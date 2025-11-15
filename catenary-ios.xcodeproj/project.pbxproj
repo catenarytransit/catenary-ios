@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		F71B7A9C2EC83C89003E084B /* MapLibreSwiftDSL in Frameworks */ = {isa = PBXBuildFile; productRef = F71B7A9B2EC83C89003E084B /* MapLibreSwiftDSL */; };
+		F71B7A9E2EC83C89003E084B /* MapLibreSwiftMacros in Frameworks */ = {isa = PBXBuildFile; productRef = F71B7A9D2EC83C89003E084B /* MapLibreSwiftMacros */; };
+		F71B7AA02EC83C89003E084B /* MapLibreSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = F71B7A9F2EC83C89003E084B /* MapLibreSwiftUI */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		F71913C12EC82B7700AAA2A3 /* catenary-ios.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "catenary-ios.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +29,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F71B7AA02EC83C89003E084B /* MapLibreSwiftUI in Frameworks */,
+				F71B7A9C2EC83C89003E084B /* MapLibreSwiftDSL in Frameworks */,
+				F71B7A9E2EC83C89003E084B /* MapLibreSwiftMacros in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,6 +74,9 @@
 			);
 			name = "catenary-ios";
 			packageProductDependencies = (
+				F71B7A9B2EC83C89003E084B /* MapLibreSwiftDSL */,
+				F71B7A9D2EC83C89003E084B /* MapLibreSwiftMacros */,
+				F71B7A9F2EC83C89003E084B /* MapLibreSwiftUI */,
 			);
 			productName = "catenary-ios";
 			productReference = F71913C12EC82B7700AAA2A3 /* catenary-ios.app */;
@@ -94,6 +106,9 @@
 			);
 			mainGroup = F71913B82EC82B7700AAA2A3;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				F71B7A9A2EC83C89003E084B /* XCRemoteSwiftPackageReference "swiftui-dsl" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F71913C22EC82B7700AAA2A3 /* Products */;
 			projectDirPath = "";
@@ -322,6 +337,35 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		F71B7A9A2EC83C89003E084B /* XCRemoteSwiftPackageReference "swiftui-dsl" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/maplibre/swiftui-dsl";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		F71B7A9B2EC83C89003E084B /* MapLibreSwiftDSL */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F71B7A9A2EC83C89003E084B /* XCRemoteSwiftPackageReference "swiftui-dsl" */;
+			productName = MapLibreSwiftDSL;
+		};
+		F71B7A9D2EC83C89003E084B /* MapLibreSwiftMacros */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F71B7A9A2EC83C89003E084B /* XCRemoteSwiftPackageReference "swiftui-dsl" */;
+			productName = MapLibreSwiftMacros;
+		};
+		F71B7A9F2EC83C89003E084B /* MapLibreSwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F71B7A9A2EC83C89003E084B /* XCRemoteSwiftPackageReference "swiftui-dsl" */;
+			productName = MapLibreSwiftUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = F71913B92EC82B7700AAA2A3 /* Project object */;
 }

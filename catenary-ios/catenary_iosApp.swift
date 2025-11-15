@@ -4,13 +4,26 @@
 //
 //
 
+import MapLibre
+import MapLibreSwiftDSL
+import MapLibreSwiftUI
 import SwiftUI
 
 @main
-struct catenary_iosApp: App {
+struct CatenaryMapsApp: App {
+    @StateObject var viewobject = viewObject()
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(viewobject)
         }
     }
 }
+
+class viewObject: ObservableObject {
+    @Published var camera: MapViewCamera = MapViewCamera.center(CLLocationCoordinate2D(latitude: 34.0522, longitude: -118.2437), zoom: 1.0)
+}
+
+//#Preview {
+//    CatenaryMapsApp()
+//}
