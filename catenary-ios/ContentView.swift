@@ -18,6 +18,7 @@ struct ShapeSources {
     static var busshapes = URL(string: "https://birch4.catenarymaps.org/shapes_bus")!
 }
 
+
 struct mapView: View {
     @Environment(\.colorScheme) var colorScheme: ColorScheme
     var styleURL: URL {
@@ -29,21 +30,27 @@ struct mapView: View {
 
     var body: some View {
         MapView(styleURL: styleURL, camera: $viewobject.camera) {
+                
+                let busSource = MLNVectorTileSource(
+                    identifier: "buslayer",
+                    configurationURL: URL(string: "https://birch4.catenarymaps.org/shapes_bus")!
+                )
+                
 
-            let vsource = MLNVectorTileSource(
-                identifier: "buslayer",
-                configurationURL: URL(string: "https://birch4.catenarymaps.org/shapes_bus")!
+            let lineColorExpression = NSExpression(
+                format: "FUNCTION('#', 'stringByAppendingString:', color)"
             )
-
-            LineStyleLayer(
-                identifier: "buslayer-line",
-                source: vsource,
-                sourceLayerIdentifier: "data"
-            )
-            .lineColor(.blue)
-            .lineWidth(2)
-            .lineCap(.round)
-            .minimumZoomLevel(5)
+            
+                LineStyleLayer(
+                    identifier: "buslayer-line",
+                    source: busSource,
+                    sourceLayerIdentifier: "data"
+                )
+                .lineColor(expression: lineColorExpression)
+                .lineWidth(2)
+                .lineCap(.round)
+                .minimumZoomLevel(5)
+            
         }
         .ignoresSafeArea()
     }
@@ -121,7 +128,6 @@ struct ContentView: View {
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.height
                 } action: { oldValue, newValue in
-                    print("newValue: \(newValue)")
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.85, blendDuration: 0.25)) {
                         
                         
@@ -132,7 +138,6 @@ struct ContentView: View {
                         } else if newValue < 420 && newValue > 360 {
                             
                             sheetHeight = 350 + ((newValue - 350) / 2)
-                            print("height:", sheetHeight, "\n")
                             
                         }
                     }
