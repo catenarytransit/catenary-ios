@@ -11,14 +11,6 @@ import SwiftUI
 import CoreLocation
 import MapLibreSwiftUI
 
-struct ShapeSources {
-    static var intercityrailshapes = "https://birch1.catenarymaps.org/shapes_intercity_rail"
-    static var localcityrailshapes = "https://birch2.catenarymaps.org/shapes_local_rail"
-    static var othershapes = "https://birch3.catenarymaps.org/"
-    static var busshapes = URL(string: "https://birch4.catenarymaps.org/shapes_bus")!
-}
-
-
 struct mapView: View {
     @Environment(\.colorScheme) var colorScheme: ColorScheme
     var styleURL: URL {
@@ -27,29 +19,93 @@ struct mapView: View {
                 : "https://maps.catenarymaps.org/dark-style.json")!
         }
     @EnvironmentObject var viewobject: viewObject
-
+    @State var railInFrame = false
     var body: some View {
         MapView(styleURL: styleURL, camera: $viewobject.camera) {
+                // BUS SHAPES LAYER
+            let busSource = MLNVectorTileSource(
+                identifier: "buslayer",
+                configurationURL: ShapeSources.busshapes
+            )
                 
-                let busSource = MLNVectorTileSource(
-                    identifier: "buslayer",
-                    configurationURL: URL(string: "https://birch4.catenarymaps.org/shapes_bus")!
-                )
-                
-
             let lineColorExpression = NSExpression(
                 format: "FUNCTION('#', 'stringByAppendingString:', color)"
             )
+            let widthStops = NSExpression(forConstantValue: [
+                9:  railInFrame ? 0.3 : 0.4,
+                10: railInFrame ? 0.45 : 0.6,
+                12: 1.0,
+                14: 2.6
+            ])
+            let opacityStops = NSExpression(forConstantValue: [
+                7:  railInFrame ? 0.04 : 0.09,
+                8:  railInFrame ? 0.04 : 0.15,
+                11: railInFrame ? 0.15 : 0.30,
+                14: railInFrame ? 0.20 : 0.30,
+                16: railInFrame ? 0.30 : 0.30
+            ])
             
-                LineStyleLayer(
-                    identifier: "buslayer-line",
-                    source: busSource,
-                    sourceLayerIdentifier: "data"
-                )
+                LineStyleLayer(identifier: LayersPerCategory.Bus.Shapes, source: busSource, sourceLayerIdentifier: "data")
                 .lineColor(expression: lineColorExpression)
-                .lineWidth(2)
-                .lineCap(.round)
-                .minimumZoomLevel(5)
+                .lineWidth(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: widthStops)
+                .lineOpacity(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: opacityStops)
+                .minimumZoomLevel(railInFrame ? 9 : 8)
+                .visible(viewobject.allLayerSettings.bus.shapes)
+            
+                // BUS SYMBOL LAYER
+            
+            let lineTextColorExpression = NSExpression(
+                format: "FUNCTION('#', 'stringByAppendingString:', text_color)"
+            )
+            
+            let busTextSizeStops = NSExpression(forConstantValue: [
+                10: 0.3125,
+                11: 0.4375,
+                13: 0.625
+            ])
+            
+            if viewobject.tempShow {
+                SymbolStyleLayer(identifier: LayersPerCategory.Bus.LabelShapes, source: busSource, sourceLayerIdentifier: "data")
+//                    .renderAbove(LayerReferenceAbove.all)
+                    .textFontNames(["Barlow-Regular"])
+                    .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: busTextSizeStops)
+                    .text(expression: NSExpression(format: "route_label"))
+                    
+
+            }
+            
+                
+                
+
+                
+            
+//                .textFontNames(["Barlow-Regular"])
+//                .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: busTextSizeStops)
+                
+            
+            
+//            SymbolStyleLayer(
+//                identifier: LayersPerCategory.Bus.LabelShapes,
+//                source: busSource,
+//                sourceLayerIdentifier: "data"
+//            )
+//            .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: busTextSizeStops)
+////            .iconColor(expression: lineTextColorExpression)
+//            .textFontNames(["Barlow-Regular"])
+//            .text(expression: NSExpression(forConstantValue: "erm"))
+//            .textAllowsOverlap(false)
+//            .textColor(expression: lineTextColorExpression)
+////            .textAnchor("center")
+//            .textHaloColor(expression: lineColorExpression)
+//            .textHaloWidth(0.2)
+//            .textHaloBlur(0)
+//            .minimumZoomLevel(railInFrame ? 13 : 11)
+//            .visible(viewobject.allLayerSettings.bus.labelshapes)
+            
+            
+//            .maximumTextWidth(interpolatedBy: <#T##MLNVariableExpression#>, curveType: <#T##MLNExpressionInterpolationMode#>, parameters: <#T##NSExpression?#>, stops: <#T##NSExpression#>)
+            
+            
             
         }
         .ignoresSafeArea()
@@ -198,11 +254,15 @@ struct ContentView: View {
 struct bottomDrawer: View {
     @Binding var selectedDetent: PresentationDetent
     @ObservedObject var locationManager: LocationManager
+    @EnvironmentObject var viewObject: viewObject
     var body: some View {
         VStack(spacing: 20) {
             Text("Hello World")
             Text("\(String(describing: selectedDetent))")
                 .font(.headline)
+            Toggle(isOn: $viewObject.tempShow, label: {
+                Text("Is on? \(viewObject.tempShow)")
+            })
             if let coordinate = locationManager.lastKnownLocation {
                             Text("Latitude: \(coordinate.latitude)")
                             
