@@ -59,52 +59,25 @@ struct mapView: View {
             )
             
             let busTextSizeStops = NSExpression(forConstantValue: [
-                10: 0.3125,
-                11: 0.4375,
-                13: 0.625
+                10: 10,
+                11: 13,
+                13: 18
             ])
             
-            if viewobject.tempShow {
+
                 SymbolStyleLayer(identifier: LayersPerCategory.Bus.LabelShapes, source: busSource, sourceLayerIdentifier: "data")
-//                    .renderAbove(LayerReferenceAbove.all)
-                    .textFontNames(["Barlow-Regular"])
-                    .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: busTextSizeStops)
-                    .text(expression: NSExpression(format: "route_label"))
-                    
-
-            }
-            
-                
-                
-
-                
-            
-//                .textFontNames(["Barlow-Regular"])
-//                .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: busTextSizeStops)
-                
-            
-            
-//            SymbolStyleLayer(
-//                identifier: LayersPerCategory.Bus.LabelShapes,
-//                source: busSource,
-//                sourceLayerIdentifier: "data"
-//            )
-//            .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: busTextSizeStops)
-////            .iconColor(expression: lineTextColorExpression)
-//            .textFontNames(["Barlow-Regular"])
-//            .text(expression: NSExpression(forConstantValue: "erm"))
-//            .textAllowsOverlap(false)
-//            .textColor(expression: lineTextColorExpression)
-////            .textAnchor("center")
-//            .textHaloColor(expression: lineColorExpression)
-//            .textHaloWidth(0.2)
-//            .textHaloBlur(0)
-//            .minimumZoomLevel(railInFrame ? 13 : 11)
-//            .visible(viewobject.allLayerSettings.bus.labelshapes)
-            
-            
-//            .maximumTextWidth(interpolatedBy: <#T##MLNVariableExpression#>, curveType: <#T##MLNExpressionInterpolationMode#>, parameters: <#T##NSExpression?#>, stops: <#T##NSExpression#>)
-            
+                .text(expression: NSExpression(format: "route_label"))
+                .textColor(expression: lineTextColorExpression)
+                .renderAbove(.all)
+                .textFontSize(10)
+                .textHaloBlur(0)
+                .textHaloWidth(2)
+                .textHaloColor(expression: lineColorExpression)
+                .textAllowsOverlap(true)
+                .textFontNames(["Barlow-Regular"])
+                .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: busTextSizeStops)
+                .minimumZoomLevel(railInFrame ? 13 : 11)
+                .visible(viewobject.allLayerSettings.bus.labelshapes)
             
             
         }
