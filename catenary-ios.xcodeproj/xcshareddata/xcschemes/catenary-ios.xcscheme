@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "F71913C02EC82B7700AAA2A3"
-               BuildableName = "catenary-ios.app"
+               BuildableName = "Catenary Maps.app"
                BlueprintName = "catenary-ios"
                ReferencedContainer = "container:catenary-ios.xcodeproj">
             </BuildableReference>
@@ -45,7 +45,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "F71913C02EC82B7700AAA2A3"
-            BuildableName = "catenary-ios.app"
+            BuildableName = "Catenary Maps.app"
             BlueprintName = "catenary-ios"
             ReferencedContainer = "container:catenary-ios.xcodeproj">
          </BuildableReference>
@@ -62,7 +62,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "F71913C02EC82B7700AAA2A3"
-            BuildableName = "catenary-ios.app"
+            BuildableName = "Catenary Maps.app"
             BlueprintName = "catenary-ios"
             ReferencedContainer = "container:catenary-ios.xcodeproj">
          </BuildableReference>

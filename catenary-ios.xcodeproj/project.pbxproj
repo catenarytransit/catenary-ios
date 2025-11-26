@@ -7,13 +7,16 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		F71B7A9C2EC83C89003E084B /* MapLibreSwiftDSL in Frameworks */ = {isa = PBXBuildFile; productRef = F71B7A9B2EC83C89003E084B /* MapLibreSwiftDSL */; };
-		F71B7A9E2EC83C89003E084B /* MapLibreSwiftMacros in Frameworks */ = {isa = PBXBuildFile; productRef = F71B7A9D2EC83C89003E084B /* MapLibreSwiftMacros */; };
-		F71B7AA02EC83C89003E084B /* MapLibreSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = F71B7A9F2EC83C89003E084B /* MapLibreSwiftUI */; };
+		F79FE1A12ED395D6006FFFF5 /* MapLibreSwiftDSL in Frameworks */ = {isa = PBXBuildFile; productRef = F79FE1A02ED395D6006FFFF5 /* MapLibreSwiftDSL */; };
+		F79FE1A32ED395D6006FFFF5 /* MapLibreSwiftMacros in Frameworks */ = {isa = PBXBuildFile; productRef = F79FE1A22ED395D6006FFFF5 /* MapLibreSwiftMacros */; };
+		F79FE1A52ED395D6006FFFF5 /* MapLibreSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = F79FE1A42ED395D6006FFFF5 /* MapLibreSwiftUI */; };
+		F7A569892ED68FB600658D21 /* MapLibreSwiftDSL in Frameworks */ = {isa = PBXBuildFile; productRef = F7A569882ED68FB600658D21 /* MapLibreSwiftDSL */; };
+		F7A5698B2ED68FB600658D21 /* MapLibreSwiftMacros in Frameworks */ = {isa = PBXBuildFile; productRef = F7A5698A2ED68FB600658D21 /* MapLibreSwiftMacros */; };
+		F7A5698D2ED68FB600658D21 /* MapLibreSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = F7A5698C2ED68FB600658D21 /* MapLibreSwiftUI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		F71913C12EC82B7700AAA2A3 /* catenary-ios.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "catenary-ios.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		F71913C12EC82B7700AAA2A3 /* Catenary Maps.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Catenary Maps.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -29,9 +32,12 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F71B7AA02EC83C89003E084B /* MapLibreSwiftUI in Frameworks */,
-				F71B7A9C2EC83C89003E084B /* MapLibreSwiftDSL in Frameworks */,
-				F71B7A9E2EC83C89003E084B /* MapLibreSwiftMacros in Frameworks */,
+				F7A5698D2ED68FB600658D21 /* MapLibreSwiftUI in Frameworks */,
+				F7A569892ED68FB600658D21 /* MapLibreSwiftDSL in Frameworks */,
+				F79FE1A52ED395D6006FFFF5 /* MapLibreSwiftUI in Frameworks */,
+				F7A5698B2ED68FB600658D21 /* MapLibreSwiftMacros in Frameworks */,
+				F79FE1A12ED395D6006FFFF5 /* MapLibreSwiftDSL in Frameworks */,
+				F79FE1A32ED395D6006FFFF5 /* MapLibreSwiftMacros in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -49,7 +55,7 @@
 		F71913C22EC82B7700AAA2A3 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				F71913C12EC82B7700AAA2A3 /* catenary-ios.app */,
+				F71913C12EC82B7700AAA2A3 /* Catenary Maps.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -74,12 +80,15 @@
 			);
 			name = "catenary-ios";
 			packageProductDependencies = (
-				F71B7A9B2EC83C89003E084B /* MapLibreSwiftDSL */,
-				F71B7A9D2EC83C89003E084B /* MapLibreSwiftMacros */,
-				F71B7A9F2EC83C89003E084B /* MapLibreSwiftUI */,
+				F79FE1A02ED395D6006FFFF5 /* MapLibreSwiftDSL */,
+				F79FE1A22ED395D6006FFFF5 /* MapLibreSwiftMacros */,
+				F79FE1A42ED395D6006FFFF5 /* MapLibreSwiftUI */,
+				F7A569882ED68FB600658D21 /* MapLibreSwiftDSL */,
+				F7A5698A2ED68FB600658D21 /* MapLibreSwiftMacros */,
+				F7A5698C2ED68FB600658D21 /* MapLibreSwiftUI */,
 			);
 			productName = "catenary-ios";
-			productReference = F71913C12EC82B7700AAA2A3 /* catenary-ios.app */;
+			productReference = F71913C12EC82B7700AAA2A3 /* Catenary Maps.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -107,7 +116,7 @@
 			mainGroup = F71913B82EC82B7700AAA2A3;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				F71B7A9A2EC83C89003E084B /* XCRemoteSwiftPackageReference "swiftui-dsl" */,
+				F7A569872ED68FB600658D21 /* XCRemoteSwiftPackageReference "swiftui-dsl" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F71913C22EC82B7700AAA2A3 /* Products */;
@@ -262,11 +271,12 @@
 		F71913D02EC82B7900AAA2A3 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "Catenary Icon";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"catenary-ios/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = A4LWZWFMJ4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -283,7 +293,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "CatenaryTransit.catenary-ios";
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Catenary Maps";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -293,11 +303,12 @@
 		F71913D12EC82B7900AAA2A3 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "Catenary Icon";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"catenary-ios/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = A4LWZWFMJ4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -314,7 +325,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "CatenaryTransit.catenary-ios";
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Catenary Maps";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -345,7 +356,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		F71B7A9A2EC83C89003E084B /* XCRemoteSwiftPackageReference "swiftui-dsl" */ = {
+		F7A569872ED68FB600658D21 /* XCRemoteSwiftPackageReference "swiftui-dsl" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/maplibre/swiftui-dsl";
 			requirement = {
@@ -356,19 +367,31 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		F71B7A9B2EC83C89003E084B /* MapLibreSwiftDSL */ = {
+		F79FE1A02ED395D6006FFFF5 /* MapLibreSwiftDSL */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = F71B7A9A2EC83C89003E084B /* XCRemoteSwiftPackageReference "swiftui-dsl" */;
 			productName = MapLibreSwiftDSL;
 		};
-		F71B7A9D2EC83C89003E084B /* MapLibreSwiftMacros */ = {
+		F79FE1A22ED395D6006FFFF5 /* MapLibreSwiftMacros */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = F71B7A9A2EC83C89003E084B /* XCRemoteSwiftPackageReference "swiftui-dsl" */;
 			productName = MapLibreSwiftMacros;
 		};
-		F71B7A9F2EC83C89003E084B /* MapLibreSwiftUI */ = {
+		F79FE1A42ED395D6006FFFF5 /* MapLibreSwiftUI */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = F71B7A9A2EC83C89003E084B /* XCRemoteSwiftPackageReference "swiftui-dsl" */;
+			productName = MapLibreSwiftUI;
+		};
+		F7A569882ED68FB600658D21 /* MapLibreSwiftDSL */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F7A569872ED68FB600658D21 /* XCRemoteSwiftPackageReference "swiftui-dsl" */;
+			productName = MapLibreSwiftDSL;
+		};
+		F7A5698A2ED68FB600658D21 /* MapLibreSwiftMacros */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F7A569872ED68FB600658D21 /* XCRemoteSwiftPackageReference "swiftui-dsl" */;
+			productName = MapLibreSwiftMacros;
+		};
+		F7A5698C2ED68FB600658D21 /* MapLibreSwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F7A569872ED68FB600658D21 /* XCRemoteSwiftPackageReference "swiftui-dsl" */;
 			productName = MapLibreSwiftUI;
 		};
 /* End XCSwiftPackageProductDependency section */

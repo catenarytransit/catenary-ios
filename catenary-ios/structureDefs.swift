@@ -18,8 +18,9 @@ class viewObject: ObservableObject {
 struct ShapeSources {
     static var intercityrailshapes = URL(string: "https://birch1.catenarymaps.org/shapes_intercity_rail")!
     static var localcityrailshapes = URL(string: "https://birch2.catenarymaps.org/shapes_local_rail")!
-    static var othershapes = URL(string: "https://birch3.catenarymaps.org/")!
+    static var othershapes = URL(string: "https://birch3.catenarymaps.org/shapes_ferry")!
     static var busshapes = URL(string: "https://birch4.catenarymaps.org/shapes_bus")!
+    
     static var busstops = URL(string: "https://birch6.catenarymaps.org/busstops")!
     static var stationfeatures = URL(string: "https://birch7.catenarymaps.org/station_features")!
     static var railstops = URL(string: "https://birch5.catenarymaps.org/railstops")!
