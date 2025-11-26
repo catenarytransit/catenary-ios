@@ -7,6 +7,7 @@
 import Foundation
 import SwiftUI
 import MapLibreSwiftUI
+import MapLibre
 import CoreLocation
 
 class viewObject: ObservableObject {
@@ -26,6 +27,49 @@ struct ShapeSources {
     static var railstops = URL(string: "https://birch5.catenarymaps.org/railstops")!
     static var otherstops = URL(string: "https://birch8.catenarymaps.org/otherstops")!
 }
+
+struct shapeTileSources {
+    static let intercityRailSource = MLNVectorTileSource(
+        identifier: "intercityraillayer",
+        configurationURL: ShapeSources.intercityrailshapes
+    )
+    
+    static let localCityRailSource = MLNVectorTileSource(
+        identifier: "localcityraillayer",
+        configurationURL: ShapeSources.localcityrailshapes
+    )
+    
+    static let otherShapesSource = MLNVectorTileSource(
+        identifier: "otherlayer",
+        configurationURL: ShapeSources.othershapes
+    )
+    
+    static let busSource = MLNVectorTileSource(
+        identifier: "buslayer",
+        configurationURL: ShapeSources.busshapes
+    )
+    
+    static let busStopsSource = MLNVectorTileSource(
+        identifier: "busstops",
+        configurationURL: ShapeSources.busstops
+    )
+    
+    static let stationFeaturesSource = MLNVectorTileSource(
+        identifier: "stationfeatures",
+        configurationURL: ShapeSources.stationfeatures
+    )
+    
+    static let railStopsSource = MLNVectorTileSource(
+        identifier: "railstops",
+        configurationURL: ShapeSources.railstops
+    )
+    
+    static let otherStopsSource = MLNVectorTileSource(
+        identifier: "otherstops",
+        configurationURL: ShapeSources.otherstops
+    )
+}
+
 
 struct AllLayerSettings {
     var bus: LayerCategorySettings = LayerCategorySettings()

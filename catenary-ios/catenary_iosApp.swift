@@ -14,7 +14,7 @@ struct CatenaryMapsApp: App {
     @StateObject var viewobject = viewObject()
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainUIView()
                 .environmentObject(viewobject)
         }
     }
