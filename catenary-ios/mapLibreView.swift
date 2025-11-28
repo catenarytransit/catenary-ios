@@ -11,6 +11,8 @@ import MapLibreSwiftDSL
 
 struct mapLibreView: View {
     @Environment(\.colorScheme) var colorScheme: ColorScheme
+    @ObservedObject var locationManager: LocationManager
+    
     var styleURL: URL {
             URL(string: colorScheme == .light
                 ? "https://maps.catenarymaps.org/light-style.json"
@@ -18,6 +20,8 @@ struct mapLibreView: View {
         }
     @EnvironmentObject var viewobject: viewObject
     @State var railInFrame = false
+    
+    @State private var userFeature: [String: Any]? = nil
     
     let lineColorExpression = NSExpression(
         format: "FUNCTION('#', 'stringByAppendingString:', color)"
@@ -34,6 +38,22 @@ struct mapLibreView: View {
             intercityRailLayer()
             metroRailLayer()
             tramRailLayer()
+            
+            
+            
+            if let loco = locationManager.lastKnownLocation {
+                // Option A: circle layer puck
+                
+                
+                
+                CircleStyleLayer(identifier: "simple-circle", source: ShapeSource(identifier: "dot", ) { MLNPointFeature(coordinate: loco) })
+                    .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [1: 1, 5: 3, 10: 5]))
+                    
+                    .color(.systemBlue)
+                    .strokeWidth(2)
+                    .strokeColor(.white)
+                
+            }
         }
         .unsafeMapViewControllerModifier { map in
             map.mapView.logoView.isHidden = true
@@ -44,6 +64,7 @@ struct mapLibreView: View {
             
         })
         .ignoresSafeArea()
+        
         
     }
     
@@ -292,5 +313,6 @@ struct mapLibreView: View {
 }
 
 #Preview {
-    mapLibreView()
+    mapLibreView(locationManager: LocationManager())
+        .environmentObject(viewObject())
 }

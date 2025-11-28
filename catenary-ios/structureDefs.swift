@@ -14,6 +14,40 @@ class viewObject: ObservableObject {
     @Published var camera: MapViewCamera = MapViewCamera.center(CLLocationCoordinate2D(latitude: 34.0522, longitude: -118.2437), zoom: 5.0)
     @Published var allLayerSettings: AllLayerSettings = AllLayerSettings()
     @Published var tempShow = false
+    @Published var searchText = ""
+    @Published var showTopView = false
+    @Published var presDetent: PresentationDetent = .height(80)
+    @Published var sheetHeight: CGFloat = 350 {
+            didSet { checkHeightEquality() }
+        }
+    @Published var largeDetentHeight: CGFloat = 0
+    
+    @Published var confirmedEqual: Bool = false
+    private var equalityTimer: Timer?
+    private let equalityDuration: TimeInterval = 0.25
+    
+    private func checkHeightEquality() {
+        if sheetHeight == largeDetentHeight {
+            // Start or restart the timer
+            equalityTimer?.invalidate()
+            equalityTimer = Timer.scheduledTimer(withTimeInterval: equalityDuration, repeats: false) { [weak self] _ in
+                withAnimation {
+                    self?.confirmedEqual = true
+                }
+            }
+        } else {
+            // Diverged: reset
+            equalityTimer?.invalidate()
+            withAnimation {
+                confirmedEqual = false
+            }
+        }
+    }
+    
+    deinit {
+        equalityTimer?.invalidate()
+    }
+    
 }
 
 struct ShapeSources {
@@ -99,15 +133,6 @@ struct LabelSettings {
     var delay: Bool = true
 }
 
-struct FoamermodeSettings {
-    var infra: Bool = false
-    var maxspeed: Bool = false
-    var signalling: Bool = false
-    var electrification: Bool = false
-    var gauge: Bool = false
-    var dummy: Bool = true
-}
-
 struct MoreSettings {
     var foamermode: FoamermodeSettings = FoamermodeSettings()
     var showstationentrances: Bool = true
@@ -116,7 +141,14 @@ struct MoreSettings {
     var showcoords: Bool = false
 }
 
-
+struct FoamermodeSettings {
+    var infra: Bool = false
+    var maxspeed: Bool = false
+    var signalling: Bool = false
+    var electrification: Bool = false
+    var gauge: Bool = false
+    var dummy: Bool = true
+}
 
 struct VehiclePositionData {
     var latitude: Double
