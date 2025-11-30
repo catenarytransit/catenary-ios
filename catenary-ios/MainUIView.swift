@@ -32,6 +32,7 @@ struct MainUIView: View {
     @State private var isSheetPresented = true
 //    @State private var selectedDetent: PresentationDetent = .height(80)
     @State private var sheetHeight: CGFloat = 350
+    @State private var newValVal: CGFloat = 0
     @State private var locationOpacity: CGFloat = 1
     @State private var animationDuration: CGFloat = 0
     @State private var text = ""
@@ -76,13 +77,14 @@ struct MainUIView: View {
                         .padding(.trailing, 15)
                 }
                 .overlay(alignment: .top) {
-                    if !viewobject.showTopView {
+                    if viewobject.sheetHeight < 400 {
                         TextField("Search Here", text: $viewobject.searchText)
                             .padding(.horizontal, 20)
                             .padding(.vertical, 12)
                             .glassEffect(.regular, in: .capsule)
                             .padding()
                             .ignoresSafeArea(.container, edges: .bottom)
+                            .transition(.asymmetric(insertion: .opacity, removal: .opacity))
                     }
                 }
 
@@ -98,26 +100,43 @@ struct MainUIView: View {
     
     @ViewBuilder
     func floatingToolBar() -> some View {
-        VStack(spacing: 35) {
-            
-            Button {
-                locationManager.checkLocationAuthorization()
-            } label: {
-                Image(systemName: "location")
+        VStack {
+            if viewobject.currentRotation != 0 {
+                Button {
+                    //                locationManager.checkLocationAuthorization()
+                    viewobject.camera.setDirection(0)
+                } label: {
+                    Image(systemName: "location.north.line")
+                        .rotationEffect(Angle(degrees: viewobject.currentRotation))
+                        .padding()
+                        .glassEffect(.clear, in: .circle)
+                }
+                .transition(.opacity.combined(with: .scale))
+                .foregroundStyle(Color.primary)
             }
-            
-            Button {
-                locationManager.checkLocationAuthorization()
-            } label: {
-                Image(systemName: "location")
+            VStack(spacing: 35) {
+                
+                Button {
+                    //                locationManager.checkLocationAuthorization()
+//                    viewobject.camera.setDirection(0)
+                    viewobject.showLayerSelector.toggle()
+                } label: {
+                    Image(systemName: "square.2.layers.3d.fill")
+                }
+                
+                Button {
+                    locationManager.checkLocationAuthorization()
+                } label: {
+                    Image(systemName: "location\(viewobject.centered ? ".fill" : "")")
+                }
+                
             }
+            .padding(.vertical, 20)
+            .padding(.horizontal, 10)
+            .glassEffect(.regular, in: .capsule)
             
         }
         .font(.title3)
-        .foregroundStyle(Color.primary)
-        .padding(.vertical, 20)
-        .padding(.horizontal, 10)
-        .glassEffect(.regular, in: .capsule)
         .offset(y: -sheetHeight)
         .opacity(locationOpacity)
         .animation(.interpolatingSpring(duration: animationDuration, bounce: 0, initialVelocity: 0), value: sheetHeight)
@@ -132,7 +151,6 @@ struct MainUIView: View {
                 direction: CLLocationDirection()
             )
         }
-        
         
         
     }

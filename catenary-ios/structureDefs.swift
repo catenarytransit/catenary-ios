@@ -10,6 +10,21 @@ import MapLibreSwiftUI
 import MapLibre
 import CoreLocation
 
+extension Color {
+    static let catenaryBlue = Color(
+        red: 0 / 255.0,
+        green: 171 / 255.0,
+        blue: 155 / 255.0
+    )
+}
+
+extension UIColor {
+    static let catenaryBlue = UIColor(red: 0 / 255.0,
+                                      green: 171 / 255.0,
+                                      blue: 155 / 255.0, alpha: 1
+    )
+}
+
 class viewObject: ObservableObject {
     @Published var camera: MapViewCamera = MapViewCamera.center(CLLocationCoordinate2D(latitude: 34.0522, longitude: -118.2437), zoom: 5.0)
     @Published var allLayerSettings: AllLayerSettings = AllLayerSettings()
@@ -21,7 +36,10 @@ class viewObject: ObservableObject {
             didSet { checkHeightEquality() }
         }
     @Published var largeDetentHeight: CGFloat = 0
+    @Published var currentRotation: CLLocationDirection = 0
     
+    @Published var centered: Bool = false
+    @Published var showLayerSelector: Bool = false
     @Published var confirmedEqual: Bool = false
     private var equalityTimer: Timer?
     private let equalityDuration: TimeInterval = 0.25
@@ -62,7 +80,7 @@ struct ShapeSources {
     static var otherstops = URL(string: "https://birch8.catenarymaps.org/otherstops")!
 }
 
-struct shapeTileSources {
+enum shapeTileSources {
     static let intercityRailSource = MLNVectorTileSource(
         identifier: "intercityraillayer",
         configurationURL: ShapeSources.intercityrailshapes
@@ -104,13 +122,33 @@ struct shapeTileSources {
     )
 }
 
-
 struct AllLayerSettings {
     var bus: LayerCategorySettings = LayerCategorySettings()
     var localrail: LayerCategorySettings = LayerCategorySettings()
     var intercityrail: LayerCategorySettings = LayerCategorySettings(labelrealtimedots: LabelSettings(trip: true))
     var other: LayerCategorySettings = LayerCategorySettings()
     var more: MoreSettings = MoreSettings()
+    
+    subscript(index: Int) -> LayerCategorySettings? {
+            switch index {
+            case 1: return intercityrail
+            case 2: return localrail
+            case 3: return bus
+            case 4: return other
+            default: return nil
+            }
+        }
+    
+    subscript(name: String) -> LayerCategorySettings? {
+            switch name {
+            case "Rail": return intercityrail
+            case "Metro/Tram": return localrail
+            case "Bus": return bus
+            case "Other": return other
+            default: return nil
+            }
+        }
+    
 }
 
 struct LayerCategorySettings {

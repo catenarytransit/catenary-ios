@@ -55,14 +55,25 @@ struct mapLibreView: View {
                 
             }
         }
+        
         .unsafeMapViewControllerModifier { map in
             map.mapView.logoView.isHidden = true
             map.mapView.attributionButton.isHidden = true
+            map.mapView.compassView.isHidden = true
         }
-        .onMapViewProxyUpdate(onViewProxyChanged: { meae in
-            print(meae.zoomLevel)
-            
-        })
+        .onMapViewProxyUpdate(updateMode: .realtime, onViewProxyChanged: { meae in
+                    DispatchQueue.main.async {
+                        viewobject.currentRotation = meae.direction
+
+                        var centered = false
+                        if let lastLoco = locationManager.lastKnownLocation {
+                            if abs(lastLoco.latitude - meae.centerCoordinate.latitude) < 0.000001 && abs(lastLoco.longitude - meae.centerCoordinate.longitude) < 0.000001 {
+                                centered = true
+                            }
+                        }
+                        viewobject.centered = centered
+                    }
+                })
         .ignoresSafeArea()
         
         
@@ -245,7 +256,7 @@ struct mapLibreView: View {
         .lineOpacity(1)
         .minimumZoomLevel(5)
         .visible(viewobject.allLayerSettings.localrail.shapes)
-        .predicate(NSPredicate(format: "(NOT (chateau == 'nyct' OR stop_to_stop_generated == TRUE)) AND (route_type == 1 OR route_type == 12)"))
+        .predicate(NSPredicate(format: "(NOT (chateau == 'nyct' AND stop_to_stop_generated == TRUE)) AND (route_type == 1 OR route_type == 12)"))
         
         SymbolStyleLayer(
                      identifier: LayersPerCategory.Metro.LabelShapes,
@@ -267,7 +278,7 @@ struct mapLibreView: View {
         .textHaloBlur(1)
         .minimumZoomLevel(6)
         .visible(viewobject.allLayerSettings.localrail.labelshapes)
-        .predicate(NSPredicate(format: "(NOT (chateau == 'nyct' OR stop_to_stop_generated == TRUE)) AND (route_type == 1 OR route_type == 12)"))
+        .predicate(NSPredicate(format: "(NOT (chateau == 'nyct' AND stop_to_stop_generated == TRUE)) AND (route_type == 1 OR route_type == 12)"))
     }
     
     @MapViewContentBuilder
