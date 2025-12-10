@@ -99,11 +99,12 @@ struct OverlayRoot: View {
     @EnvironmentObject var viewobject: viewObject
     @Environment(\.dismiss) private var dismiss
     @State var currentPage = "Rail"
-    var bigSheet: Bool {
-        withAnimation {
-            (viewobject.allLayerSettings[currentPage]?.visiblerealtimedots ?? true)
-        }
-    }
+//    var bigSheet: Bool {
+//        withAnimation {
+//            (viewobject.allLayerSettings[currentPage]?.visiblerealtimedots ?? true)
+//        }
+//    }
+//    @State var expanded: Bool = false
     var body: some View {
         EmptyView()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -117,8 +118,9 @@ struct OverlayRoot: View {
                 
                 NavigationStack {
                     LayerSelectorSheet(tabPage: $currentPage)
-                        .presentationDetents([.height(250 + (bigSheet ? 200 : 0))])
+                        .presentationDetents([.height(230)])
                         .presentationBackgroundInteraction(PresentationBackgroundInteraction.disabled)
+                        
                         .interactiveDismissDisabled(false)
                         .toolbar {
                             
@@ -144,7 +146,9 @@ struct OverlayRoot: View {
                     
                         
                 }
+                
             }
+            
         
         
         //            .navigationTitle("Layers")
@@ -156,19 +160,20 @@ struct layerSettingButton: View {
     var imageName: String
     var label: String
     var sfsymbol: Bool = false
+    
     var body: some View {
         VStack {
             Button {
-                withAnimation(nil) {
+//                withAnimation(nil) {
                     specificLayerSetting.toggle()
-                }
+//                }
             } label: {
+                
                 (sfsymbol ? Image(systemName: imageName) : Image(imageName).resizable())
                     
                     
                     .if(sfsymbol) { $0.padding() }
                     .foregroundStyle(Color.primary)
-                    .aspectRatio(1, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .background(
                         RoundedRectangle(cornerRadius: 20, style: .continuous)
@@ -180,31 +185,42 @@ struct layerSettingButton: View {
                             .stroke(specificLayerSetting ? Color.catenaryBlue : Color.clear, lineWidth: 3)
                     )
                     .animation(nil, value: specificLayerSetting)
+                    .aspectRatio(1, contentMode: .fit)
+
             }
-            .layoutPriority(-1)
-            Text(label)
-                .lineLimit(1, reservesSpace: true)
-                .layoutPriority(0)
+            
+            if !sfsymbol {
+                Text(label)
+                    .lineLimit(1, reservesSpace: true)
+            }
+//                .if(sfsymbol) {
+//                    $0.fontWidth(.compressed)
+//                }
+                
 //                .minimumScaleFactor(0.3)
         }
     }
 }
 
 extension View {
-    @ViewBuilder
     func `if`<Content: View>(_ condition: Bool, transform: (Self) -> Content) -> some View {
-        if condition {
-            transform(self)
-        } else {
-            self
+        Group {
+            if condition {
+                AnyView(transform(self))
+            } else {
+                AnyView(self)
+            }
         }
     }
 }
+
+
 
 struct layerTabView: View {
     @Environment(\.colorScheme) var colorScheme: ColorScheme
     @Binding var layerSettings: LayerCategorySettings
     @State var selected: Int = 0
+    
     var body: some View {
         
         VStack {
@@ -214,66 +230,100 @@ struct layerTabView: View {
                 layerSettingButton(specificLayerSetting: $layerSettings.stops, imageName: "stopsicon", label: "Stops")
                 layerSettingButton(specificLayerSetting: $layerSettings.labelstops, imageName: "\(colorScheme == .dark ? "dark" : "light")-stop-name", label: "Names")
                 layerSettingButton(specificLayerSetting: $layerSettings.visiblerealtimedots, imageName: "vehiclesicon", label: "Vehicles")
+                    .contextMenu {
+                        Toggle(isOn: $layerSettings.labelrealtimedots.route) {
+                            Label("Route", systemImage: "point.bottomleft.forward.to.point.topright.scurvepath")
+                        }
+
+                        Toggle(isOn: $layerSettings.labelrealtimedots.trip) {
+                            Label("Trip", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                        }
+
+                        Toggle(isOn: $layerSettings.labelrealtimedots.vehicle) {
+                            Label("Vehicle", systemImage: "cablecar")
+                        }
+
+                        Toggle(isOn: $layerSettings.labelrealtimedots.delay) {
+                            Label("Delay", systemImage: "stopwatch")
+                        }
+
+                        Toggle(isOn: $layerSettings.labelrealtimedots.occupancy) {
+                            Label("Occupancy", systemImage: "person.3")
+                        }
+
+                        Toggle(isOn: $layerSettings.labelrealtimedots.speed) {
+                            Label("Speed", systemImage: "gauge.with.dots.needle.67percent")
+                        }
+
+                        Toggle(isOn: $layerSettings.labelrealtimedots.headsign) {
+                            Label("Headsign", systemImage: "flag.pattern.checkered")
+                        }
+
+                        Toggle(isOn: $layerSettings.labelrealtimedots.direction) {
+                            Label("Direction", systemImage: "line.diagonal.arrow")
+                        }
+                    }
+                    .menuActionDismissBehavior(.disabled)
             }
             .padding(.horizontal)
-            .layoutPriority(1)
             
-            if layerSettings.visiblerealtimedots {
-                Grid() {
+//            DisclosureGroup(isExpanded: $expandedVehicleSettings) {
+//                
+////                layerSettingButton(specificLayerSetting: $layerSettings.visiblerealtimedots, imageName: "vehiclesicon", label: "Vehicles")
+//                Text("Hello! I am a setting.")
+//                Text("I am also a setting.")
+//                Text("I, too, exist as a setting in this world!")
+//                Text("I exist?")
+//            } label: {
+//                HStack {
+//                    Image(systemName: "arrow.down")
+//                    Text("Vehicle Options")
+//                    Image(systemName: "arrow.down")
+//                }
+//                .frame(maxWidth: .infinity)
+//            }
+//            .labelsHidden()
+//                if layerSettings.visiblerealtimedots {
                     
-                    // Top row: 5 buttons
-                    GridRow {
-                        
-                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.route,
-                                           imageName: "point.bottomleft.forward.to.point.topright.scurvepath",
-                                           label: "Route", sfsymbol: true)
-                        .frame(maxWidth: .infinity)
-                        .gridCellColumns(3)
-                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.trip,
-                                           imageName: "point.topleft.down.to.point.bottomright.curvepath",
-                                           label: "Trip", sfsymbol: true)
-                        .frame(maxWidth: .infinity)
-                        .gridCellColumns(3)
-                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.vehicle,
-                                           imageName: "cablecar",
-                                           label: "Vehicle", sfsymbol: true)
-                        .frame(maxWidth: .infinity)
-                        .gridCellColumns(3)
-                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.delay,
-                                           imageName: "stopwatch",
-                                           label: "Delay", sfsymbol: true)
-                        .frame(maxWidth: .infinity)
-                        .gridCellColumns(3)
-                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.speed,
-                                           imageName: "gauge.with.dots.needle.67percent",
-                                           label: "Speed", sfsymbol: true)
-                        .frame(maxWidth: .infinity)
-                        .gridCellColumns(3)
-                    }
+//            ScrollView(.horizontal) {
+//                    HStack {
+////                        
+//                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.route,
+//                                           imageName: "point.bottomleft.forward.to.point.topright.scurvepath",
+//                                           label: "Route", sfsymbol: true)
+//                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.trip,
+//                                           imageName: "point.topleft.down.to.point.bottomright.curvepath",
+//                                           label: "Trip", sfsymbol: true)
+//                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.vehicle,
+//                                           imageName: "cablecar",
+//                                           label: "Vehicle", sfsymbol: true)
+//                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.delay,
+//                                           imageName: "stopwatch",
+//                                           label: "Delay", sfsymbol: true)
+//                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.occupancy,
+//                                           imageName: "person.3",
+//                                           label: "Occupancy", sfsymbol: true)
+//                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.speed,
+//                                           imageName: "gauge.with.dots.needle.67percent",
+//                                           label: "Speed", sfsymbol: true)
+//                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.headsign,
+//                                           imageName: "flag.pattern.checkered",
+//                                           label: "Headsign", sfsymbol: true)
+//                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.direction,
+//                                           imageName: "line.diagonal.arrow",
+//                                           label: "Direction", sfsymbol: true)
+//                        //                    Spacer()
+//                    }
+//                    .padding(.horizontal)
+//                    .padding(.vertical, 5)
+//                    }
+//                    .scrollIndicators(.never)
+////                    .border(.black, width: 1)
+//                    .scrollBounceBehavior(.always)
                     
-                    // Bottom row: 3 buttons, centered
-                    GridRow {
-                        //                    Spacer()
-                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.occupancy,
-                                           imageName: "person.2",
-                                           label: "Occupancy", sfsymbol: true)
-                        .gridCellColumns(5)
-                        .frame(maxWidth: .infinity)
-                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.headsign,
-                                           imageName: "flag.pattern.checkered",
-                                           label: "Headsign", sfsymbol: true)
-                        .frame(maxWidth: .infinity)
-                        .gridCellColumns(5)
-                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.direction,
-                                           imageName: "line.diagonal.arrow",
-                                           label: "Direction", sfsymbol: true)
-                        .gridCellColumns(5)
-                        .frame(maxWidth: .infinity)
-                        //                    Spacer()
-                    }
-                }
-                .padding()
-            }
+                    
+//
+//            }
             
 
             
@@ -304,7 +354,6 @@ struct LayerSelectorSheet: View {
     @EnvironmentObject var viewobject: viewObject
     @Environment(\.colorScheme) var colorScheme: ColorScheme
     @Binding var tabPage: String
-    
     var body: some View {
         
     
@@ -392,7 +441,7 @@ struct InAppNotificationViewModifier: ViewModifier {
                     TextField("Search Here", text: $text)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 12)
-                        .glassEffect(.regular, in: .capsule)
+                        .glassEffect(.regular.interactive(), in: .capsule)
                         .padding()
                         .ignoresSafeArea(.container, edges: .bottom)
                         .background (

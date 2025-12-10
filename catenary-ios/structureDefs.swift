@@ -81,45 +81,61 @@ struct ShapeSources {
 }
 
 enum shapeTileSources {
-    static let intercityRailSource = MLNVectorTileSource(
-        identifier: "intercityraillayer",
-        configurationURL: ShapeSources.intercityrailshapes
-    )
+    static func intercityRailSource() -> MLNVectorTileSource {
+        MLNVectorTileSource(
+            identifier: "intercityraillayer",
+            configurationURL: ShapeSources.intercityrailshapes
+        )
+    }
     
-    static let localCityRailSource = MLNVectorTileSource(
-        identifier: "localcityraillayer",
-        configurationURL: ShapeSources.localcityrailshapes
-    )
+    static func localCityRailSource() -> MLNVectorTileSource {
+            MLNVectorTileSource(
+                identifier: "localcityraillayer",
+                configurationURL: ShapeSources.localcityrailshapes
+            )
+        }
     
-    static let otherShapesSource = MLNVectorTileSource(
-        identifier: "otherlayer",
-        configurationURL: ShapeSources.othershapes
-    )
+    static func otherShapesSource() -> MLNVectorTileSource {
+        MLNVectorTileSource(
+            identifier: "otherlayer",
+            configurationURL: ShapeSources.othershapes
+        )
+    }
     
-    static let busSource = MLNVectorTileSource(
-        identifier: "buslayer",
-        configurationURL: ShapeSources.busshapes
-    )
+    static func busSource() -> MLNVectorTileSource {
+        MLNVectorTileSource(
+            identifier: "buslayer",
+            configurationURL: ShapeSources.busshapes
+        )
+    }
     
-    static let busStopsSource = MLNVectorTileSource(
-        identifier: "busstops",
-        configurationURL: ShapeSources.busstops
-    )
+    static func busStopsSource() -> MLNVectorTileSource {
+        MLNVectorTileSource(
+            identifier: "busstops",
+            configurationURL: ShapeSources.busstops
+        )
+    }
     
-    static let stationFeaturesSource = MLNVectorTileSource(
-        identifier: "stationfeatures",
-        configurationURL: ShapeSources.stationfeatures
-    )
-    
-    static let railStopsSource = MLNVectorTileSource(
-        identifier: "railstops",
-        configurationURL: ShapeSources.railstops
-    )
-    
-    static let otherStopsSource = MLNVectorTileSource(
-        identifier: "otherstops",
-        configurationURL: ShapeSources.otherstops
-    )
+    static func stationFeaturesSource() -> MLNVectorTileSource {
+        MLNVectorTileSource(
+            identifier: "stationfeatures",
+            configurationURL: ShapeSources.stationfeatures
+        )
+    }
+
+    static func railStopsSource() -> MLNVectorTileSource {
+        MLNVectorTileSource(
+            identifier: "railstops",
+            configurationURL: ShapeSources.railstops
+        )
+    }
+
+    static func otherStopsSource() -> MLNVectorTileSource {
+        MLNVectorTileSource(
+            identifier: "otherstops",
+            configurationURL: ShapeSources.otherstops
+        )
+    }
 }
 
 struct AllLayerSettings {

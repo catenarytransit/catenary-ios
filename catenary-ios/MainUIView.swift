@@ -36,6 +36,7 @@ struct MainUIView: View {
     @State private var locationOpacity: CGFloat = 1
     @State private var animationDuration: CGFloat = 0
     @State private var text = ""
+    @State var tempSheetOpacity: CGFloat = 0
     
     var body: some View {
         ZStack {
@@ -55,33 +56,52 @@ struct MainUIView: View {
                             viewobject.sheetHeight = newValue
                         }
                         .onGeometryChange(for: CGFloat.self) { proxy in
-                            max(min(proxy.size.height, 400), 0)
-                        } action: { oldValue, newValue in
-                            sheetHeight = min(newValue, 350)
-                            if newValue > 350 {
-                                viewobject.showTopView = true
-                            } else {
-                                viewobject.showTopView = false
-                            }
-                            let progress = max(min((newValue - (350)) / 50, 1), 0)
-                            let toolbarOpacity = 1 - progress
-                            locationOpacity = toolbarOpacity
                             
-                            let diff = abs(newValue - oldValue)
-                            let duration = max(min(diff / 100, 0.3), 0)
-                            animationDuration = duration
+                            return max(min(proxy.size.height, 450), 0)
+                            
+                            
+                        } action: { oldValue, newValue in
+                            
+                                print(newValue, isSheetPresented)
+                                
+                                sheetHeight = min(newValue, 350)
+                                if newValue > 400 {
+                                    viewobject.showTopView = true
+                                } else {
+                                    viewobject.showTopView = false
+                                }
+                                let progress = max(min((newValue - (400)) / 50, 1), 0)
+                                let toolbarOpacity = 1 - progress
+                                locationOpacity = toolbarOpacity
+                                
+                                let diff = abs(newValue - oldValue)
+                                let duration = max(min(diff / 100, 0.3), 0)
+                                animationDuration = duration
+                            
                         }
                 }
+                .onChange(of: viewobject.showLayerSelector) { last, current in
+                    withAnimation(.bouncy) {
+                        if current {
+                            isSheetPresented = false
+                        } else {
+                            isSheetPresented = true
+                        }
+                    }
+                }
                 .overlay(alignment: .bottomTrailing) {
-                    floatingToolBar()
-                        .padding(.trailing, 15)
+                    if isSheetPresented {
+                        floatingToolBar()
+                            .padding(.trailing, 15)
+                            .transition(.move(edge: .trailing))
+                    }
                 }
                 .overlay(alignment: .top) {
-                    if viewobject.sheetHeight < 400 {
+                    if viewobject.sheetHeight < 450 {
                         TextField("Search Here", text: $viewobject.searchText)
                             .padding(.horizontal, 20)
                             .padding(.vertical, 12)
-                            .glassEffect(.regular, in: .capsule)
+                            .glassEffect(.regular.interactive(), in: .capsule)
                             .padding()
                             .ignoresSafeArea(.container, edges: .bottom)
                             .transition(.asymmetric(insertion: .opacity, removal: .opacity))
@@ -100,58 +120,59 @@ struct MainUIView: View {
     
     @ViewBuilder
     func floatingToolBar() -> some View {
-        VStack {
-            if viewobject.currentRotation != 0 {
-                Button {
-                    //                locationManager.checkLocationAuthorization()
-                    viewobject.camera.setDirection(0)
-                } label: {
-                    Image(systemName: "location.north.line")
-                        .rotationEffect(Angle(degrees: viewobject.currentRotation))
-                        .padding()
-                        .glassEffect(.clear, in: .circle)
+        GlassEffectContainer {
+            VStack {
+                if viewobject.currentRotation != 0 {
+                    Button {
+                        //                locationManager.checkLocationAuthorization()
+                        viewobject.camera.setDirection(0)
+                    } label: {
+                        Image(systemName: "location.north.line")
+                            .rotationEffect(Angle(degrees: viewobject.currentRotation))
+                            .padding()
+                            .glassEffect(.regular.interactive(), in: .circle)
+                    }
+                    .transition(.opacity.combined(with: .scale))
+                    .foregroundStyle(Color.primary)
                 }
-                .transition(.opacity.combined(with: .scale))
-                .foregroundStyle(Color.primary)
+                VStack {
+                    
+                    Button {
+                        //                locationManager.checkLocationAuthorization()
+                        //                    viewobject.camera.setDirection(0)
+                        viewobject.showLayerSelector.toggle()
+                    } label: {
+                        Image(systemName: "square.3.layers.3d")
+                    }
+                    .padding(.bottom)
+                    Button {
+                        locationManager.checkLocationAuthorization()
+                    } label: {
+                        Image(systemName: "location\(viewobject.centered ? ".fill" : "")")
+                    }
+                    .padding(.top)
+                    
+                }
+                .padding(.all, 10)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                
             }
-            VStack(spacing: 35) {
-                
-                Button {
-                    //                locationManager.checkLocationAuthorization()
-//                    viewobject.camera.setDirection(0)
-                    viewobject.showLayerSelector.toggle()
-                } label: {
-                    Image(systemName: "square.2.layers.3d.fill")
-                }
-                
-                Button {
-                    locationManager.checkLocationAuthorization()
-                } label: {
-                    Image(systemName: "location\(viewobject.centered ? ".fill" : "")")
-                }
-                
-            }
-            .padding(.vertical, 20)
-            .padding(.horizontal, 10)
-            .glassEffect(.regular, in: .capsule)
+            .font(.title3)
+            .offset(y: -sheetHeight)
+            .opacity(locationOpacity)
+            .animation(.interpolatingSpring(duration: animationDuration, bounce: 0, initialVelocity: 0), value: sheetHeight)
             
+            .onChange(of: locationManager.lastKnownLocation) { anOldLocation, newLocation in
+                guard let location = newLocation else { return }
+                viewobject.camera.state = .centered(
+                    onCoordinate: location,
+                    zoom: 15,
+                    pitch: 0,
+                    pitchRange: .free,
+                    direction: CLLocationDirection()
+                )
+            }
         }
-        .font(.title3)
-        .offset(y: -sheetHeight)
-        .opacity(locationOpacity)
-        .animation(.interpolatingSpring(duration: animationDuration, bounce: 0, initialVelocity: 0), value: sheetHeight)
-        
-        .onChange(of: locationManager.lastKnownLocation) { anOldLocation, newLocation in
-            guard let location = newLocation else { return }
-            viewobject.camera.state = .centered(
-                onCoordinate: location,
-                zoom: 15,
-                pitch: 0,
-                pitchRange: .free,
-                direction: CLLocationDirection()
-            )
-        }
-        
         
     }
     

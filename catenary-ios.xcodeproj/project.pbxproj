@@ -7,12 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F7186EED2EE4A8BF00723A13 /* MapLibreSwiftDSL in Frameworks */ = {isa = PBXBuildFile; productRef = F7186EEC2EE4A8BF00723A13 /* MapLibreSwiftDSL */; };
+		F7186EEF2EE4A8BF00723A13 /* MapLibreSwiftMacros in Frameworks */ = {isa = PBXBuildFile; productRef = F7186EEE2EE4A8BF00723A13 /* MapLibreSwiftMacros */; };
+		F7186EF12EE4A8BF00723A13 /* MapLibreSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = F7186EF02EE4A8BF00723A13 /* MapLibreSwiftUI */; };
 		F79FE1A12ED395D6006FFFF5 /* MapLibreSwiftDSL in Frameworks */ = {isa = PBXBuildFile; productRef = F79FE1A02ED395D6006FFFF5 /* MapLibreSwiftDSL */; };
 		F79FE1A32ED395D6006FFFF5 /* MapLibreSwiftMacros in Frameworks */ = {isa = PBXBuildFile; productRef = F79FE1A22ED395D6006FFFF5 /* MapLibreSwiftMacros */; };
 		F79FE1A52ED395D6006FFFF5 /* MapLibreSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = F79FE1A42ED395D6006FFFF5 /* MapLibreSwiftUI */; };
-		F7A569892ED68FB600658D21 /* MapLibreSwiftDSL in Frameworks */ = {isa = PBXBuildFile; productRef = F7A569882ED68FB600658D21 /* MapLibreSwiftDSL */; };
-		F7A5698B2ED68FB600658D21 /* MapLibreSwiftMacros in Frameworks */ = {isa = PBXBuildFile; productRef = F7A5698A2ED68FB600658D21 /* MapLibreSwiftMacros */; };
-		F7A5698D2ED68FB600658D21 /* MapLibreSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = F7A5698C2ED68FB600658D21 /* MapLibreSwiftUI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,10 +32,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F7A5698D2ED68FB600658D21 /* MapLibreSwiftUI in Frameworks */,
-				F7A569892ED68FB600658D21 /* MapLibreSwiftDSL in Frameworks */,
+				F7186EF12EE4A8BF00723A13 /* MapLibreSwiftUI in Frameworks */,
+				F7186EED2EE4A8BF00723A13 /* MapLibreSwiftDSL in Frameworks */,
 				F79FE1A52ED395D6006FFFF5 /* MapLibreSwiftUI in Frameworks */,
-				F7A5698B2ED68FB600658D21 /* MapLibreSwiftMacros in Frameworks */,
+				F7186EEF2EE4A8BF00723A13 /* MapLibreSwiftMacros in Frameworks */,
 				F79FE1A12ED395D6006FFFF5 /* MapLibreSwiftDSL in Frameworks */,
 				F79FE1A32ED395D6006FFFF5 /* MapLibreSwiftMacros in Frameworks */,
 			);
@@ -83,9 +83,9 @@
 				F79FE1A02ED395D6006FFFF5 /* MapLibreSwiftDSL */,
 				F79FE1A22ED395D6006FFFF5 /* MapLibreSwiftMacros */,
 				F79FE1A42ED395D6006FFFF5 /* MapLibreSwiftUI */,
-				F7A569882ED68FB600658D21 /* MapLibreSwiftDSL */,
-				F7A5698A2ED68FB600658D21 /* MapLibreSwiftMacros */,
-				F7A5698C2ED68FB600658D21 /* MapLibreSwiftUI */,
+				F7186EEC2EE4A8BF00723A13 /* MapLibreSwiftDSL */,
+				F7186EEE2EE4A8BF00723A13 /* MapLibreSwiftMacros */,
+				F7186EF02EE4A8BF00723A13 /* MapLibreSwiftUI */,
 			);
 			productName = "catenary-ios";
 			productReference = F71913C12EC82B7700AAA2A3 /* Catenary Maps.app */;
@@ -116,7 +116,7 @@
 			mainGroup = F71913B82EC82B7700AAA2A3;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				F7A569872ED68FB600658D21 /* XCRemoteSwiftPackageReference "swiftui-dsl" */,
+				F7186EEB2EE4A8BF00723A13 /* XCRemoteSwiftPackageReference "swiftui-dsl" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F71913C22EC82B7700AAA2A3 /* Products */;
@@ -356,9 +356,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		F7A569872ED68FB600658D21 /* XCRemoteSwiftPackageReference "swiftui-dsl" */ = {
+		F7186EEB2EE4A8BF00723A13 /* XCRemoteSwiftPackageReference "swiftui-dsl" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/maplibre/swiftui-dsl";
+			repositoryURL = "https://github.com/snagglegrolop/swiftui-dsl";
 			requirement = {
 				branch = main;
 				kind = branch;
@@ -367,6 +367,21 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		F7186EEC2EE4A8BF00723A13 /* MapLibreSwiftDSL */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F7186EEB2EE4A8BF00723A13 /* XCRemoteSwiftPackageReference "swiftui-dsl" */;
+			productName = MapLibreSwiftDSL;
+		};
+		F7186EEE2EE4A8BF00723A13 /* MapLibreSwiftMacros */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F7186EEB2EE4A8BF00723A13 /* XCRemoteSwiftPackageReference "swiftui-dsl" */;
+			productName = MapLibreSwiftMacros;
+		};
+		F7186EF02EE4A8BF00723A13 /* MapLibreSwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F7186EEB2EE4A8BF00723A13 /* XCRemoteSwiftPackageReference "swiftui-dsl" */;
+			productName = MapLibreSwiftUI;
+		};
 		F79FE1A02ED395D6006FFFF5 /* MapLibreSwiftDSL */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MapLibreSwiftDSL;
@@ -377,21 +392,6 @@
 		};
 		F79FE1A42ED395D6006FFFF5 /* MapLibreSwiftUI */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = MapLibreSwiftUI;
-		};
-		F7A569882ED68FB600658D21 /* MapLibreSwiftDSL */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = F7A569872ED68FB600658D21 /* XCRemoteSwiftPackageReference "swiftui-dsl" */;
-			productName = MapLibreSwiftDSL;
-		};
-		F7A5698A2ED68FB600658D21 /* MapLibreSwiftMacros */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = F7A569872ED68FB600658D21 /* XCRemoteSwiftPackageReference "swiftui-dsl" */;
-			productName = MapLibreSwiftMacros;
-		};
-		F7A5698C2ED68FB600658D21 /* MapLibreSwiftUI */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = F7A569872ED68FB600658D21 /* XCRemoteSwiftPackageReference "swiftui-dsl" */;
 			productName = MapLibreSwiftUI;
 		};
 /* End XCSwiftPackageProductDependency section */
