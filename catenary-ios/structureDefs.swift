@@ -11,24 +11,19 @@ import MapLibre
 import CoreLocation
 
 extension Color {
-    static let catenaryBlue = Color(
-        red: 0 / 255.0,
-        green: 171 / 255.0,
-        blue: 155 / 255.0
-    )
+    static let catenaryBlue = Color(red: 0 / 255.0, green: 171 / 255.0, blue: 155 / 255.0)
 }
 
 extension UIColor {
-    static let catenaryBlue = UIColor(red: 0 / 255.0,
-                                      green: 171 / 255.0,
-                                      blue: 155 / 255.0, alpha: 1
-    )
+    static let catenaryBlue = UIColor(red: 0 / 255.0, green: 171 / 255.0, blue: 155 / 255.0, alpha: 1)
 }
 
 class viewObject: ObservableObject {
     @Published var camera: MapViewCamera = MapViewCamera.center(CLLocationCoordinate2D(latitude: 34.0522, longitude: -118.2437), zoom: 5.0)
     @Published var allLayerSettings: AllLayerSettings = AllLayerSettings()
-    @Published var tempShow = false
+    @Published var currZoom: Double = 5.0
+    @Published var visibleCoordinateBounds: MLNCoordinateBounds = MLNCoordinateBounds(sw: CLLocationCoordinate2D(latitude: 0, longitude: 0), ne: CLLocationCoordinate2D(latitude: 0, longitude: 0))
+    
     @Published var searchText = ""
     @Published var showTopView = false
     @Published var presDetent: PresentationDetent = .height(80)
@@ -37,6 +32,7 @@ class viewObject: ObservableObject {
         }
     @Published var largeDetentHeight: CGFloat = 0
     @Published var currentRotation: CLLocationDirection = 0
+    @Published var isSearchFocusing: Bool = false
     
     @Published var centered: Bool = false
     @Published var showLayerSelector: Bool = false
@@ -46,7 +42,7 @@ class viewObject: ObservableObject {
     
     private func checkHeightEquality() {
         if sheetHeight == largeDetentHeight {
-            // Start or restart the timer
+            // start or restart the timer
             equalityTimer?.invalidate()
             equalityTimer = Timer.scheduledTimer(withTimeInterval: equalityDuration, repeats: false) { [weak self] _ in
                 withAnimation {
@@ -54,7 +50,7 @@ class viewObject: ObservableObject {
                 }
             }
         } else {
-            // Diverged: reset
+            // if diiverged: reset
             equalityTimer?.invalidate()
             withAnimation {
                 confirmedEqual = false
@@ -64,8 +60,23 @@ class viewObject: ObservableObject {
     
     deinit {
         equalityTimer?.invalidate()
+        NotificationCenter.default.removeObserver(self)
     }
-    
+    @Published var isVisible: Bool = false
+    @Published var topHeightKeys: CGFloat = 0
+//    @Published var sheetHeight: CGFloat = 0
+
+    init() {
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.isVisible = true
+            self?.topHeightKeys = self?.sheetHeight ?? 350
+            self?.sheetHeight = self?.largeDetentHeight ?? 350
+        }
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardDidHideNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.isVisible = false
+        }
+    }
+
 }
 
 struct ShapeSources {
@@ -78,6 +89,7 @@ struct ShapeSources {
     static var stationfeatures = URL(string: "https://birch7.catenarymaps.org/station_features")!
     static var railstops = URL(string: "https://birch5.catenarymaps.org/railstops")!
     static var otherstops = URL(string: "https://birch8.catenarymaps.org/otherstops")!
+    static var osmstations = URL(string: "https://birch.catenarymaps.org/osm_stations")!
 }
 
 enum shapeTileSources {
@@ -134,6 +146,13 @@ enum shapeTileSources {
         MLNVectorTileSource(
             identifier: "otherstops",
             configurationURL: ShapeSources.otherstops
+        )
+    }
+    
+    static func osmStationsSource() -> MLNVectorTileSource {
+        MLNVectorTileSource(
+            identifier: "osmstations",
+            configurationURL: ShapeSources.osmstations
         )
     }
 }
@@ -204,36 +223,23 @@ struct FoamermodeSettings {
     var dummy: Bool = true
 }
 
-struct VehiclePositionData {
-    var latitude: Double
-    var longitude: Double
-    var bearing: Float?
-    var speed: Float?
+struct RouteCacheEntry: Codable {
+    let color: String
+    let text_color: String
+    let short_name: String?
+    let long_name: String?
+    let route_id: String
+    let agency_id: String?
 }
 
-struct VehicleDescriptor {
-    var id: String?
-    var label: String?
+struct TileBounds {
+    let min_x: Int
+    let max_x: Int
+    let min_y: Int
+    let max_y: Int
 }
 
-struct TripDescriptor {
-    var trip_id: String?
-    var route_id: String?
-    var trip_headsign: String?
-    var trip_short_name: String?
-    var start_time: String?
-    var start_date: String?
-    var delay: Int?
-}
 
-struct VehiclePosition {
-    var position: VehiclePositionData?
-    var vehicle: VehicleDescriptor?
-    var trip: TripDescriptor?
-    var route_type: Int
-    var timestamp: Int?
-    var occupancy_status: Int?
-}
 
 enum LayersPerCategory {
 
@@ -299,3 +305,5 @@ enum LayersPerCategory {
         let PointingShell = "tram-pointingshell"
     }
 }
+
+

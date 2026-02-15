@@ -15,12 +15,55 @@ var GlobalViewObject: viewObject = viewObject()
 @main
 struct CatenaryMapsApp: App {
     @StateObject var viewobject = GlobalViewObject
+//    @StateObject var liveTransitData: TransitViewModel = TransitViewModel()
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
         
     var body: some Scene {
         WindowGroup {
             MainUIView()
                 .environmentObject(viewobject)
+                .onAppear() {
+                    let url = URL(string: "wss://echo.websocket.org")!
+                    let task = URLSession.shared.webSocketTask(with: url)
+                    task.resume()
+                    
+                    task.send(.string("Hello WebSocket")) { error in
+                        if let error = error {
+                            print("Send error:", error)
+                        }
+                    }
+                    
+                    task.receive { result in
+                        switch result {
+                        case .success(let message):
+                            switch message {
+                            case .string(let text):
+                                print("Received:", text)
+                            case .data(let data):
+                                print("Received data:", data)
+                            @unknown default:
+                                break
+                            }
+                        case .failure(let error):
+                            print("Receive error:", error)
+                        }
+                    }
+                    
+                }
+            
+            
+//                .environmentObject(liveTransitData)
+//                .onAppear {
+//                    liveTransitData.loadData()
+//                    
+//                }
+//                .onTapGesture {
+//                    liveTransitData.vehicles.forEach {
+//                        print("\($0.agencyName), \($0.type) — \($0.headsign), \($0.routeId)")
+//                        
+//                    }
+//                }
+            
         }
     }
 }
@@ -112,7 +155,8 @@ struct OverlayRoot: View {
                 text: $viewobject.searchText,
                 showField: $viewobject.showTopView,
                 presDetent: viewobject.presDetent,
-                confirmedEqual: viewobject.confirmedEqual
+                confirmedEqual: viewobject.confirmedEqual, 
+                keyboardVisible: viewobject.isVisible
             )
             .sheet(isPresented: $viewobject.showLayerSelector) {
                 
@@ -408,18 +452,18 @@ class PassThroughWindow: UIWindow {
     var textFieldFrame: CGRect = .zero
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        // When showing the layer selector sheet, this window should capture touches normally
+        
         if GlobalViewObject.showLayerSelector {
             return super.hitTest(point, with: event)
         }
 
-        // Otherwise, allow touches to pass through except within the text field frame
+        
         if textFieldFrame.contains(point) {
-            // Still pass through touches in the text field area so the underlying search field can be focused
+        
             return nil
         }
 
-        // Pass through touches elsewhere to the main app window
+        
         return nil
     }
 }
@@ -434,10 +478,11 @@ struct InAppNotificationViewModifier: ViewModifier {
     @Binding var showField: Bool
     var presDetent: PresentationDetent
     var confirmedEqual: Bool
+    var keyboardVisible: Bool
     func body(content: Content) -> some View {
         content
             .overlay(alignment: .top) {
-                if showField && !confirmedEqual {
+                if showField && !(confirmedEqual || keyboardVisible) {
                     TextField("Search Here", text: $text)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 12)
@@ -466,8 +511,8 @@ struct InAppNotificationViewModifier: ViewModifier {
 }
 
 extension View {
-    func inAppSearchOverlay(text: Binding<String>, showField: Binding<Bool>, presDetent: PresentationDetent, confirmedEqual: Bool) -> some View {
-        self.modifier(InAppNotificationViewModifier(text: text, showField: showField, presDetent: presDetent, confirmedEqual: confirmedEqual))
+    func inAppSearchOverlay(text: Binding<String>, showField: Binding<Bool>, presDetent: PresentationDetent, confirmedEqual: Bool, keyboardVisible: Bool) -> some View {
+        self.modifier(InAppNotificationViewModifier(text: text, showField: showField, presDetent: presDetent, confirmedEqual: confirmedEqual, keyboardVisible: keyboardVisible))
     }
 }
 

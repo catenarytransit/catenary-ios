@@ -24,11 +24,11 @@ final class FloatingWindow: UIWindow {
     }
 }
 
-
 struct MainUIView: View {
     
     @StateObject var locationManager = LocationManager()
-
+    @FocusState var focus: Bool
+    @FocusState var isFocused: Bool
     @State private var isSheetPresented = true
 //    @State private var selectedDetent: PresentationDetent = .height(80)
     @State private var sheetHeight: CGFloat = 350
@@ -38,11 +38,13 @@ struct MainUIView: View {
     @State private var text = ""
     @State var tempSheetOpacity: CGFloat = 0
     
+    
     var body: some View {
         ZStack {
             mapLibreView(locationManager: locationManager)
                 .sheet(isPresented: $isSheetPresented) {
                     BottomDrawer(selectedDetent: $viewobject.presDetent, locationManager: locationManager)
+                        .ignoresSafeArea(.keyboard)
                         .presentationDetents([.height(80), .height(350), .large], selection: $viewobject.presDetent)
                         
                         .presentationBackgroundInteraction(.enabled)
@@ -52,8 +54,21 @@ struct MainUIView: View {
                         .interactiveDismissDisabled()
                         .onGeometryChange(for: CGFloat.self) { proxy in
                             proxy.size.height
-                        } action: { newValue in
-                            viewobject.sheetHeight = newValue
+                        } action: { oldValue, newValue in
+                            if viewobject.isVisible {
+                                let raisedHeight = newValue + (viewobject.largeDetentHeight - viewobject.topHeightKeys)
+                                                               
+                                viewobject.sheetHeight = viewobject.largeDetentHeight <= raisedHeight ? viewobject.largeDetentHeight : raisedHeight
+                                
+                                if viewobject.largeDetentHeight != viewobject.sheetHeight {
+                                    withAnimation {
+                                        viewobject.isVisible = false
+                                    }
+                                }
+                            } else {
+                                
+                                viewobject.sheetHeight = newValue 
+                            }
                         }
                         .onGeometryChange(for: CGFloat.self) { proxy in
                             
@@ -80,6 +95,7 @@ struct MainUIView: View {
                             
                         }
                 }
+                
                 .onChange(of: viewobject.showLayerSelector) { last, current in
                     withAnimation(.bouncy) {
                         if current {
@@ -105,8 +121,17 @@ struct MainUIView: View {
                             .padding()
                             .ignoresSafeArea(.container, edges: .bottom)
                             .transition(.asymmetric(insertion: .opacity, removal: .opacity))
+                            .focused($focus)
+                        
+                            
                     }
                 }
+                .onChange(of: focus) { from, to in
+                    guard to else { return }
+                    viewobject.presDetent = .large
+                    viewobject.isSearchFocusing = true
+                }
+//            if presentation detent switches to large & issearch focusing is true, switch focus state to true
 
         }
         
