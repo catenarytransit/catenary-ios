@@ -23,53 +23,6 @@ struct BottomDrawer: View {
     var body: some View {
         VStack {
             ScrollView(.vertical) {
-                //                VStack {
-                //                    HStack {
-                //                        Spacer()
-                //                    }
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                    Text("These are words that we are seeing")
-                //                }
-                //            }
-                
                 
                 if viewObject.confirmedEqual {
                     Text("\(viewObject.sheetHeight), \(viewObject.largeDetentHeight)")
@@ -87,11 +40,18 @@ struct BottomDrawer: View {
                 VStack {
                     if viewObject.confirmedEqual || viewObject.isVisible {
                         
-                        HStack(spacing: 10) {
+                        
                             
                             TextField("Search Here", text: $viewObject.searchText)
-                                .padding(.horizontal, 20)
+                                .padding(.trailing, 20)
                                 .padding(.vertical, 12)
+                                .safeAreaInset(edge: .leading) {    
+                                    Image(.catLogo)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .frame(height: 18)
+                                        .padding(.leading, 10)                                    
+                                }
                                 .background(.gray.opacity(0.25), in: .capsule)
                                 .focused($isFocused)
                                 .transition(.blurReplace)
@@ -99,7 +59,7 @@ struct BottomDrawer: View {
                                 
 
                             //                            .shadow(color: .black.opacity(0.1), radius: 3)
-                        }
+                        
                         
                         .padding(.horizontal, 18)
                         .frame(height: 80)

@@ -33,6 +33,8 @@ struct CatenaryMapsApp: App {
                         }
                     }
                     
+//                    while task.state != .completed {}
+                    
                     task.receive { result in
                         switch result {
                         case .success(let message):
@@ -484,8 +486,16 @@ struct InAppNotificationViewModifier: ViewModifier {
             .overlay(alignment: .top) {
                 if showField && !(confirmedEqual || keyboardVisible) {
                     TextField("Search Here", text: $text)
-                        .padding(.horizontal, 20)
+                        .padding(.trailing, 20)
                         .padding(.vertical, 12)
+                        .safeAreaInset(edge: .leading) { 
+                            Image(.catLogo)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(height: 18)
+                                .padding(.leading, 10)
+                                
+                        }
                         .glassEffect(.regular.interactive(), in: .capsule)
                         .padding()
                         .ignoresSafeArea(.container, edges: .bottom)

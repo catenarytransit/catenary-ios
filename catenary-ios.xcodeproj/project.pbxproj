@@ -16,7 +16,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		F71913C12EC82B7700AAA2A3 /* Catenary Maps.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Catenary Maps.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		F71913C12EC82B7700AAA2A3 /* Catenary.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Catenary.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -55,7 +55,7 @@
 		F71913C22EC82B7700AAA2A3 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				F71913C12EC82B7700AAA2A3 /* Catenary Maps.app */,
+				F71913C12EC82B7700AAA2A3 /* Catenary.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -88,7 +88,7 @@
 				F7186EF02EE4A8BF00723A13 /* MapLibreSwiftUI */,
 			);
 			productName = "catenary-ios";
-			productReference = F71913C12EC82B7700AAA2A3 /* Catenary Maps.app */;
+			productReference = F71913C12EC82B7700AAA2A3 /* Catenary.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -281,6 +281,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = 7LFT4CQ294;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
@@ -296,7 +297,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = org.catenarymaps.maps;
-				PRODUCT_NAME = "Catenary Maps";
+				PRODUCT_NAME = Catenary;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -312,6 +313,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = 7LFT4CQ294;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
@@ -327,7 +329,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = org.catenarymaps.maps;
-				PRODUCT_NAME = "Catenary Maps";
+				PRODUCT_NAME = Catenary;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";

@@ -28,7 +28,6 @@ struct MainUIView: View {
     
     @StateObject var locationManager = LocationManager()
     @FocusState var focus: Bool
-    @FocusState var isFocused: Bool
     @State private var isSheetPresented = true
 //    @State private var selectedDetent: PresentationDetent = .height(80)
     @State private var sheetHeight: CGFloat = 350
@@ -115,14 +114,22 @@ struct MainUIView: View {
                 .overlay(alignment: .top) {
                     if viewobject.sheetHeight < 450 {
                         TextField("Search Here", text: $viewobject.searchText)
-                            .padding(.horizontal, 20)
+                            .padding(.trailing, 20)
                             .padding(.vertical, 12)
+                            .safeAreaInset(edge: .leading) { 
+                                Image(.catLogo)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(height: 18)
+                                    .padding(.leading, 10)
+                                    
+                            }
                             .glassEffect(.regular.interactive(), in: .capsule)
                             .padding()
                             .ignoresSafeArea(.container, edges: .bottom)
                             .transition(.asymmetric(insertion: .opacity, removal: .opacity))
                             .focused($focus)
-                        
+
                             
                     }
                 }

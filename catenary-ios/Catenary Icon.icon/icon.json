@@ -8,11 +8,25 @@
       "blur-material" : null,
       "layers" : [
         {
+          "blend-mode" : "normal",
           "fill-specializations" : [
             {
               "appearance" : "dark",
               "value" : {
-                "solid" : "display-p3:0.02327,0.05420,0.10047,1.00000"
+                "linear-gradient" : [
+                  "display-p3:0.18286,0.35571,0.33643,1.00000",
+                  "display-p3:0.10150,0.22571,0.21313,1.00000"
+                ],
+                "orientation" : {
+                  "start" : {
+                    "x" : 0.5,
+                    "y" : 0
+                  },
+                  "stop" : {
+                    "x" : 0.5,
+                    "y" : 0.7
+                  }
+                }
               }
             }
           ],
@@ -46,7 +60,7 @@
           "opacity-specializations" : [
             {
               "appearance" : "dark",
-              "value" : 0.4
+              "value" : 0.2
             }
           ],
           "position" : {
