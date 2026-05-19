@@ -148,7 +148,7 @@ final class RealtimeVehicles: ObservableObject {
 
     private var bounds: MLNCoordinateBounds?
     private var realtimeChateauIDs: [String] = []
-    private let pollInterval: Duration = .seconds(2.5)
+    private let pollInterval: Duration = .seconds(0.25)
 
     private static let bulkFetchURL = URL(string: "https://birch.catenarymaps.org/bulk_realtime_fetch_v3")!
     private static let chateausURL = URL(string: "https://birch.catenarymaps.org/getchateaus")!
