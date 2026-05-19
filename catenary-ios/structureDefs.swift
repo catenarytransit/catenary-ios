@@ -102,6 +102,7 @@ struct ShapeSources {
     static var railstops = URL(string: "https://birch5.catenarymaps.org/railstops")!
     static var otherstops = URL(string: "https://birch8.catenarymaps.org/otherstops")!
     static var osmstations = URL(string: "https://birch.catenarymaps.org/osm_stations")!
+    static var bulkrealtimefetch = URL(string: "https://birch.catenarymaps.org/bulk_realtime_fetch_v3")!
 }
 
 enum shapeTileSources {
@@ -165,6 +166,13 @@ enum shapeTileSources {
         MLNVectorTileSource(
             identifier: "osmstations",
             configurationURL: ShapeSources.osmstations
+        )
+    }
+    
+    static func bulkRealTimeFetchSource() -> MLNVectorTileSource {
+        MLNVectorTileSource(
+            identifier: "bulkrealtimefetch",
+            configurationURL: ShapeSources.bulkrealtimefetch
         )
     }
 }

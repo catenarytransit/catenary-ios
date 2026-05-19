@@ -35,8 +35,8 @@ struct UnsubscribeTrip: Codable {
     let start_time: String?
 }
 
-// Common envelope coming back from server
-struct SpruceCommonMessage: Codable {
+// Common envelope coming back from server (decode-only; we never send this shape).
+struct SpruceCommonMessage: Decodable {
     let type: String
     let data: JSONValue?            // for initial_trip and update_trip
     let chateaus: [String: EachChateauResponseV2]? // alternative map_update payload
@@ -94,9 +94,10 @@ indirect enum JSONValue: Codable, Equatable {
     }
 }
 
-// MARK: - Placeholder models referenced by messages
-// NOTE: Replace these with your real models if they already exist in your project.
+// MARK: - Wire types used by the WebSocket
 
+/// Lat/lon bounding box sent to Spruce in `update_map` messages.
+/// (Distinct from the tile-coordinate `BoundsInputV3` used by the HTTP API.)
 struct BoundsInput: Codable, Equatable {
     let south: Double
     let west: Double
@@ -104,11 +105,9 @@ struct BoundsInput: Codable, Equatable {
     let east: Double
 }
 
-struct EachChateauResponseV2: Codable, Equatable {
-    // Define fields according to your backend schema
-}
-
-struct BulkRealtimeResponseV2: Codable, Equatable {
+/// `map_update` payload from Spruce. Re-uses `EachChateauResponseV2` from
+/// `RealtimeVehicles.swift` (same wire format as the HTTP `bulk_realtime_fetch_v3`).
+struct BulkRealtimeResponseV2: Decodable {
     let chateaus: [String: EachChateauResponseV2]
 }
 
