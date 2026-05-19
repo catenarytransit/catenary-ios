@@ -906,6 +906,8 @@ struct mapLibreView: View {
                         currZoom = proxy.zoomLevel
                         coordinateBounds = proxy.visibleCoordinateBounds
                         realtimeVM.updateBounds(proxy.visibleCoordinateBounds)
+                        realtimeVM.updateZoom(proxy.zoomLevel)
+                        realtimeVM.updateLayerSettings(viewobject.allLayerSettings)
                     }
                 })
         .task {

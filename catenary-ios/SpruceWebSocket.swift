@@ -8,16 +8,16 @@
 import Foundation
 import Combine
 
-// MARK: - Wire formats (Codable)
+// MARK: - Wire formats (send-only — we encode these but never decode them)
 
-struct MapViewportUpdate: Codable {
+struct MapViewportUpdate: Encodable {
     var type: String = "update_map"
     let chateaus: [String]
     let categories: [String]
     let bounds_input: BoundsInput
 }
 
-struct SubscribeTrip: Codable {
+struct SubscribeTrip: Encodable {
     var type: String = "subscribe_trip"
     let chateau: String
     let trip_id: String
@@ -26,7 +26,7 @@ struct SubscribeTrip: Codable {
     let start_time: String?
 }
 
-struct UnsubscribeTrip: Codable {
+struct UnsubscribeTrip: Encodable {
     var type: String = "unsubscribe_trip"
     let chateau: String
     let trip_id: String?
@@ -96,13 +96,14 @@ indirect enum JSONValue: Codable, Equatable {
 
 // MARK: - Wire types used by the WebSocket
 
-/// Lat/lon bounding box sent to Spruce in `update_map` messages.
-/// (Distinct from the tile-coordinate `BoundsInputV3` used by the HTTP API.)
-struct BoundsInput: Codable, Equatable {
-    let south: Double
-    let west: Double
-    let north: Double
-    let east: Double
+/// Tile-coordinate bounding box sent to Spruce in `update_map` messages.
+/// Matches Android's `BoundsInput` in `FetchRealtimeData.kt`.
+/// `BoundsInputPerLevel` is shared with `RealtimeVehicles.swift`.
+struct BoundsInput: Encodable {
+    let level5: BoundsInputPerLevel
+    let level7: BoundsInputPerLevel
+    let level8: BoundsInputPerLevel
+    let level12: BoundsInputPerLevel
 }
 
 /// `map_update` payload from Spruce. Re-uses `EachChateauResponseV2` from
@@ -244,20 +245,24 @@ final class SpruceWebSocket: NSObject, ObservableObject {
                 publish { self.spruceUpdateData = msg.data }
             case "map_update":
                 if let map = msg.map_update {
+                    print("\(TAG): map_update received (chateaus=\(map.chateaus.count))")
                     publish { self.spruceMapData = map }
                 } else if let chateaus = msg.chateaus {
+                    print("\(TAG): map_update received (top-level chateaus=\(chateaus.count))")
                     let wrapped = BulkRealtimeResponseV2(chateaus: chateaus)
                     publish { self.spruceMapData = wrapped }
+                } else {
+                    print("\(TAG): map_update received but neither map_update nor chateaus populated")
                 }
             case "error":
                 publish { self.spruceError = msg.message }
                 print("\(TAG): Spruce WS Error: \(msg.message ?? "")")
             default:
-                break
+                print("\(TAG): Unhandled WS message type: \(msg.type)")
             }
         } catch {
-            // Match Kotlin: parse errors are logged only, not surfaced via spruceError
             print("\(TAG): Error parsing Spruce WS message: \(error)")
+            print("\(TAG): Raw: \(text.prefix(300))")
         }
     }
 
@@ -277,21 +282,29 @@ final class SpruceWebSocket: NSObject, ObservableObject {
 
     // MARK: - Sending
 
+    // NOTE: we don't gate sends on `spruceStatus == "connected"` because the
+    // status update is dispatched to main async (so it lags behind the actual
+    // connection by one runloop). URLSessionWebSocketTask.send() will queue
+    // messages until the handshake completes, then flush them. Gating here
+    // was silently dropping the first `update_map` on every fresh connect.
     private func sendMapUpdate(_ params: MapViewportUpdate) {
-        guard spruceStatus == "connected" else { return }
         sendCodable(params, errorContext: "map update")
     }
 
     private func sendTripSubscription(_ params: SubscribeTrip) {
-        guard spruceStatus == "connected" else { return }
         sendCodable(params, errorContext: "trip subscription")
     }
 
     private func sendCodable<T: Encodable>(_ value: T, errorContext: String) {
+        guard let task else {
+            print("\(TAG): Dropping \(errorContext) — no task yet")
+            return
+        }
         do {
             let data = try encoder.encode(value)
             if let text = String(data: data, encoding: .utf8) {
-                task?.send(.string(text)) { error in
+                print("\(TAG): Sending \(errorContext) (\(data.count) bytes)")
+                task.send(.string(text)) { error in
                     if let error { print("\(TAG): Error sending \(errorContext): \(error)") }
                 }
             }
