@@ -809,41 +809,30 @@ struct mapLibreView: View {
             shapeLayer
             stationFeaturesLayer
             stopsLayer
-
-            if let loco = locationManager.lastKnownLocation {
-                CircleStyleLayer(identifier: "simple-circle", source: ShapeSource(identifier: "dot") { MLNPointFeature(coordinate: loco) })
-                    .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [1: 1, 5: 3, 10: 5]))
-                
-                    .color(.systemBlue)
-                    .strokeWidth(2)
-                    .strokeColor(.white)
-            }
         }
-        
+
         .unsafeMapViewControllerModifier { map in
             map.mapView.logoView.isHidden = true
             map.mapView.attributionButton.isHidden = true
             map.mapView.compassView.isHidden = true
+            map.mapView.showsUserLocation = true
         }
         .onMapViewProxyUpdate(updateMode: .realtime, onViewProxyChanged: { proxy in
-                    // 4. Update View State
                     DispatchQueue.main.async {
                         viewobject.currentRotation = proxy.direction
-                        
-                        var centered = false
-                        if let lastLoco = locationManager.lastKnownLocation {
-                            if abs(lastLoco.latitude - proxy.centerCoordinate.latitude) < 0.000001 && abs(lastLoco.longitude - proxy.centerCoordinate.longitude) < 0.000001 {
-                                centered = true
-                            }
-                        }
-                        viewobject.centered = centered
-                        
                         currZoom = proxy.zoomLevel
                         coordinateBounds = proxy.visibleCoordinateBounds
                     }
-                    
                 })
-
+        .mapUserAnnotationStyle(
+            MapUserAnnotationStyle(
+                approximateHaloBorderColor: .catenaryBlue,
+                approximateHaloFillColor: .catenaryBlue,
+                haloFillColor: .catenaryBlue,
+                puckArrowFillColor: .catenaryBlue,
+                puckFillColor: .white
+            )
+        )
         .ignoresSafeArea()
         
         
