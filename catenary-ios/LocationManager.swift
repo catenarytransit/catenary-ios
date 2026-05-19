@@ -39,7 +39,11 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        // Location Manager configuration
+        manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.distanceFilter = 5
+        
         lastKnownLocation = locations.first?.coordinate
-        manager.stopUpdatingLocation() // optional: stop after first update
+//        manager.stopUpdatingLocation() // optional: stop after first update
     }
 }
