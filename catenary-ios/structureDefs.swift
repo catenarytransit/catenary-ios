@@ -34,7 +34,19 @@ class viewObject: ObservableObject {
     @Published var currentRotation: CLLocationDirection = 0
     @Published var isSearchFocusing: Bool = false
     
-    @Published var centered: Bool = false
+    /// `true` whenever the map camera is in any user-tracking mode.
+    /// Derived from `camera.state`, so it updates automatically when the user
+    /// pans the map and MapLibre exits tracking.
+    var centered: Bool {
+        switch camera.state {
+        case .trackingUserLocation,
+             .trackingUserLocationWithHeading,
+             .trackingUserLocationWithCourse:
+            return true
+        default:
+            return false
+        }
+    }
     @Published var showLayerSelector: Bool = false
     @Published var confirmedEqual: Bool = false
     private var equalityTimer: Timer?
