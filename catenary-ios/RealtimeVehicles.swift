@@ -148,7 +148,7 @@ final class RealtimeVehicles: ObservableObject {
 
     private var bounds: MLNCoordinateBounds?
     private var realtimeChateauIDs: [String] = []
-    private let pollInterval: Duration = .seconds(0.25)
+    private let pollInterval: Duration = .seconds(1.5)
 
     private static let bulkFetchURL = URL(string: "https://birch.catenarymaps.org/bulk_realtime_fetch_v3")!
     private static let chateausURL = URL(string: "https://birch.catenarymaps.org/getchateaus")!
@@ -159,11 +159,17 @@ final class RealtimeVehicles: ObservableObject {
 
     /// Long-running polling loop. Call from `.task { await vm.run() }` so SwiftUI
     /// auto-cancels when the view leaves the hierarchy.
+    ///
+    /// Deadline-based sleep: schedule the next tick at the *start* of each cycle
+    /// so the request's own duration is absorbed into the interval rather than
+    /// added on top of it.
     func run() async {
         await loadChateaus()
+        let clock = ContinuousClock()
         while !Task.isCancelled {
+            let nextTick = clock.now.advanced(by: pollInterval)
             await pollOnce()
-            try? await Task.sleep(for: pollInterval)
+            try? await clock.sleep(until: nextTick)
         }
     }
 
@@ -209,23 +215,29 @@ final class RealtimeVehicles: ObservableObject {
         )
 
         do {
+            let started = ContinuousClock.now
             var req = URLRequest(url: Self.bulkFetchURL)
             req.httpMethod = "POST"
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = try JSONEncoder().encode(request)
             let (data, _) = try await URLSession.shared.data(for: req)
             let resp = try JSONDecoder().decode(BulkFetchResponseV2.self, from: data)
-            self.vehicles = Self.flatten(resp)
+            let flattened = Self.flatten(resp)
+            self.vehicles = flattened.vehicles
+            let elapsedMs = Int(Double((ContinuousClock.now - started).components.attoseconds) / 1e15)
+            print("RealtimeVehicles: vehicles=\(flattened.vehicles.count) latestUpdate=\(flattened.latestUpdateMs ?? 0) bytes=\(data.count) elapsed=\(elapsedMs)ms")
         } catch {
             print("RealtimeVehicles: error fetching vehicles:", error)
         }
     }
 
-    private static func flatten(_ resp: BulkFetchResponseV2) -> [RealtimeVehicle] {
+    private static func flatten(_ resp: BulkFetchResponseV2) -> (vehicles: [RealtimeVehicle], latestUpdateMs: UInt64?) {
         var out: [RealtimeVehicle] = []
+        var latest: UInt64 = 0
         for chateau in resp.chateaus.values {
             guard let cats = chateau.categories else { continue }
             for payload in [cats.metro, cats.bus, cats.rail, cats.other].compactMap({ $0 }) {
+                latest = max(latest, payload.last_updated_time_ms)
                 guard let xs = payload.vehicle_positions else { continue }
                 for ys in xs.values {
                     for vehicleMap in ys.values {
@@ -247,7 +259,7 @@ final class RealtimeVehicles: ObservableObject {
                 }
             }
         }
-        return out
+        return (vehicles: out, latestUpdateMs: latest == 0 ? nil : latest)
     }
 
     /// Convert a lat/lon bounding box into a tile-coordinate rectangle for a given zoom.
