@@ -827,7 +827,7 @@ struct mapLibreView: View {
 
         // Intercity rail
         CircleStyleLayer(identifier: LayersPerCategory.IntercityRail.Livedots, source: source)
-            .color(.systemBlue)
+            .color(.systemRed)
             .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
                     stops: NSExpression(forConstantValue: [5: 3, 10: 5, 14: 8]))
             .strokeColor(.white)

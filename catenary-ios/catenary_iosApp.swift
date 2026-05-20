@@ -14,7 +14,7 @@ var GlobalViewObject: viewObject = viewObject()
 
 private func tintForTab(_ tab: String) -> Color {
     switch tab {
-        case "Rail":       return .blue
+        case "Rail":       return .red
         case "Metro/Tram": return .purple
         case "Bus":        return .catenaryBlue
         case "Other":      return .orange
