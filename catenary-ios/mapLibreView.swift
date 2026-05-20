@@ -894,6 +894,17 @@ struct mapLibreView: View {
             map.mapView.attributionButton.isHidden = true
             map.mapView.compassView.isHidden = true
             map.mapView.showsUserLocation = true
+            // The MapUserAnnotationStyle API doesn't expose a size knob, so we
+            // scale the annotation view directly. It is created lazily after
+            // the first location fix; this closure runs on subsequent view
+            // updates so the transform sticks once the view exists.
+            if let userLoc = map.mapView.userLocation,
+               let userView = map.mapView.view(for: userLoc) {
+                let target = CGAffineTransform(scaleX: 0.7, y: 0.7)
+                if userView.transform != target {
+                    userView.transform = target
+                }
+            }
             // Defer @State write off the current view-update pass.
             if mapViewRef == nil {
                 let captured = map.mapView
@@ -939,7 +950,7 @@ struct mapLibreView: View {
                 approximateHaloFillColor: .catenaryBlue,
                 haloFillColor: .catenaryBlue,
                 puckArrowFillColor: .catenaryBlue,
-                puckFillColor: .white
+                puckFillColor: .blue,
             )
         )
         .ignoresSafeArea()
