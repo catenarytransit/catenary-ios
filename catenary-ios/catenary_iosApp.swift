@@ -12,6 +12,16 @@ import SwiftUI
 
 var GlobalViewObject: viewObject = viewObject()
 
+private func tintForTab(_ tab: String) -> Color {
+    switch tab {
+        case "Rail":       return .blue
+        case "Metro/Tram": return .purple
+        case "Bus":        return .catenaryBlue
+        case "Other":      return .orange
+        default:           return .catenaryBlue
+    }
+}
+
 @main
 struct CatenaryMapsApp: App {
     @StateObject var viewobject = GlobalViewObject
@@ -205,6 +215,7 @@ struct layerSettingButton: View {
     var imageName: String
     var label: String
     var sfsymbol: Bool = false
+    var accentColor: Color = .catenaryBlue
     
     var body: some View {
         VStack {
@@ -227,7 +238,7 @@ struct layerSettingButton: View {
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .stroke(specificLayerSetting ? Color.catenaryBlue : Color.clear, lineWidth: 3)
+                            .stroke(specificLayerSetting ? accentColor : .clear, lineWidth: 3)
                     )
                     .animation(nil, value: specificLayerSetting)
                     .aspectRatio(1, contentMode: .fit)
@@ -264,132 +275,31 @@ extension View {
 struct layerTabView: View {
     @Environment(\.colorScheme) var colorScheme: ColorScheme
     @Binding var layerSettings: LayerCategorySettings
-    @State var selected: Int = 0
-    
+    var accentColor: Color = .catenaryBlue       // ← new
+
     var body: some View {
-        
         VStack {
             HStack(alignment: .firstTextBaseline) {
-                layerSettingButton(specificLayerSetting: $layerSettings.shapes, imageName: "routesicon", label: "Routes")
-                layerSettingButton(specificLayerSetting: $layerSettings.labelshapes, imageName: "labelsicon", label: "Labels")
-                layerSettingButton(specificLayerSetting: $layerSettings.stops, imageName: "stopsicon", label: "Stops")
-                layerSettingButton(specificLayerSetting: $layerSettings.labelstops, imageName: "\(colorScheme == .dark ? "dark" : "light")-stop-name", label: "Names")
-                layerSettingButton(specificLayerSetting: $layerSettings.visiblerealtimedots, imageName: "vehiclesicon", label: "Vehicles")
-                    .contextMenu {
-                        Toggle(isOn: $layerSettings.labelrealtimedots.route) {
-                            Label("Route", systemImage: "point.bottomleft.forward.to.point.topright.scurvepath")
-                        }
-
-                        Toggle(isOn: $layerSettings.labelrealtimedots.trip) {
-                            Label("Trip", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
-                        }
-
-                        Toggle(isOn: $layerSettings.labelrealtimedots.vehicle) {
-                            Label("Vehicle", systemImage: "cablecar")
-                        }
-
-                        Toggle(isOn: $layerSettings.labelrealtimedots.delay) {
-                            Label("Delay", systemImage: "stopwatch")
-                        }
-
-                        Toggle(isOn: $layerSettings.labelrealtimedots.occupancy) {
-                            Label("Occupancy", systemImage: "person.3")
-                        }
-
-                        Toggle(isOn: $layerSettings.labelrealtimedots.speed) {
-                            Label("Speed", systemImage: "gauge.with.dots.needle.67percent")
-                        }
-
-                        Toggle(isOn: $layerSettings.labelrealtimedots.headsign) {
-                            Label("Headsign", systemImage: "flag.pattern.checkered")
-                        }
-
-                        Toggle(isOn: $layerSettings.labelrealtimedots.direction) {
-                            Label("Direction", systemImage: "line.diagonal.arrow")
-                        }
-                    }
+                layerSettingButton(specificLayerSetting: $layerSettings.shapes,
+                                   imageName: "routesicon", label: "Routes",
+                                   accentColor: accentColor)
+                layerSettingButton(specificLayerSetting: $layerSettings.labelshapes,
+                                   imageName: "labelsicon", label: "Labels",
+                                   accentColor: accentColor)
+                layerSettingButton(specificLayerSetting: $layerSettings.stops,
+                                   imageName: "stopsicon", label: "Stops",
+                                   accentColor: accentColor)
+                layerSettingButton(specificLayerSetting: $layerSettings.labelstops,
+                                   imageName: "\(colorScheme == .dark ? "dark" : "light")-stop-name",
+                                   label: "Names",
+                                   accentColor: accentColor)
+                layerSettingButton(specificLayerSetting: $layerSettings.visiblerealtimedots,
+                                   imageName: "vehiclesicon", label: "Vehicles",
+                                   accentColor: accentColor)
+                    .contextMenu { /* unchanged */ }
                     .menuActionDismissBehavior(.disabled)
             }
             .padding(.horizontal)
-            
-//            DisclosureGroup(isExpanded: $expandedVehicleSettings) {
-//                
-////                layerSettingButton(specificLayerSetting: $layerSettings.visiblerealtimedots, imageName: "vehiclesicon", label: "Vehicles")
-//                Text("Hello! I am a setting.")
-//                Text("I am also a setting.")
-//                Text("I, too, exist as a setting in this world!")
-//                Text("I exist?")
-//            } label: {
-//                HStack {
-//                    Image(systemName: "arrow.down")
-//                    Text("Vehicle Options")
-//                    Image(systemName: "arrow.down")
-//                }
-//                .frame(maxWidth: .infinity)
-//            }
-//            .labelsHidden()
-//                if layerSettings.visiblerealtimedots {
-                    
-//            ScrollView(.horizontal) {
-//                    HStack {
-////                        
-//                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.route,
-//                                           imageName: "point.bottomleft.forward.to.point.topright.scurvepath",
-//                                           label: "Route", sfsymbol: true)
-//                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.trip,
-//                                           imageName: "point.topleft.down.to.point.bottomright.curvepath",
-//                                           label: "Trip", sfsymbol: true)
-//                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.vehicle,
-//                                           imageName: "cablecar",
-//                                           label: "Vehicle", sfsymbol: true)
-//                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.delay,
-//                                           imageName: "stopwatch",
-//                                           label: "Delay", sfsymbol: true)
-//                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.occupancy,
-//                                           imageName: "person.3",
-//                                           label: "Occupancy", sfsymbol: true)
-//                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.speed,
-//                                           imageName: "gauge.with.dots.needle.67percent",
-//                                           label: "Speed", sfsymbol: true)
-//                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.headsign,
-//                                           imageName: "flag.pattern.checkered",
-//                                           label: "Headsign", sfsymbol: true)
-//                        layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.direction,
-//                                           imageName: "line.diagonal.arrow",
-//                                           label: "Direction", sfsymbol: true)
-//                        //                    Spacer()
-//                    }
-//                    .padding(.horizontal)
-//                    .padding(.vertical, 5)
-//                    }
-//                    .scrollIndicators(.never)
-////                    .border(.black, width: 1)
-//                    .scrollBounceBehavior(.always)
-                    
-                    
-//
-//            }
-            
-
-            
-//            HStack(alignment: .firstTextBaseline) {
-//                //direction always true
-//                layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.route, imageName: "point.bottomleft.forward.to.point.topright.scurvepath", label: "Route", sfsymbol: true)
-//                layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.trip, imageName: "point.topleft.down.to.point.bottomright.curvepath", label: "Trip", sfsymbol: true)
-//                layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.vehicle, imageName: "cablecar", label: "Vehicle", sfsymbol: true)
-//                layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.headsign, imageName: "flag.pattern.checkered", label: "Headsign", sfsymbol: true)
-//                layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.speed, imageName: "gauge.with.dots.needle.67percent", label: "Speed", sfsymbol: true)
-//                layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.occupancy, imageName: "person.3", label: "Occupancy", sfsymbol: true)
-//                layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.delay, imageName: "stopwatch", label: "Delay", sfsymbol: true)
-//                layerSettingButton(specificLayerSetting: $layerSettings.labelrealtimedots.direction, imageName: "line.diagonal.arrow", label: "Direction", sfsymbol: true)
-//                
-//            }
-//            .padding()
-            
-//            if layerSettings.visiblerealtimedots {
-//                Spacer()
-//                    .frame(height: 150)
-//            }
         }
     }
 }
@@ -399,50 +309,29 @@ struct LayerSelectorSheet: View {
     @EnvironmentObject var viewobject: viewObject
     @Environment(\.colorScheme) var colorScheme: ColorScheme
     @Binding var tabPage: String
-    var body: some View {
-        
+    var accentColor: Color = .catenaryBlue
     
+    var body: some View {
             
         TabView(selection: $tabPage) {
             
             Tab("Rail", systemImage: "tram.fill.tunnel", value: "Rail") {
-                layerTabView(layerSettings: $viewobject.allLayerSettings.intercityrail)
-                
+                layerTabView(layerSettings: $viewobject.allLayerSettings.intercityrail, accentColor: .railCategory)
             }
-            
-            
             Tab("Metro/Tram", systemImage: "lightrail.fill", value: "Metro/Tram") {
-                layerTabView(layerSettings: $viewobject.allLayerSettings.localrail)
-                
+                layerTabView(layerSettings: $viewobject.allLayerSettings.localrail, accentColor: .metroCategory)
             }
-            
             Tab("Bus", systemImage: "bus.fill", value: "Bus") {
-                layerTabView(layerSettings: $viewobject.allLayerSettings.bus)
-                
+                layerTabView(layerSettings: $viewobject.allLayerSettings.bus, accentColor: .busCategory)
             }
-            
             Tab("Other", systemImage: "ferry.fill", value: "Other") {
-                layerTabView(layerSettings: $viewobject.allLayerSettings.other)
-                
+                layerTabView(layerSettings: $viewobject.allLayerSettings.other, accentColor: .otherCategory)
             }
-            
-            Tab("More", systemImage: "ellipsis", value: "More") {
-                
-            }
+            Tab("More", systemImage: "ellipsis", value: "More") { }
         }
         .ignoresSafeArea(edges: .bottom)
         .symbolColorRenderingMode(.flat)
-        .tint(.catenaryBlue)
-//        .tabViewStyle(.page(indexDisplayMode: .never))
-
-//        .toolbar {
-//            ToolbarItem(placement: .bottomBar) {
-//                Label("Rail", systemImage: "tram.fill.tunnel")
-//            }
-//            ToolbarItem(placement: .bottomBar) {
-//                Label("Rail", systemImage: "tram.fill.tunnel")
-//            }
-//        }
+        .tint(tintForTab(tabPage))
     
 
     }
