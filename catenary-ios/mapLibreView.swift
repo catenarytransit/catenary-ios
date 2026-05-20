@@ -12,6 +12,7 @@ import MapLibreSwiftDSL
 struct mapLibreView: View {
     @Environment(\.colorScheme) var colorScheme: ColorScheme
     @ObservedObject var locationManager: LocationManager
+    @StateObject private var realtimeVM = RealtimeVehicles()
     
     var styleURL: URL {
             URL(string: colorScheme == .light
@@ -22,7 +23,13 @@ struct mapLibreView: View {
     @State var railInFrame = false
     
     @State private var userFeature: [String: Any]? = nil
-    
+
+    /// Captured reference to the underlying MLNMapView. Used to push fresh
+    /// features into the `realtime-vehicles` source when `realtimeVM.vehicles`
+    /// publishes — MapLibreSwiftDSL only adds shape sources once and never
+    /// updates their data, so we mutate the source directly.
+    @State private var mapViewRef: MLNMapView?
+
     let lineColorExpression = NSExpression(
         format: "FUNCTION('#', 'stringByAppendingString:', color)"
     )
@@ -798,52 +805,143 @@ struct mapLibreView: View {
         .textHaloWidth(1)
         .predicate(NSPredicate(format: "station_type == 'stop_position'"))
         .minimumZoomLevel(14.2)
-        
-        
-        
-
     }
-    
+
+    /// Live vehicle position dots, driven by `RealtimeVehicles`'s polled feed.
+    /// Re-renders automatically when `realtimeVM.vehicles` publishes.
+    @MapViewContentBuilder
+    var realtimeLayer: some StyleLayerCollection {
+        let source = ShapeSource(identifier: "realtime-vehicles") {
+            for v in realtimeVM.vehicles {
+                let feature = MLNPointFeature()
+                feature.coordinate = v.coordinate
+                feature.attributes = [
+                    "route_type": Int(v.routeType),
+                    "bearing": v.bearing ?? 0,
+                    "route_id": v.routeId ?? "",
+                    "headsign": v.headsign ?? ""
+                ]
+                feature
+            }
+        }
+
+        // Intercity rail
+        CircleStyleLayer(identifier: LayersPerCategory.IntercityRail.Livedots, source: source)
+            .color(.systemBlue)
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [5: 3, 10: 5, 14: 8]))
+            .strokeColor(.white)
+            .strokeWidth(1.5)
+            .predicate(NSPredicate(format: "route_type == 2"))
+            .minimumZoomLevel(5)
+            .visible(viewobject.allLayerSettings.intercityrail.visiblerealtimedots)
+
+        // Metro
+        CircleStyleLayer(identifier: LayersPerCategory.Metro.Livedots, source: source)
+            .color(.systemPurple)
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [8: 2.5, 13: 5, 18: 8]))
+            .strokeColor(.white)
+            .strokeWidth(1.5)
+            .predicate(NSPredicate(format: "route_type == 1 OR route_type == 12 OR route_type == 7"))
+            .minimumZoomLevel(8)
+            .visible(viewobject.allLayerSettings.localrail.visiblerealtimedots)
+
+        // Tram / light rail
+        CircleStyleLayer(identifier: LayersPerCategory.Tram.Livedots, source: source)
+            .color(.systemGreen)
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [9: 2, 13: 4, 18: 7]))
+            .strokeColor(.white)
+            .strokeWidth(1.5)
+            .predicate(NSPredicate(format: "route_type == 0 OR route_type == 5"))
+            .minimumZoomLevel(9)
+            .visible(viewobject.allLayerSettings.localrail.visiblerealtimedots)
+
+        // Bus
+        CircleStyleLayer(identifier: LayersPerCategory.Bus.Livedots, source: source)
+            .color(.catenaryBlue)
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [10: 2.5, 14: 5, 18: 9]))
+            .strokeColor(.white)
+            .strokeWidth(1.5)
+            .predicate(NSPredicate(format: "route_type == 3 OR route_type == 11"))
+            .minimumZoomLevel(11)
+            .visible(viewobject.allLayerSettings.bus.visiblerealtimedots)
+
+        // Other (ferry, cable car, funicular)
+        CircleStyleLayer(identifier: LayersPerCategory.Other.Livedots, source: source)
+            .color(.systemOrange)
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [6: 2.5, 12: 4.5, 18: 7]))
+            .strokeColor(.white)
+            .strokeWidth(1.5)
+            .predicate(NSPredicate(format: "route_type == 4 OR route_type == 6"))
+            .minimumZoomLevel(6)
+            .visible(viewobject.allLayerSettings.other.visiblerealtimedots)
+    }
+
     var body: some View {
         MapView(styleURL: styleURL, camera: $viewobject.camera) {
             shapeLayer
             stationFeaturesLayer
             stopsLayer
-
-            if let loco = locationManager.lastKnownLocation {
-                CircleStyleLayer(identifier: "simple-circle", source: ShapeSource(identifier: "dot") { MLNPointFeature(coordinate: loco) })
-                    .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [1: 1, 5: 3, 10: 5]))
-                
-                    .color(.systemBlue)
-                    .strokeWidth(2)
-                    .strokeColor(.white)
-            }
+            realtimeLayer
         }
-        
+
         .unsafeMapViewControllerModifier { map in
             map.mapView.logoView.isHidden = true
             map.mapView.attributionButton.isHidden = true
             map.mapView.compassView.isHidden = true
+            map.mapView.showsUserLocation = true
+            // Defer @State write off the current view-update pass.
+            if mapViewRef == nil {
+                let captured = map.mapView
+                DispatchQueue.main.async { mapViewRef = captured }
+            }
         }
         .onMapViewProxyUpdate(updateMode: .realtime, onViewProxyChanged: { proxy in
-                    // 4. Update View State
                     DispatchQueue.main.async {
                         viewobject.currentRotation = proxy.direction
-                        
-                        var centered = false
-                        if let lastLoco = locationManager.lastKnownLocation {
-                            if abs(lastLoco.latitude - proxy.centerCoordinate.latitude) < 0.000001 && abs(lastLoco.longitude - proxy.centerCoordinate.longitude) < 0.000001 {
-                                centered = true
-                            }
-                        }
-                        viewobject.centered = centered
-                        
                         currZoom = proxy.zoomLevel
                         coordinateBounds = proxy.visibleCoordinateBounds
+                        realtimeVM.updateBounds(proxy.visibleCoordinateBounds)
+                        realtimeVM.updateZoom(proxy.zoomLevel)
+                        realtimeVM.updateLayerSettings(viewobject.allLayerSettings)
                     }
-                    
                 })
-
+        .task {
+            await realtimeVM.run()
+        }
+        .onChange(of: realtimeVM.vehicles) { _, newVehicles in
+            // MapLibreSwiftDSL caches sources by identifier and won't push
+            // new features into an existing MLNShapeSource. We update the
+            // underlying source's `shape` directly so dots actually move.
+            guard let style = mapViewRef?.style,
+                  let source = style.source(withIdentifier: "realtime-vehicles") as? MLNShapeSource
+            else { return }
+            let features: [MLNShape & MLNFeature] = newVehicles.map { v in
+                let f = MLNPointFeature()
+                f.coordinate = v.coordinate
+                f.attributes = [
+                    "route_type": Int(v.routeType),
+                    "bearing": v.bearing ?? 0,
+                    "route_id": v.routeId ?? "",
+                    "headsign": v.headsign ?? ""
+                ]
+                return f
+            }
+            source.shape = MLNShapeCollectionFeature(shapes: features)
+        }
+        .mapUserAnnotationStyle(
+            MapUserAnnotationStyle(
+                approximateHaloBorderColor: .catenaryBlue,
+                approximateHaloFillColor: .catenaryBlue,
+                haloFillColor: .catenaryBlue,
+                puckArrowFillColor: .catenaryBlue,
+                puckFillColor: .white
+            )
+        )
         .ignoresSafeArea()
         
         

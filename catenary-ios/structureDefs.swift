@@ -34,7 +34,19 @@ class viewObject: ObservableObject {
     @Published var currentRotation: CLLocationDirection = 0
     @Published var isSearchFocusing: Bool = false
     
-    @Published var centered: Bool = false
+    /// `true` whenever the map camera is in any user-tracking mode.
+    /// Derived from `camera.state`, so it updates automatically when the user
+    /// pans the map and MapLibre exits tracking.
+    var centered: Bool {
+        switch camera.state {
+        case .trackingUserLocation,
+             .trackingUserLocationWithHeading,
+             .trackingUserLocationWithCourse:
+            return true
+        default:
+            return false
+        }
+    }
     @Published var showLayerSelector: Bool = false
     @Published var confirmedEqual: Bool = false
     private var equalityTimer: Timer?
@@ -90,6 +102,7 @@ struct ShapeSources {
     static var railstops = URL(string: "https://birch5.catenarymaps.org/railstops")!
     static var otherstops = URL(string: "https://birch8.catenarymaps.org/otherstops")!
     static var osmstations = URL(string: "https://birch.catenarymaps.org/osm_stations")!
+    static var bulkrealtimefetch = URL(string: "https://birch.catenarymaps.org/bulk_realtime_fetch_v3")!
 }
 
 enum shapeTileSources {
@@ -153,6 +166,13 @@ enum shapeTileSources {
         MLNVectorTileSource(
             identifier: "osmstations",
             configurationURL: ShapeSources.osmstations
+        )
+    }
+    
+    static func bulkRealTimeFetchSource() -> MLNVectorTileSource {
+        MLNVectorTileSource(
+            identifier: "bulkrealtimefetch",
+            configurationURL: ShapeSources.bulkrealtimefetch
         )
     }
 }

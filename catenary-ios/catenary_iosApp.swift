@@ -169,9 +169,8 @@ struct OverlayRoot: View {
                         
                         .interactiveDismissDisabled(false)
                         .toolbar {
-                            
                             ToolbarItem(placement: .topBarLeading) {
-                                Text("Layer Settings: \(Text(currentPage).foregroundColor(.catenaryBlue))")
+                                Text("Layers")
                                     .font(.title2)
                                     .fontWeight(.semibold)
                                     .fixedSize()

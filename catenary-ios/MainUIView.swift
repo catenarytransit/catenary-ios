@@ -179,6 +179,7 @@ struct MainUIView: View {
                     .padding(.bottom)
                     Button {
                         locationManager.checkLocationAuthorization()
+                        viewobject.camera = .trackUserLocation(zoom: 15)
                     } label: {
                         Image(systemName: "location\(viewobject.centered ? ".fill" : "")")
                     }
@@ -193,17 +194,6 @@ struct MainUIView: View {
             .offset(y: -sheetHeight)
             .opacity(locationOpacity)
             .animation(.interpolatingSpring(duration: animationDuration, bounce: 0, initialVelocity: 0), value: sheetHeight)
-            
-            .onChange(of: locationManager.lastKnownLocation) { anOldLocation, newLocation in
-                guard let location = newLocation else { return }
-                viewobject.camera.state = .centered(
-                    onCoordinate: location,
-                    zoom: 15,
-                    pitch: 0,
-                    pitchRange: .free,
-                    direction: CLLocationDirection()
-                )
-            }
         }
         
     }
