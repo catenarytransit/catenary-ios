@@ -69,7 +69,13 @@ struct RealtimeTrajectoryVehicle: Identifiable, Hashable {
     let chateauID: String
     let tripID: String?
     let routeID: String?
+    let displayName: String?
     let headsign: String
+    let tripShortName: String?
+    let routeShortName: String?
+    let routeLongName: String?
+    let color: String?
+    let textColor: String?
     let startDate: String?
     let startTime: String?
 
@@ -114,7 +120,13 @@ final class RealtimeTrajectories: ObservableObject {
         let chateauID: String
         let tripID: String?
         let routeID: String?
+        let displayName: String?
         let headsign: String
+        let tripShortName: String?
+        let routeShortName: String?
+        let routeLongName: String?
+        let color: String?
+        let textColor: String?
         let startDate: String?
         let startTime: String?
     }
@@ -324,7 +336,13 @@ final class RealtimeTrajectories: ObservableObject {
                     chateauID: trajectory.chateauID,
                     tripID: trajectory.tripID,
                     routeID: trajectory.routeID,
+                    displayName: trajectory.displayName,
                     headsign: trajectory.headsign,
+                    tripShortName: trajectory.tripShortName,
+                    routeShortName: trajectory.routeShortName,
+                    routeLongName: trajectory.routeLongName,
+                    color: trajectory.color,
+                    textColor: trajectory.textColor,
                     startDate: trajectory.startDate,
                     startTime: trajectory.startTime
                 ))
@@ -372,7 +390,13 @@ final class RealtimeTrajectories: ObservableObject {
             chateauID: item.chateau_id ?? fallbackChateau,
             tripID: item.trip_id,
             routeID: item.route_id,
+            displayName: item.display_name,
             headsign: stops.last?.name ?? "",
+            tripShortName: item.trip_short_name,
+            routeShortName: item.route_short_name,
+            routeLongName: item.route_long_name,
+            color: item.color,
+            textColor: item.text_color,
             startDate: item.start_date,
             startTime: item.start_time
         )

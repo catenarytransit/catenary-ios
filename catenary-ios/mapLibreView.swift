@@ -15,6 +15,16 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
     private var recognizer: UITapGestureRecognizer?
 
     private let selectableLayerIDs: Set<String> = [
+        LayersPerCategory.IntercityRail.Livedots,
+        LayersPerCategory.Metro.Livedots,
+        LayersPerCategory.Tram.Livedots,
+        LayersPerCategory.Bus.Livedots,
+        LayersPerCategory.Other.Livedots,
+        LayersPerCategory.TrajectoryIntercityRail.Livedots,
+        LayersPerCategory.TrajectoryMetro.Livedots,
+        LayersPerCategory.TrajectoryTram.Livedots,
+        LayersPerCategory.TrajectoryBus.Livedots,
+        LayersPerCategory.TrajectoryOther.Livedots,
         LayersPerCategory.Bus.Shapes,
         LayersPerCategory.Bus.LabelShapes,
         LayersPerCategory.Bus.Stops,
@@ -73,8 +83,9 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
     @objc private func handleTap(_ recognizer: UITapGestureRecognizer) {
         guard recognizer.state == .ended, let mapView, let navigator else { return }
         let point = recognizer.location(in: mapView)
+        let hitArea = CGRect(x: point.x - 22, y: point.y - 22, width: 44, height: 44)
         let features = mapView.visibleFeatures(
-            at: point,
+            in: hitArea,
             inStyleLayersWithIdentifiers: selectableLayerIDs,
             predicate: nil
         )
@@ -83,16 +94,45 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         let options = features.compactMap { makeOption(from: $0) }.filter { seen.insert($0.id).inserted }
         guard !options.isEmpty else { return }
 
-        if options.count == 1, let option = options.first {
-            navigator.push(option.destination)
+        let destination: CatenaryStackItem
+        if let option = options.first, options.count == 1 {
+            destination = option.destination
         } else {
-            navigator.push(.mapSelectionScreen(options: options))
+            destination = .mapSelectionScreen(options: options)
+        }
+
+        if let current = navigator.currentStackItem, case .mapSelectionScreen = current {
+            navigator.replaceTop(with: destination)
+        } else {
+            navigator.push(destination)
         }
     }
 
     private func makeOption(from feature: MLNFeature) -> MapSelectionOption? {
         let latitude = (feature as? MLNPointFeature)?.coordinate.latitude
         let longitude = (feature as? MLNPointFeature)?.coordinate.longitude
+
+        if string(feature, keys: ["selection_kind"]) == "vehicle",
+           let chateauID = string(feature, keys: ["chateau", "chateau_id"]),
+           let routeType = integer(feature, keys: ["route_type"]) {
+            return MapSelectionOption(data: .vehicle(
+                chateauID: chateauID,
+                vehicleID: string(feature, keys: ["vehicle_id"]),
+                routeID: string(feature, keys: ["route_id"]),
+                headsign: string(feature, keys: ["headsign", "trip_headsign"]) ?? "",
+                tripLabel: string(feature, keys: ["vehicle_label", "display_name"]),
+                colour: string(feature, keys: ["color", "colour"]) ?? "777777",
+                routeShortName: string(feature, keys: ["route_short_name", "route_label"]),
+                routeLongName: string(feature, keys: ["route_long_name"]),
+                routeType: routeType,
+                tripShortName: string(feature, keys: ["trip_short_name"]),
+                textColour: string(feature, keys: ["text_color", "text_colour"]) ?? "FFFFFF",
+                gtfsID: string(feature, keys: ["gtfs_id"]) ?? chateauID,
+                tripID: string(feature, keys: ["trip_id", "unique_trip_id"]),
+                startTime: string(feature, keys: ["start_time"]),
+                startDate: string(feature, keys: ["start_date"])
+            ))
+        }
 
         if let osmID = string(feature, keys: ["osm_station_id", "osm_id"]),
            let latitude,
@@ -957,10 +997,19 @@ struct mapLibreView: View {
                 let feature = MLNPointFeature()
                 feature.coordinate = v.coordinate
                 feature.attributes = [
+                    "selection_kind": "vehicle",
+                    "chateau": v.chateauID,
                     "route_type": Int(v.routeType),
                     "bearing": v.bearing ?? 0,
+                    "vehicle_id": v.vehicleID ?? v.id,
+                    "vehicle_label": v.vehicleLabel ?? "",
+                    "gtfs_id": v.chateauID,
+                    "trip_id": v.tripID ?? "",
                     "route_id": v.routeId ?? "",
-                    "headsign": v.headsign ?? ""
+                    "headsign": v.headsign ?? "",
+                    "trip_short_name": v.tripShortName ?? "",
+                    "start_time": v.startTime ?? "",
+                    "start_date": v.startDate ?? ""
                 ]
                 feature
             }
@@ -1032,12 +1081,20 @@ struct mapLibreView: View {
                 let feature = MLNPointFeature()
                 feature.coordinate = vehicle.coordinate
                 feature.attributes = [
+                    "selection_kind": "vehicle",
                     "route_type": vehicle.routeType,
                     "bearing": vehicle.bearing,
                     "chateau": vehicle.chateauID,
+                    "gtfs_id": vehicle.chateauID,
                     "trip_id": vehicle.tripID ?? "",
                     "route_id": vehicle.routeID ?? "",
+                    "display_name": vehicle.displayName ?? "",
                     "headsign": vehicle.headsign,
+                    "trip_short_name": vehicle.tripShortName ?? "",
+                    "route_short_name": vehicle.routeShortName ?? "",
+                    "route_long_name": vehicle.routeLongName ?? "",
+                    "color": vehicle.color ?? "777777",
+                    "text_color": vehicle.textColor ?? "FFFFFF",
                     "start_date": vehicle.startDate ?? "",
                     "start_time": vehicle.startTime ?? ""
                 ]
@@ -1196,10 +1253,19 @@ struct mapLibreView: View {
                 let f = MLNPointFeature()
                 f.coordinate = v.coordinate
                 f.attributes = [
+                    "selection_kind": "vehicle",
+                    "chateau": v.chateauID,
                     "route_type": Int(v.routeType),
                     "bearing": v.bearing ?? 0,
+                    "vehicle_id": v.vehicleID ?? v.id,
+                    "vehicle_label": v.vehicleLabel ?? "",
+                    "gtfs_id": v.chateauID,
+                    "trip_id": v.tripID ?? "",
                     "route_id": v.routeId ?? "",
-                    "headsign": v.headsign ?? ""
+                    "headsign": v.headsign ?? "",
+                    "trip_short_name": v.tripShortName ?? "",
+                    "start_time": v.startTime ?? "",
+                    "start_date": v.startDate ?? ""
                 ]
                 return f
             }
@@ -1213,12 +1279,20 @@ struct mapLibreView: View {
                 let feature = MLNPointFeature()
                 feature.coordinate = vehicle.coordinate
                 feature.attributes = [
+                    "selection_kind": "vehicle",
                     "route_type": vehicle.routeType,
                     "bearing": vehicle.bearing,
                     "chateau": vehicle.chateauID,
+                    "gtfs_id": vehicle.chateauID,
                     "trip_id": vehicle.tripID ?? "",
                     "route_id": vehicle.routeID ?? "",
+                    "display_name": vehicle.displayName ?? "",
                     "headsign": vehicle.headsign,
+                    "trip_short_name": vehicle.tripShortName ?? "",
+                    "route_short_name": vehicle.routeShortName ?? "",
+                    "route_long_name": vehicle.routeLongName ?? "",
+                    "color": vehicle.color ?? "777777",
+                    "text_color": vehicle.textColor ?? "FFFFFF",
                     "start_date": vehicle.startDate ?? "",
                     "start_time": vehicle.startTime ?? ""
                 ]

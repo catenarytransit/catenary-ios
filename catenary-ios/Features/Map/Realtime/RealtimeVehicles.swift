@@ -93,11 +93,18 @@ struct CatenaryRtVehiclePosition: Decodable {
 
 struct RealtimeVehicle: Identifiable, Hashable {
     let id: String
+    let chateauID: String
     let coordinate: CLLocationCoordinate2D
     let routeType: Int16
     let bearing: Double?
+    let vehicleID: String?
+    let vehicleLabel: String?
+    let tripID: String?
     let routeId: String?
     let headsign: String?
+    let tripShortName: String?
+    let startTime: String?
+    let startDate: String?
     let delay: Int32?
 
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
@@ -218,14 +225,21 @@ final class RealtimeVehicles: ObservableObject {
                 for (id, v) in vehicleMap {
                     guard let pos = v.position else { continue }
                     byChateau[chateauID, default: [:]][category, default: [:]][id] = RealtimeVehicle(
-                        id: id,
+                        id: "\(chateauID)|\(id)",
+                        chateauID: chateauID,
                         coordinate: CLLocationCoordinate2D(
                             latitude: Double(pos.latitude),
                             longitude: Double(pos.longitude)),
                         routeType: v.route_type,
                         bearing: pos.bearing.map(Double.init),
+                        vehicleID: v.vehicle?.id ?? id,
+                        vehicleLabel: v.vehicle?.label,
+                        tripID: v.trip?.trip_id,
                         routeId: v.trip?.route_id,
                         headsign: v.trip?.trip_headsign,
+                        tripShortName: v.trip?.trip_short_name,
+                        startTime: v.trip?.start_time,
+                        startDate: v.trip?.start_date,
                         delay: v.trip?.delay
                     )
                     added += 1

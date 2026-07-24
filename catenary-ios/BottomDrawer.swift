@@ -133,40 +133,7 @@ private struct CatenaryStackDestinationView: View {
             .id(destination.id)
 
         case let .mapSelectionScreen(options):
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 8) {
-                    Text("Choose an item")
-                        .font(.title2.weight(.semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.bottom, 4)
-
-                    ForEach(options) { option in
-                        Button {
-                            viewObject.push(option.destination)
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: option.data.systemImage)
-                                    .frame(width: 28)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(option.data.title)
-                                        .foregroundStyle(.primary)
-                                    Text(option.data.subtitle)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.forward")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .padding(12)
-                            .background(.quaternary, in: .rect(cornerRadius: 14))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding()
-            }
+            MapOverlappingSelectionScreen(options: options)
 
         case .settings:
             ScrollView {

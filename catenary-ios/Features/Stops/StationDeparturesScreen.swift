@@ -82,7 +82,7 @@ struct StationDeparturesScreen: View {
             .padding(.bottom, 8)
         }
         .task(id: source.id) {
-            await redirectGTFSStopToOSMStationIfNeeded()
+            if await redirectGTFSStopToOSMStationIfNeeded() { return }
             guard !Task.isCancelled else { return }
             await model.reset(source: source, anchor: referenceDate)
             synchronizeFilters()
@@ -363,12 +363,12 @@ struct StationDeparturesScreen: View {
         )
     }
 
-    private func redirectGTFSStopToOSMStationIfNeeded() async {
+    private func redirectGTFSStopToOSMStationIfNeeded() async -> Bool {
         guard case let .stop(chateauID, stopID) = source,
               let lookup = await model.lookupOSMStation(chateauID: chateauID, stopID: stopID),
               lookup.found,
               let stationID = lookup.osmStationId else {
-            return
+            return false
         }
 
         replaceWithOSMStation(
@@ -378,6 +378,7 @@ struct StationDeparturesScreen: View {
             latitude: lookup.osmStationInfo?.lat,
             longitude: lookup.osmStationInfo?.lon
         )
+        return true
     }
 
     private func replaceWithOSMStation(
