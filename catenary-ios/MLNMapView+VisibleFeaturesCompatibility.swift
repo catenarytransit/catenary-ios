@@ -17,7 +17,7 @@ extension MLNMapView {
         predicate: NSPredicate?
     ) -> [MLNFeature] {
         visibleFeatures(
-            in: point,
+            at: point,
             styleLayerIdentifiers: styleLayerIdentifiers,
             predicate: predicate
         )
