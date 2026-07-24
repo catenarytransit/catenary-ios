@@ -37,7 +37,7 @@ struct BottomDrawer: View {
                 )
             }
         }
-        .safeAreaBar(edge: .top) {
+        .safeAreaInset(edge: .top, spacing: 0) {
             VStack {
                 if viewObject.currentStackItem == nil {
                     if viewObject.confirmedEqual || viewObject.isVisible {
@@ -51,10 +51,9 @@ struct BottomDrawer: View {
                                     .frame(height: 18)
                                     .padding(.leading, 10)
                             }
-                            .background(.gray.opacity(0.25), in: .capsule)
                             .focused($isFocused)
-                            .transition(.blurReplace)
-                            .glassEffect(.regular.interactive(), in: .capsule)
+                            .catenarySearchBarSurface()
+                            .transition(.move(edge: .top).combined(with: .opacity))
                             .padding(.horizontal, 18)
                             .frame(height: 80)
                     } else if selectedDetent != .height(80) {

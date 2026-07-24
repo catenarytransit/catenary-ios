@@ -145,7 +145,6 @@ struct OverlayRoot: View {
                                     .fontWeight(.semibold)
                                     .fixedSize()
                             }
-                            .sharedBackgroundVisibility(.hidden)
                             
                             ToolbarItem(placement: .topBarTrailing) {
                                 Button {
@@ -290,7 +289,7 @@ struct LayerSelectorSheet: View {
             Tab("More", systemImage: "ellipsis", value: "More") { }
         }
         .ignoresSafeArea(edges: .bottom)
-        .symbolColorRenderingMode(.flat)
+        .symbolRenderingMode(.monochrome)
     
 
     }
@@ -343,9 +342,8 @@ struct InAppNotificationViewModifier: ViewModifier {
                                 .padding(.leading, 10)
                                 
                         }
-                        .glassEffect(.regular.interactive(), in: .capsule)
+                        .catenarySearchBarSurface()
                         .padding()
-                        .ignoresSafeArea(.container, edges: .bottom)
                         .background (
                             GeometryReader { geo in
                                 Color.clear
@@ -361,7 +359,7 @@ struct InAppNotificationViewModifier: ViewModifier {
                                     }
                             }
                         )
-                        .transition(.blurReplace)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
     }
@@ -370,6 +368,20 @@ struct InAppNotificationViewModifier: ViewModifier {
 extension View {
     func inAppSearchOverlay(text: Binding<String>, showField: Binding<Bool>, presDetent: PresentationDetent, confirmedEqual: Bool, keyboardVisible: Bool) -> some View {
         self.modifier(InAppNotificationViewModifier(text: text, showField: showField, presDetent: presDetent, confirmedEqual: confirmedEqual, keyboardVisible: keyboardVisible))
+    }
+}
+
+extension View {
+    /// Matches the Compose search field's Material surface, pill shape, and 4 dp shadow
+    /// without requiring the newer Liquid Glass SDK.
+    func catenarySearchBarSurface() -> some View {
+        self
+            .background(Color(uiColor: .systemBackground), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            }
+            .shadow(color: Color.black.opacity(0.14), radius: 4, x: 0, y: 2)
     }
 }
 

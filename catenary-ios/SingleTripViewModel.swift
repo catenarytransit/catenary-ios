@@ -23,9 +23,9 @@ final class SingleTripViewModel: ObservableObject {
     private var vehiclePollTask: Task<Void, Never>?
     private var hasStarted = false
 
-    init(selection: SingleTripSelection, socket: RamondaWebSocket = .shared) {
+    init(selection: SingleTripSelection, socket: RamondaWebSocket? = nil) {
         self.selection = selection
-        self.socket = socket
+        self.socket = socket ?? RamondaWebSocket.shared
         bindSocket()
     }
 
