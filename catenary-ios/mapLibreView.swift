@@ -1044,6 +1044,8 @@ struct mapLibreView: View {
         .onMapViewProxyUpdate(updateMode: .realtime, onViewProxyChanged: { proxy in
                     DispatchQueue.main.async {
                         viewobject.currentRotation = proxy.direction
+                        viewobject.currZoom = proxy.zoomLevel
+                        viewobject.visibleCoordinateBounds = proxy.visibleCoordinateBounds
                         currZoom = proxy.zoomLevel
                         coordinateBounds = proxy.visibleCoordinateBounds
                         realtimeVM.updateBounds(proxy.visibleCoordinateBounds)

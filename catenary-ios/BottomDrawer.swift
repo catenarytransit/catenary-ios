@@ -15,24 +15,26 @@ import MapLibreSwiftUI
 struct BottomDrawer: View {
     @Binding var selectedDetent: PresentationDetent
     @ObservedObject var locationManager: LocationManager
+    @Binding var nearbyPinActive: Bool
+    @Binding var nearbyPinCoordinate: CLLocationCoordinate2D?
     @EnvironmentObject var viewObject: viewObject
     @FocusState var isFocused: Bool
 
     var body: some View {
         Group {
             if let destination = viewObject.currentStackItem {
-                CatenaryStackDestinationView(destination: destination)
+                CatenaryStackDestinationView(
+                    destination: destination,
+                    locationManager: locationManager,
+                    nearbyPinActive: $nearbyPinActive,
+                    nearbyPinCoordinate: $nearbyPinCoordinate
+                )
             } else {
-                ScrollView(.vertical) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Explore nearby transit")
-                            .font(.title2.weight(.semibold))
-                        Text("Search for a place or tap a route, stop, station, or vehicle on the map.")
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                }
+                NearbyDeparturesView(
+                    locationManager: locationManager,
+                    pinActive: $nearbyPinActive,
+                    pickedCoordinate: $nearbyPinCoordinate
+                )
             }
         }
         .safeAreaBar(edge: .top) {
@@ -109,12 +111,29 @@ private struct StackNavigationControls: View {
 
 private struct CatenaryStackDestinationView: View {
     let destination: CatenaryStackItem
+    @ObservedObject var locationManager: LocationManager
+    @Binding var nearbyPinActive: Bool
+    @Binding var nearbyPinCoordinate: CLLocationCoordinate2D?
     @EnvironmentObject private var viewObject: viewObject
 
+    @ViewBuilder
     var body: some View {
-        ScrollView {
-            switch destination {
-            case let .mapSelectionScreen(options):
+        switch destination {
+        case .stop, .osmStation:
+            StopScreenView(destination: destination)
+                .id(destination.id)
+
+        case let .nearbyDepartures(_, latitude, longitude):
+            NearbyDeparturesView(
+                locationManager: locationManager,
+                fixedOrigin: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+                pinActive: $nearbyPinActive,
+                pickedCoordinate: $nearbyPinCoordinate
+            )
+            .id(destination.id)
+
+        case let .mapSelectionScreen(options):
+            ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
                     Text("Choose an item")
                         .font(.title2.weight(.semibold))
@@ -147,8 +166,10 @@ private struct CatenaryStackDestinationView: View {
                     }
                 }
                 .padding()
+            }
 
-            case .settings:
+        case .settings:
+            ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Settings")
                         .font(.largeTitle.bold())
@@ -159,8 +180,11 @@ private struct CatenaryStackDestinationView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
+            }
 
-            default:
+        default:
+            // SingleTripScreen and BlockScreen intentionally remain placeholders.
+            ScrollView {
                 StackDestinationSummary(destination: destination)
                     .padding()
             }

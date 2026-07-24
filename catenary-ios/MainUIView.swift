@@ -36,6 +36,8 @@ struct MainUIView: View {
     @State private var animationDuration: CGFloat = 0
     @State private var text = ""
     @State var tempSheetOpacity: CGFloat = 0
+    @State private var nearbyPinActive = false
+    @State private var nearbyPinCoordinate: CLLocationCoordinate2D?
     
     
     var body: some View {
@@ -54,7 +56,12 @@ struct MainUIView: View {
                     focus = false
                 }
                 .sheet(isPresented: $isSheetPresented) {
-                    BottomDrawer(selectedDetent: $viewobject.presDetent, locationManager: locationManager)
+                    BottomDrawer(
+                        selectedDetent: $viewobject.presDetent,
+                        locationManager: locationManager,
+                        nearbyPinActive: $nearbyPinActive,
+                        nearbyPinCoordinate: $nearbyPinCoordinate
+                    )
                         .ignoresSafeArea(.keyboard)
                         .presentationDetents([.height(80), .height(350), .large], selection: $viewobject.presDetent)
                         
@@ -114,6 +121,14 @@ struct MainUIView: View {
                         } else {
                             isSheetPresented = true
                         }
+                    }
+                }
+                .overlay {
+                    if nearbyPinActive, nearbyPinCoordinate != nil {
+                        DraggableNearbyPinOverlay(
+                            coordinate: $nearbyPinCoordinate,
+                            bounds: viewobject.visibleCoordinateBounds
+                        )
                     }
                 }
                 .overlay(alignment: .bottomTrailing) {
