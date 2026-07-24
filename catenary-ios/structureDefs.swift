@@ -27,6 +27,17 @@ extension UIColor {
     static let otherCategory  = UIColor.systemOrange
 }
 
+struct SelectedStopMapContext: Equatable {
+    let id: String
+    let name: String
+    let latitude: Double
+    let longitude: Double
+
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+}
+
 // MARK: - Typed navigation stack
 
 /// Swift equivalent of catenary-compose's `CatenaryStackEnum`.
@@ -209,6 +220,18 @@ enum MapSelectionSelector: Hashable, Identifiable {
 
 class viewObject: ObservableObject {
     @Published var camera: MapViewCamera = MapViewCamera.center(CLLocationCoordinate2D(latitude: 34.0522, longitude: -118.2437), zoom: 5.0)
+    @Published private(set) var selectedStopContext: SelectedStopMapContext?
+
+    func setSelectedStopContext(_ context: SelectedStopMapContext) {
+        guard selectedStopContext != context else { return }
+        selectedStopContext = context
+    }
+
+    func clearSelectedStopContext(id: String) {
+        guard selectedStopContext?.id == id else { return }
+        selectedStopContext = nil
+    }
+
     @Published var allLayerSettings: AllLayerSettings = AllLayerSettings()
     @Published var currZoom: Double = 5.0
     @Published var visibleCoordinateBounds: MLNCoordinateBounds = MLNCoordinateBounds(sw: CLLocationCoordinate2D(latitude: 0, longitude: 0), ne: CLLocationCoordinate2D(latitude: 0, longitude: 0))
@@ -263,6 +286,7 @@ class viewObject: ObservableObject {
 
     func home() {
         catenaryStack.removeAll()
+        selectedStopContext = nil
         presDetent = .height(350)
     }
 

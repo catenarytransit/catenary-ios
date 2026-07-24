@@ -120,8 +120,8 @@ private struct CatenaryStackDestinationView: View {
     var body: some View {
         switch destination {
         case .stop, .osmStation:
-            StopScreenView(destination: destination)
-                .id(destination.id)
+            StationDeparturesScreen(destination: destination)
+                .id(destination.stopScreenIdentity)
 
         case let .nearbyDepartures(_, latitude, longitude):
             NearbyDeparturesView(

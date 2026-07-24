@@ -1021,12 +1021,59 @@ struct mapLibreView: View {
             .visible(viewobject.allLayerSettings.other.visiblerealtimedots)
     }
 
+    @MapViewContentBuilder
+    var selectedStopLayer: some StyleLayerCollection {
+        let source = ShapeSource(identifier: "selected-stop-context") {
+            if let context = viewobject.selectedStopContext {
+                let feature = MLNPointFeature()
+                feature.coordinate = context.coordinate
+                feature.attributes = ["name": context.name]
+                feature
+            }
+        }
+
+        CircleStyleLayer(identifier: "selected-stop-context-circle", source: source)
+            .color(.catenaryBlue)
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [8: 5, 14: 8, 18: 11]))
+            .strokeColor(.white)
+            .strokeWidth(2)
+
+        SymbolStyleLayer(identifier: "selected-stop-context-label", source: source)
+            .text(expression: NSExpression(format: "name"))
+            .textFontNames(["Barlow-Bold"])
+            .textFontSize(12)
+            .textOffset(CGVector(dx: 0, dy: 1.4))
+            .textAnchor("top")
+            .textColor(colorScheme == .dark ? .white : .black)
+            .textHaloColor(colorScheme == .dark ? UIColor.black : UIColor.white)
+            .textHaloWidth(1)
+    }
+
+    private func updateSelectedStopSource(_ context: SelectedStopMapContext?) {
+        guard let source = mapViewRef?.style?.source(
+            withIdentifier: "selected-stop-context"
+        ) as? MLNShapeSource else { return }
+
+        let features: [MLNShape & MLNFeature]
+        if let context {
+            let feature = MLNPointFeature()
+            feature.coordinate = context.coordinate
+            feature.attributes = ["name": context.name]
+            features = [feature]
+        } else {
+            features = []
+        }
+        source.shape = MLNShapeCollectionFeature(shapes: features)
+    }
+
     var body: some View {
         MapView(styleURL: styleURL, camera: $viewobject.camera) {
             shapeLayer
             stationFeaturesLayer
             stopsLayer
             realtimeLayer
+            selectedStopLayer
         }
 
         .unsafeMapViewControllerModifier { map in
@@ -1075,6 +1122,9 @@ struct mapLibreView: View {
                 return f
             }
             source.shape = MLNShapeCollectionFeature(shapes: features)
+        }
+        .onChange(of: viewobject.selectedStopContext) { _, context in
+            updateSelectedStopSource(context)
         }
         .mapUserAnnotationStyle(
             MapUserAnnotationStyle(
