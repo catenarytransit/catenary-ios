@@ -3,18 +3,6 @@ import CoreLocation
 import Foundation
 import SwiftUI
 
-private enum StopScreenSource: Hashable {
-    case stop(chateauID: String, stopID: String)
-    case osmStation(id: String)
-
-    var id: String {
-        switch self {
-        case let .stop(chateauID, stopID): return "stop|\(chateauID)|\(stopID)"
-        case let .osmStation(id): return "osm|\(id)"
-        }
-    }
-}
-
 private struct StopAPIResponse: Decodable {
     let primary: StopAPIPrimary?
     let routes: [String: [String: StopAPIRouteInfo]]?
@@ -454,14 +442,10 @@ struct StopScreenView: View {
     }
 
     private var source: StopScreenSource {
-        switch destination {
-        case let .stop(chateauID, stopID, _):
-            return .stop(chateauID: chateauID, stopID: stopID)
-        case let .osmStation(osmStationID, _, _, _, _, _):
-            return .osmStation(id: osmStationID)
-        default:
+        guard let source = StopScreenSource(destination: destination) else {
             preconditionFailure("StopScreenView received an unsupported destination")
         }
+        return source
     }
 
     private var loadKey: String {
