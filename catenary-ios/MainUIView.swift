@@ -151,7 +151,7 @@ struct MainUIView: View {
                                     .padding(.leading, 10)
                                     
                             }
-                            .glassEffect(.regular.interactive(), in: .capsule)
+                            .background(.regularMaterial, in: Capsule())
                             .padding()
                             .ignoresSafeArea(.container, edges: .bottom)
                             .transition(.asymmetric(insertion: .opacity, removal: .opacity))
@@ -179,7 +179,7 @@ struct MainUIView: View {
     
     @ViewBuilder
     func floatingToolBar() -> some View {
-        GlassEffectContainer {
+        Group {
             VStack {
                 if viewobject.currentRotation != 0 {
                     Button {
@@ -189,7 +189,7 @@ struct MainUIView: View {
                         Image(systemName: "location.north.line")
                             .rotationEffect(Angle(degrees: viewobject.currentRotation))
                             .padding()
-                            .glassEffect(.regular.interactive(), in: .circle)
+                            .background(.regularMaterial, in: Circle())
                     }
                     .transition(.opacity.combined(with: .scale))
                     .foregroundStyle(Color.primary)
@@ -214,7 +214,7 @@ struct MainUIView: View {
                     
                 }
                 .padding(.all, 10)
-                .glassEffect(.regular.interactive(), in: .capsule)
+                .background(.regularMaterial, in: Capsule())
                 
             }
             .font(.title3)
