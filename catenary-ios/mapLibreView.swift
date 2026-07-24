@@ -9,10 +9,150 @@ import MapLibreSwiftUI
 import MapLibre
 import MapLibreSwiftDSL
 
+final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecognizerDelegate {
+    private weak var mapView: MLNMapView?
+    private weak var navigator: viewObject?
+    private var recognizer: UITapGestureRecognizer?
+
+    private let selectableLayerIDs: Set<String> = [
+        LayersPerCategory.Bus.Shapes,
+        LayersPerCategory.Bus.LabelShapes,
+        LayersPerCategory.Bus.Stops,
+        LayersPerCategory.Bus.LabelStops,
+        LayersPerCategory.IntercityRail.Shapes,
+        LayersPerCategory.IntercityRail.LabelShapes,
+        LayersPerCategory.IntercityRail.Stops,
+        LayersPerCategory.IntercityRail.LabelStops,
+        LayersPerCategory.Metro.Shapes,
+        LayersPerCategory.Metro.LabelShapes,
+        LayersPerCategory.Metro.Stops,
+        LayersPerCategory.Metro.LabelStops,
+        LayersPerCategory.Tram.Shapes,
+        LayersPerCategory.Tram.LabelShapes,
+        LayersPerCategory.Tram.Stops,
+        LayersPerCategory.Tram.LabelStops,
+        LayersPerCategory.Other.Shapes,
+        LayersPerCategory.Other.LabelShapes,
+        LayersPerCategory.Other.Stops,
+        LayersPerCategory.Other.LabelStops,
+        LayersPerCategory.Bus.Stops + "_osm",
+        LayersPerCategory.Bus.LabelStops + "_osm",
+        LayersPerCategory.IntercityRail.Stops + "_osm",
+        LayersPerCategory.IntercityRail.LabelStops + "_osm",
+        LayersPerCategory.Metro.Stops + "_osm",
+        LayersPerCategory.Metro.LabelStops + "_osm",
+        LayersPerCategory.Tram.Stops + "_osm",
+        LayersPerCategory.Tram.LabelStops + "_osm",
+        LayersPerCategory.Other.Stops + "_osm",
+        LayersPerCategory.Other.LabelStops + "_osm"
+    ]
+
+    func install(on mapView: MLNMapView, navigator: viewObject) {
+        self.navigator = navigator
+        guard self.mapView !== mapView else { return }
+
+        if let recognizer, let oldMap = self.mapView {
+            oldMap.removeGestureRecognizer(recognizer)
+        }
+
+        self.mapView = mapView
+        let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+        recognizer.cancelsTouchesInView = false
+        recognizer.delegate = self
+        mapView.addGestureRecognizer(recognizer)
+        self.recognizer = recognizer
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        true
+    }
+
+    @objc private func handleTap(_ recognizer: UITapGestureRecognizer) {
+        guard recognizer.state == .ended, let mapView, let navigator else { return }
+        let point = recognizer.location(in: mapView)
+        let features = mapView.visibleFeatures(
+            at: point,
+            inStyleLayersWithIdentifiers: selectableLayerIDs,
+            predicate: nil
+        )
+
+        var seen = Set<String>()
+        let options = features.compactMap { makeOption(from: $0) }.filter { seen.insert($0.id).inserted }
+        guard !options.isEmpty else { return }
+
+        if options.count == 1, let option = options.first {
+            navigator.push(option.destination)
+        } else {
+            navigator.push(.mapSelectionScreen(options: options))
+        }
+    }
+
+    private func makeOption(from feature: MLNFeature) -> MapSelectionOption? {
+        let latitude = (feature as? MLNPointFeature)?.coordinate.latitude
+        let longitude = (feature as? MLNPointFeature)?.coordinate.longitude
+
+        if let osmID = string(feature, keys: ["osm_station_id", "osm_id"]),
+           let latitude,
+           let longitude {
+            return MapSelectionOption(data: .osmStation(
+                osmID: osmID,
+                name: string(feature, keys: ["name", "displayname"]) ?? "Station",
+                modeType: string(feature, keys: ["mode_type", "station_type"]) ?? "station",
+                latitude: latitude,
+                longitude: longitude
+            ))
+        }
+
+        if let chateauID = string(feature, keys: ["chateau", "chateau_id"]),
+           let stopID = string(feature, keys: ["stop_id", "gtfs_id"]) {
+            return MapSelectionOption(data: .stop(
+                chateauID: chateauID,
+                stopID: stopID,
+                stopName: string(feature, keys: ["displayname", "stop_name", "name"]) ?? stopID
+            ))
+        }
+
+        if let chateauID = string(feature, keys: ["chateau", "chateau_id"]),
+           let routeID = string(feature, keys: ["route_id"]) {
+            return MapSelectionOption(data: .route(
+                chateauID: chateauID,
+                routeID: routeID,
+                colour: string(feature, keys: ["color", "colour"]) ?? "000000",
+                name: string(feature, keys: ["route_label", "short_name", "long_name"]),
+                routeType: integer(feature, keys: ["route_type"])
+            ))
+        }
+
+        return nil
+    }
+
+    private func string(_ feature: MLNFeature, keys: [String]) -> String? {
+        for key in keys {
+            guard let value = feature.attributes[key], !(value is NSNull) else { continue }
+            if let value = value as? String, !value.isEmpty { return value }
+            if let value = value as? NSNumber { return value.stringValue }
+        }
+        return nil
+    }
+
+    private func integer(_ feature: MLNFeature, keys: [String]) -> Int? {
+        for key in keys {
+            guard let value = feature.attributes[key], !(value is NSNull) else { continue }
+            if let value = value as? NSNumber { return value.intValue }
+            if let value = value as? String, let parsed = Int(value) { return parsed }
+        }
+        return nil
+    }
+}
+
 struct mapLibreView: View {
     @Environment(\.colorScheme) var colorScheme: ColorScheme
     @ObservedObject var locationManager: LocationManager
     @StateObject private var realtimeVM = RealtimeVehicles()
+    @StateObject private var featureTapCoordinator = MapFeatureTapCoordinator()
     
     var styleURL: URL {
             URL(string: colorScheme == .light
@@ -894,6 +1034,7 @@ struct mapLibreView: View {
             map.mapView.attributionButton.isHidden = true
             map.mapView.compassView.isHidden = true
             map.mapView.showsUserLocation = true
+            featureTapCoordinator.install(on: map.mapView, navigator: viewobject)
             // Defer @State write off the current view-update pass.
             if mapViewRef == nil {
                 let captured = map.mapView

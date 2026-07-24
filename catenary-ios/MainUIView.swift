@@ -41,6 +41,18 @@ struct MainUIView: View {
     var body: some View {
         ZStack {
             mapLibreView(locationManager: locationManager)
+                .onOpenURL { url in
+                    viewobject.openDeepLink(url)
+                    isSheetPresented = true
+                }
+                .onChange(of: viewobject.catenaryStack) { _, stack in
+                    guard !stack.isEmpty else { return }
+                    isSheetPresented = true
+                    if viewobject.presDetent != .large {
+                        viewobject.presDetent = .large
+                    }
+                    focus = false
+                }
                 .sheet(isPresented: $isSheetPresented) {
                     BottomDrawer(selectedDetent: $viewobject.presDetent, locationManager: locationManager)
                         .ignoresSafeArea(.keyboard)

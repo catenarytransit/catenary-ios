@@ -17,74 +17,228 @@ struct BottomDrawer: View {
     @ObservedObject var locationManager: LocationManager
     @EnvironmentObject var viewObject: viewObject
     @FocusState var isFocused: Bool
-    @State var searchText = ""
-    @State var keepAlive: Bool = false
-    
+
     var body: some View {
-        VStack {
-            ScrollView(.vertical) {
-                
-                if viewObject.confirmedEqual {
-                    Text("\(viewObject.sheetHeight), \(viewObject.largeDetentHeight)")
-                    Text("hey this is confirmd to be equal lol")
-                    
-                } else {
-                    Text("\(viewObject.sheetHeight), \(viewObject.largeDetentHeight)")
+        Group {
+            if let destination = viewObject.currentStackItem {
+                CatenaryStackDestinationView(destination: destination)
+            } else {
+                ScrollView(.vertical) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Explore nearby transit")
+                            .font(.title2.weight(.semibold))
+                        Text("Search for a place or tap a route, stop, station, or vehicle on the map.")
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
                 }
-                Text("i focused: \(isFocused ? "true" : "false")")
-                Text("keyoard visible? \(viewObject.isVisible ? "true" : "false")")
-                Spacer()
             }
         }
-            .safeAreaBar(edge: .top) {
-                VStack {
+        .safeAreaBar(edge: .top) {
+            VStack {
+                if viewObject.currentStackItem == nil {
                     if viewObject.confirmedEqual || viewObject.isVisible {
-                        
-                        
-                            
-                            TextField("Search Here", text: $viewObject.searchText)
-                                .padding(.trailing, 20)
-                                .padding(.vertical, 12)
-                                .safeAreaInset(edge: .leading) {    
-                                    Image(.catLogo)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                        .frame(height: 18)
-                                        .padding(.leading, 10)                                    
-                                }
-                                .background(.gray.opacity(0.25), in: .capsule)
-                                .focused($isFocused)
-                                .transition(.blurReplace)
-                                .glassEffect(.regular.interactive(), in: .capsule)
-                                
-
-                            //                            .shadow(color: .black.opacity(0.1), radius: 3)
-                        
-                        
-                        .padding(.horizontal, 18)
-                        .frame(height: 80)
-                    } else {
-                        if selectedDetent != .height(80) {
-                            Spacer()
-                                .frame(height: 0.5 * max(160 - (viewObject.largeDetentHeight - viewObject.sheetHeight), 0))
-                        }
+                        TextField("Search Here", text: $viewObject.searchText)
+                            .padding(.trailing, 20)
+                            .padding(.vertical, 12)
+                            .safeAreaInset(edge: .leading) {
+                                Image(.catLogo)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(height: 18)
+                                    .padding(.leading, 10)
+                            }
+                            .background(.gray.opacity(0.25), in: .capsule)
+                            .focused($isFocused)
+                            .transition(.blurReplace)
+                            .glassEffect(.regular.interactive(), in: .capsule)
+                            .padding(.horizontal, 18)
+                            .frame(height: 80)
+                    } else if selectedDetent != .height(80) {
+                        Spacer()
+                            .frame(height: 0.5 * max(160 - (viewObject.largeDetentHeight - viewObject.sheetHeight), 0))
                     }
+                } else {
+                    StackNavigationControls(
+                        canGoBack: !viewObject.catenaryStack.isEmpty,
+                        onBack: { viewObject.pop() },
+                        onHome: { viewObject.home() }
+                    )
+                    .padding(.horizontal, 18)
+                    .frame(height: 64)
                 }
-                .ignoresSafeArea(.keyboard)
-
             }
-            .onChange(of: viewObject.confirmedEqual) { from, to in 
-                if to && viewObject.isSearchFocusing {
-                    // delaying one runloop (idk if it does anything) technically makes sure sheet is presented
-                    DispatchQueue.main.async {
-                        isFocused = true
-                        viewObject.isSearchFocusing = false
+            .ignoresSafeArea(.keyboard)
+        }
+        .onChange(of: viewObject.confirmedEqual) { _, confirmed in
+            if confirmed && viewObject.isSearchFocusing && viewObject.currentStackItem == nil {
+                DispatchQueue.main.async {
+                    isFocused = true
+                    viewObject.isSearchFocusing = false
+                }
+            }
+        }
+    }
+}
+
+private struct StackNavigationControls: View {
+    let canGoBack: Bool
+    let onBack: () -> Void
+    let onHome: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button(action: onBack) {
+                Image(systemName: "chevron.backward")
+                    .frame(width: 40, height: 40)
+            }
+            .buttonStyle(.bordered)
+            .disabled(!canGoBack)
+
+            Button(action: onHome) {
+                Image(systemName: "house.fill")
+                    .frame(width: 40, height: 40)
+            }
+            .buttonStyle(.bordered)
+
+            Spacer()
+        }
+    }
+}
+
+private struct CatenaryStackDestinationView: View {
+    let destination: CatenaryStackItem
+    @EnvironmentObject private var viewObject: viewObject
+
+    var body: some View {
+        ScrollView {
+            switch destination {
+            case let .mapSelectionScreen(options):
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    Text("Choose an item")
+                        .font(.title2.weight(.semibold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, 4)
+
+                    ForEach(options) { option in
+                        Button {
+                            viewObject.push(option.destination)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: option.data.systemImage)
+                                    .frame(width: 28)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(option.data.title)
+                                        .foregroundStyle(.primary)
+                                    Text(option.data.subtitle)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.forward")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(12)
+                            .background(.quaternary, in: .rect(cornerRadius: 14))
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-            
+                .padding()
+
+            case .settings:
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Settings")
+                        .font(.largeTitle.bold())
+                    Button("Open map layer settings") {
+                        viewObject.showLayerSelector = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+
+            default:
+                StackDestinationSummary(destination: destination)
+                    .padding()
+            }
         }
-        
-        
-        
+    }
+}
+
+private struct StackDestinationSummary: View {
+    let destination: CatenaryStackItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(title)
+                .font(.largeTitle.bold())
+            ForEach(rows.indices, id: \.self) { index in
+                let row = rows[index]
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.0)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(row.1)
+                        .textSelection(.enabled)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var title: String {
+        switch destination {
+        case .singleTrip: return "Trip"
+        case .vehicleSelected: return "Vehicle"
+        case .route: return "Route"
+        case .stop: return "Stop"
+        case .nearbyDepartures: return "Nearby departures"
+        case .mapSelectionScreen: return "Selection"
+        case .settings: return "Settings"
+        case .block: return "Block"
+        case .osmItem: return "Map item"
+        case let .osmStation(_, stationName, _, _, _, _): return stationName ?? "Station"
+        }
+    }
+
+    private var rows: [(String, String)] {
+        switch destination {
+        case let .singleTrip(chateauID, tripID, routeID, startTime, startDate, vehicleID, routeType):
+            return compactRows([
+                ("Chateau", chateauID), ("Trip", tripID), ("Route", routeID),
+                ("Start time", startTime), ("Start date", startDate),
+                ("Vehicle", vehicleID), ("Route type", routeType.map { String($0) })
+            ])
+        case let .vehicleSelected(chateauID, vehicleID, gtfsID):
+            return compactRows([("Chateau", chateauID), ("Vehicle", vehicleID), ("GTFS feed", gtfsID)])
+        case let .route(chateauID, routeID):
+            return [("Chateau", chateauID), ("Route", routeID)]
+        case let .stop(chateauID, stopID, time):
+            return compactRows([("Chateau", chateauID), ("Stop", stopID), ("Time", time.map { String($0) })])
+        case let .nearbyDepartures(chateauID, latitude, longitude):
+            return [("Chateau", chateauID), ("Latitude", String(latitude)), ("Longitude", String(longitude))]
+        case let .block(chateauID, blockID, serviceDate):
+            return [("Chateau", chateauID), ("Block", blockID), ("Service date", serviceDate)]
+        case let .osmItem(osmID, osmClass, osmType):
+            return compactRows([("OSM ID", osmID), ("Class", osmClass), ("Type", osmType)])
+        case let .osmStation(osmStationID, _, modeType, latitude, longitude, time):
+            return compactRows([
+                ("OSM station", osmStationID), ("Mode", modeType),
+                ("Latitude", latitude.map { String($0) }), ("Longitude", longitude.map { String($0) }),
+                ("Time", time.map { String($0) })
+            ])
+        case .mapSelectionScreen, .settings:
+            return []
+        }
+    }
+
+    private func compactRows(_ rows: [(String, String?)]) -> [(String, String)] {
+        rows.compactMap { label, value in
+            guard let value, !value.isEmpty else { return nil }
+            return (label, value)
+        }
     }
 }
