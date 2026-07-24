@@ -32,36 +32,6 @@ struct CatenaryMapsApp: App {
         WindowGroup {
             MainUIView()
                 .environmentObject(viewobject)
-                .onAppear() {
-                    let url = URL(string: "wss://echo.websocket.org")!
-                    let task = URLSession.shared.webSocketTask(with: url)
-                    task.resume()
-                    
-                    task.send(.string("Hello WebSocket")) { error in
-                        if let error = error {
-                            print("Send error:", error)
-                        }
-                    }
-                    
-//                    while task.state != .completed {}
-                    
-                    task.receive { result in
-                        switch result {
-                        case .success(let message):
-                            switch message {
-                            case .string(let text):
-                                print("Received:", text)
-                            case .data(let data):
-                                print("Received data:", data)
-                            @unknown default:
-                                break
-                            }
-                        case .failure(let error):
-                            print("Receive error:", error)
-                        }
-                    }
-                    
-                }
             
             
 //                .environmentObject(liveTransitData)

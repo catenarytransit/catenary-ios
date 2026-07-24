@@ -123,6 +123,20 @@ private struct CatenaryStackDestinationView: View {
             StationDeparturesScreen(destination: destination)
                 .id(destination.stopScreenIdentity)
 
+        case let .singleTrip(chateauID, tripID, routeID, startTime, startDate, vehicleID, routeType):
+            SingleTripScreen(
+                selection: SingleTripSelection(
+                    chateauID: chateauID,
+                    tripID: tripID,
+                    routeID: routeID,
+                    startTime: startTime,
+                    startDate: startDate,
+                    vehicleID: vehicleID,
+                    routeType: routeType
+                )
+            )
+            .id(destination.id)
+
         case let .nearbyDepartures(_, latitude, longitude):
             NearbyDeparturesView(
                 locationManager: locationManager,
@@ -150,7 +164,7 @@ private struct CatenaryStackDestinationView: View {
             }
 
         default:
-            // SingleTripScreen and BlockScreen intentionally remain placeholders.
+            // Route, vehicle, block, and OSM item screens remain placeholders.
             ScrollView {
                 StackDestinationSummary(destination: destination)
                     .padding()
