@@ -11,10 +11,13 @@ import Combine
 // MARK: - Wire formats (send-only — we encode these but never decode them)
 
 struct MapViewportUpdate: Encodable {
-    var type: String = "update_map"
-    let chateaus: [String]
+    var type: String = "subscribe_map_v2"
     let categories: [String]
     let bounds_input: BoundsInput
+}
+
+struct UnsubscribeMapV2: Encodable {
+    var type: String = "unsubscribe_map_v2"
 }
 
 struct SubscribeTrip: Encodable {
@@ -35,6 +38,19 @@ struct UnsubscribeTrip: Encodable {
     let start_time: String?
 }
 
+struct SubscribeTrajectories: Encodable {
+    var type: String = "subscribe_trajectories"
+    let bbox: [Double]
+    let zoom: Int
+    let modes: [String]
+    let precision: Int?
+    let client_reference: String
+}
+
+struct UnsubscribeTrajectories: Encodable {
+    var type: String = "unsubscribe_trajectories"
+}
+
 // Common envelope coming back from server (decode-only; we never send this shape).
 struct SpruceCommonMessage: Decodable {
     let type: String
@@ -42,6 +58,12 @@ struct SpruceCommonMessage: Decodable {
     let chateaus: [String: EachChateauResponseV2]? // alternative map_update payload
     let map_update: BulkRealtimeResponseV2? // wrapped map_update
     let message: String?            // for error
+    let timestamp: UInt64?
+    let client_reference: String?
+    let chateau: String?
+    let content: [TrajectoryWrapper]?
+    let chunk_index: Int?
+    let total_chunks: Int?
 }
 
 // MARK: - JSON helper for arbitrary payloads
@@ -99,7 +121,7 @@ indirect enum JSONValue: Codable, Equatable {
 /// Tile-coordinate bounding box sent to Spruce in `update_map` messages.
 /// Matches Android's `BoundsInput` in `FetchRealtimeData.kt`.
 /// `BoundsInputPerLevel` is shared with `RealtimeVehicles.swift`.
-struct BoundsInput: Encodable {
+struct BoundsInput: Encodable, Equatable {
     let level5: BoundsInputPerLevel
     let level7: BoundsInputPerLevel
     let level8: BoundsInputPerLevel
@@ -128,6 +150,10 @@ final class SpruceWebSocket: NSObject, ObservableObject {
     @Published private(set) var spruceUpdateData: JSONValue?
     @Published private(set) var spruceError: String?
 
+    /// Chunked trajectory messages are events, not state. A subject guarantees
+    /// that every chunk is delivered to the trajectory accumulator in order.
+    let trajectoryMessages = PassthroughSubject<TrajectoryBuffer, Never>()
+
     private let decoder: JSONDecoder = {
         let d = JSONDecoder()
         return d
@@ -144,6 +170,7 @@ final class SpruceWebSocket: NSObject, ObservableObject {
     // Keep last-sent params to resend on reconnect
     private var activeMapParams: MapViewportUpdate?
     private var activeTripParams: SubscribeTrip?
+    private var activeTrajectoryParams: SubscribeTrajectories?
 
     // Reconnect control
     private var reconnectWorkItem: DispatchWorkItem?
@@ -163,11 +190,47 @@ final class SpruceWebSocket: NSObject, ObservableObject {
         ensureConnection()
     }
 
-    func updateMap(categories: [String], chateaus: [String], boundsInput: BoundsInput) {
+    func updateMap(categories: [String], boundsInput: BoundsInput) {
         ensureConnection()
-        let params = MapViewportUpdate(chateaus: chateaus, categories: categories, bounds_input: boundsInput)
+        let params = MapViewportUpdate(categories: categories, bounds_input: boundsInput)
         activeMapParams = params
         sendMapUpdate(params)
+    }
+
+    func unsubscribeMap() {
+        guard activeMapParams != nil else { return }
+        activeMapParams = nil
+        guard spruceStatus == "connected" else { return }
+        sendCodable(UnsubscribeMapV2(), errorContext: "map unsubscribe")
+    }
+
+    func subscribeTrajectories(
+        bbox: [Double],
+        zoom: Int,
+        modes: [String],
+        precision: Int? = nil,
+        clientReference: String = "trajectories_layer"
+    ) {
+        ensureConnection()
+        let params = SubscribeTrajectories(
+            bbox: bbox,
+            zoom: zoom,
+            modes: modes,
+            precision: precision,
+            client_reference: clientReference
+        )
+        activeTrajectoryParams = params
+        sendTrajectorySubscription(params)
+    }
+
+    func unsubscribeTrajectories() {
+        guard activeTrajectoryParams != nil else { return }
+        activeTrajectoryParams = nil
+        guard spruceStatus == "connected" else { return }
+        sendCodable(
+            UnsubscribeTrajectories(),
+            errorContext: "trajectory unsubscribe"
+        )
     }
 
     func subscribeTrip(chateau: String,
@@ -254,6 +317,25 @@ final class SpruceWebSocket: NSObject, ObservableObject {
                 } else {
                     print("\(TAG): map_update received but neither map_update nor chateaus populated")
                 }
+            case "buffer":
+                guard let timestamp = msg.timestamp,
+                      let clientReference = msg.client_reference,
+                      let chateau = msg.chateau,
+                      let content = msg.content,
+                      let chunkIndex = msg.chunk_index,
+                      let totalChunks = msg.total_chunks
+                else { return }
+                let buffer = TrajectoryBuffer(
+                    timestamp: timestamp,
+                    clientReference: clientReference,
+                    chateau: chateau,
+                    content: content,
+                    chunkIndex: chunkIndex,
+                    totalChunks: totalChunks
+                )
+                publish { self.trajectoryMessages.send(buffer) }
+            case "pong":
+                break
             case "error":
                 publish { self.spruceError = msg.message }
                 print("\(TAG): Spruce WS Error: \(msg.message ?? "")")
@@ -289,6 +371,10 @@ final class SpruceWebSocket: NSObject, ObservableObject {
     // was silently dropping the first `update_map` on every fresh connect.
     private func sendMapUpdate(_ params: MapViewportUpdate) {
         sendCodable(params, errorContext: "map update")
+    }
+
+    private func sendTrajectorySubscription(_ params: SubscribeTrajectories) {
+        sendCodable(params, errorContext: "trajectory subscription")
     }
 
     private func sendTripSubscription(_ params: SubscribeTrip) {
@@ -345,6 +431,10 @@ extension SpruceWebSocket: URLSessionWebSocketDelegate {
         if let trip = activeTripParams {
             print("\(TAG): Resending active trip params")
             sendTripSubscription(trip)
+        }
+        if let trajectory = activeTrajectoryParams {
+            print("\(TAG): Resending active trajectory params")
+            sendTrajectorySubscription(trajectory)
         }
     }
 

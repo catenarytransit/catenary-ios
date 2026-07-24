@@ -152,6 +152,7 @@ struct mapLibreView: View {
     @Environment(\.colorScheme) var colorScheme: ColorScheme
     @ObservedObject var locationManager: LocationManager
     @StateObject private var realtimeVM = RealtimeVehicles()
+    @StateObject private var trajectoryVM = RealtimeTrajectories()
     @StateObject private var featureTapCoordinator = MapFeatureTapCoordinator()
     
     var styleURL: URL {
@@ -1021,6 +1022,80 @@ struct mapLibreView: View {
             .visible(viewobject.allLayerSettings.other.visiblerealtimedots)
     }
 
+    /// Synthetic positions interpolated from Spruce trajectory buffers. These
+    /// use a separate source so authoritative GTFS-RT positions and trajectories
+    /// can be cleared and updated independently.
+    @MapViewContentBuilder
+    var trajectoryLayer: some StyleLayerCollection {
+        let source = ShapeSource(identifier: "trajectory-vehicles") {
+            for vehicle in trajectoryVM.vehicles {
+                let feature = MLNPointFeature()
+                feature.coordinate = vehicle.coordinate
+                feature.attributes = [
+                    "route_type": vehicle.routeType,
+                    "bearing": vehicle.bearing,
+                    "chateau": vehicle.chateauID,
+                    "trip_id": vehicle.tripID ?? "",
+                    "route_id": vehicle.routeID ?? "",
+                    "headsign": vehicle.headsign,
+                    "start_date": vehicle.startDate ?? "",
+                    "start_time": vehicle.startTime ?? ""
+                ]
+                feature
+            }
+        }
+
+        CircleStyleLayer(identifier: LayersPerCategory.TrajectoryIntercityRail.Livedots, source: source)
+            .color(.systemBlue)
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [3: 2.5, 10: 5, 14: 8]))
+            .strokeColor(.white)
+            .strokeWidth(1.5)
+            .predicate(NSPredicate(format: "route_type == 2"))
+            .minimumZoomLevel(3)
+            .visible(viewobject.allLayerSettings.intercityrail.visiblerealtimedots)
+
+        CircleStyleLayer(identifier: LayersPerCategory.TrajectoryMetro.Livedots, source: source)
+            .color(.systemPurple)
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [4: 2.5, 13: 5, 18: 8]))
+            .strokeColor(.white)
+            .strokeWidth(1.5)
+            .predicate(NSPredicate(format: "route_type == 1 OR route_type == 12 OR route_type == 7"))
+            .minimumZoomLevel(4)
+            .visible(viewobject.allLayerSettings.localrail.visiblerealtimedots)
+
+        CircleStyleLayer(identifier: LayersPerCategory.TrajectoryTram.Livedots, source: source)
+            .color(.systemGreen)
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [4: 2, 13: 4, 18: 7]))
+            .strokeColor(.white)
+            .strokeWidth(1.5)
+            .predicate(NSPredicate(format: "route_type == 0 OR route_type == 5"))
+            .minimumZoomLevel(4)
+            .visible(viewobject.allLayerSettings.localrail.visiblerealtimedots)
+
+        CircleStyleLayer(identifier: LayersPerCategory.TrajectoryBus.Livedots, source: source)
+            .color(.catenaryBlue)
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [9: 2.5, 14: 5, 18: 9]))
+            .strokeColor(.white)
+            .strokeWidth(1.5)
+            .predicate(NSPredicate(format: "route_type == 3 OR route_type == 11"))
+            .minimumZoomLevel(9)
+            .visible(viewobject.allLayerSettings.bus.visiblerealtimedots)
+
+        CircleStyleLayer(identifier: LayersPerCategory.TrajectoryOther.Livedots, source: source)
+            .color(.systemOrange)
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [3: 2.5, 12: 4.5, 18: 7]))
+            .strokeColor(.white)
+            .strokeWidth(1.5)
+            .predicate(NSPredicate(format: "route_type == 4 OR route_type == 6"))
+            .minimumZoomLevel(3)
+            .visible(viewobject.allLayerSettings.other.visiblerealtimedots)
+    }
+
     @MapViewContentBuilder
     var selectedStopLayer: some StyleLayerCollection {
         let source = ShapeSource(identifier: "selected-stop-context") {
@@ -1073,6 +1148,7 @@ struct mapLibreView: View {
             stationFeaturesLayer
             stopsLayer
             realtimeLayer
+            trajectoryLayer
             selectedStopLayer
         }
 
@@ -1098,10 +1174,16 @@ struct mapLibreView: View {
                         realtimeVM.updateBounds(proxy.visibleCoordinateBounds)
                         realtimeVM.updateZoom(proxy.zoomLevel)
                         realtimeVM.updateLayerSettings(viewobject.allLayerSettings)
+                        trajectoryVM.updateBounds(proxy.visibleCoordinateBounds)
+                        trajectoryVM.updateZoom(proxy.zoomLevel)
+                        trajectoryVM.updateLayerSettings(viewobject.allLayerSettings)
                     }
                 })
         .task {
             await realtimeVM.run()
+        }
+        .task {
+            await trajectoryVM.run()
         }
         .onChange(of: realtimeVM.vehicles) { _, newVehicles in
             // MapLibreSwiftDSL caches sources by identifier and won't push
@@ -1123,8 +1205,33 @@ struct mapLibreView: View {
             }
             source.shape = MLNShapeCollectionFeature(shapes: features)
         }
+        .onChange(of: trajectoryVM.vehicles) { _, newVehicles in
+            guard let style = mapViewRef?.style,
+                  let source = style.source(withIdentifier: "trajectory-vehicles") as? MLNShapeSource
+            else { return }
+            let features: [MLNShape & MLNFeature] = newVehicles.map { vehicle in
+                let feature = MLNPointFeature()
+                feature.coordinate = vehicle.coordinate
+                feature.attributes = [
+                    "route_type": vehicle.routeType,
+                    "bearing": vehicle.bearing,
+                    "chateau": vehicle.chateauID,
+                    "trip_id": vehicle.tripID ?? "",
+                    "route_id": vehicle.routeID ?? "",
+                    "headsign": vehicle.headsign,
+                    "start_date": vehicle.startDate ?? "",
+                    "start_time": vehicle.startTime ?? ""
+                ]
+                return feature
+            }
+            source.shape = MLNShapeCollectionFeature(shapes: features)
+        }
         .onChange(of: viewobject.selectedStopContext) { _, context in
             updateSelectedStopSource(context)
+        }
+        .onDisappear {
+            realtimeVM.stop()
+            trajectoryVM.stop()
         }
         .mapUserAnnotationStyle(
             MapUserAnnotationStyle(

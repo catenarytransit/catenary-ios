@@ -576,6 +576,19 @@ enum LayersPerCategory {
     static let IntercityRail = IntercityRailCategory()
     static let Metro = MetroCategory()
     static let Tram = TramCategory()
+    static let TrajectoryBus = TrajectoryCategory(prefix: "trajectory-bus")
+    static let TrajectoryMetro = TrajectoryCategory(prefix: "trajectory-metro")
+    static let TrajectoryTram = TrajectoryCategory(prefix: "trajectory-tram")
+    static let TrajectoryIntercityRail = TrajectoryCategory(prefix: "trajectory-intercityrail")
+    static let TrajectoryOther = TrajectoryCategory(prefix: "trajectory-other")
+
+    struct TrajectoryCategory {
+        let Livedots: String
+
+        init(prefix: String) {
+            Livedots = "\(prefix)-livedots"
+        }
+    }
 
     struct BusCategory {
         let Shapes = "bus-shapes"
