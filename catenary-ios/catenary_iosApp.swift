@@ -12,16 +12,6 @@ import SwiftUI
 
 var GlobalViewObject: viewObject = viewObject()
 
-private func tintForTab(_ tab: String) -> Color {
-    switch tab {
-        case "Rail":       return .blue
-        case "Metro/Tram": return .purple
-        case "Bus":        return .catenaryBlue
-        case "Other":      return .orange
-        default:           return .catenaryBlue
-    }
-}
-
 @main
 struct CatenaryMapsApp: App {
     @StateObject var viewobject = GlobalViewObject
@@ -301,7 +291,6 @@ struct LayerSelectorSheet: View {
         }
         .ignoresSafeArea(edges: .bottom)
         .symbolColorRenderingMode(.flat)
-        .tint(tintForTab(tabPage))
     
 
     }
