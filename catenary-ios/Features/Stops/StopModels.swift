@@ -144,6 +144,7 @@ struct DeparturesAtStopResponse: Decodable, Sendable {
     let primary: StopPrimary?
     let routes: [String: [String: StopRouteInfo]]?
     let events: [StopEvent]?
+    let alerts: [String: [String: SingleTripAlert]]?
     let agencies: [String: [String: StopAgencyInfo]]?
     let stops: [StopPrimary]?
 }

@@ -9,7 +9,6 @@ struct SingleTripScreen: View {
     @AppStorage("singleTripShowPreviousStops") private var showPreviousStops = false
     @AppStorage("singleTripShowOriginalTimetable") private var showOriginalTimetable = false
     @AppStorage("singleTripShowCountdown") private var showCountdown = true
-    @State private var alertsPresented = false
     @State private var hasScrolledToCurrentStop = false
 
     init(selection: SingleTripSelection) {
@@ -106,46 +105,12 @@ struct SingleTripScreen: View {
 
                     let activeAlerts = model.activeAlerts(at: model.currentDate)
                     if !activeAlerts.isEmpty {
-                        Button {
-                            alertsPresented = true
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundStyle(.orange)
-                                Text(alertTitle(activeAlerts))
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(2)
-                                Spacer()
-                                Text("\(activeAlerts.count)")
-                                    .font(.caption.bold())
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 3)
-                                    .foregroundStyle(.white)
-                                    .background(.orange, in: .capsule)
-                                Image(systemName: "chevron.forward")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(12)
-                            .background(.orange.opacity(0.12), in: .rect(cornerRadius: 12))
-                        }
-                        .buttonStyle(.plain)
-                        .sheet(isPresented: $alertsPresented) {
-                            NavigationStack {
-                                SingleTripAlertsView(
-                                    alerts: activeAlerts,
-                                    timezone: data.timezone
-                                )
-                                .navigationTitle("Service alerts")
-                                .navigationBarTitleDisplayMode(.inline)
-                                .toolbar {
-                                    ToolbarItem(placement: .confirmationAction) {
-                                        Button("Done") { alertsPresented = false }
-                                    }
-                                }
-                            }
-                        }
+                        AlertsBox(
+                            alerts: Dictionary(uniqueKeysWithValues: activeAlerts),
+                            defaultTimezone: data.timezone,
+                            chateauID: selection.chateauID,
+                            initiallyExpanded: true
+                        )
                     }
 
                     displayOptions
@@ -372,13 +337,6 @@ struct SingleTripScreen: View {
             ?? nonEmpty(data.tripShortName)
             ?? nonEmpty(data.routeLongName)
             ?? "Trip"
-    }
-
-    private func alertTitle(_ alerts: [(String, SingleTripAlert)]) -> String {
-        guard let text = alerts.first?.1.headerText?.preferredTranslation()?.text else {
-            return "Service alerts"
-        }
-        return nonEmpty(plainText(text)) ?? "Service alerts"
     }
 
     private var occupancyLabel: String? {
@@ -658,108 +616,6 @@ private struct SingleTripTimelineMarker: View {
     }
 }
 
-private struct SingleTripAlertsView: View {
-    let alerts: [(String, SingleTripAlert)]
-    let timezone: String?
-
-    var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
-                ForEach(alerts, id: \.0) { alertItem in
-                    SingleTripAlertCard(
-                        alert: alertItem.1,
-                        timezone: timezone
-                    )
-                }
-            }
-            .padding()
-        }
-    }
-}
-
-private struct SingleTripAlertCard: View {
-    let alert: SingleTripAlert
-    let timezone: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(alertTitle)
-                .font(.headline)
-
-            if let alertDescription {
-                Text(alertDescription)
-                    .font(.body)
-                    .textSelection(.enabled)
-            }
-
-            if let activePeriodText {
-                Label(activePeriodText, systemImage: "clock")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let moreInformationURL {
-                Link("More information", destination: moreInformationURL)
-                    .font(.subheadline.weight(.semibold))
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.orange.opacity(0.1), in: .rect(cornerRadius: 14))
-    }
-
-    private var alertTitle: String {
-        guard let text = alert.headerText?.preferredTranslation()?.text else {
-            return "Service alert"
-        }
-        return plainText(text)
-    }
-
-    private var alertDescription: String? {
-        guard let text = alert.descriptionText?.preferredTranslation()?.text else {
-            return nil
-        }
-        let description = plainText(text)
-        return description.isEmpty ? nil : description
-    }
-
-    private var moreInformationURL: URL? {
-        guard let text = alert.url?.preferredTranslation()?.text else {
-            return nil
-        }
-        return URL(string: plainText(text))
-    }
-
-    private var activePeriodText: String? {
-        guard let period = alert.activePeriod.first,
-              period.start != nil || period.end != nil else { return nil }
-
-        let formatter = DateFormatter()
-        formatter.locale = .autoupdatingCurrent
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        formatter.timeZone = TimeZone(identifier: timezone ?? "") ?? .autoupdatingCurrent
-
-        let start = period.start.map {
-            formatter.string(from: Date(timeIntervalSince1970: TimeInterval($0)))
-        }
-        let end = period.end.map {
-            formatter.string(from: Date(timeIntervalSince1970: TimeInterval($0)))
-        }
-
-        switch (start, end) {
-        case let (.some(start), .some(end)):
-            return "\(start) – \(end)"
-        case let (.some(start), .none):
-            return "From \(start)"
-        case let (.none, .some(end)):
-            return "Until \(end)"
-        case (.none, .none):
-            return nil
-        }
-    }
-}
-
 private extension Color {
     init?(catenaryHex value: String?) {
         guard let value else { return nil }
@@ -773,16 +629,3 @@ private extension Color {
     }
 }
 
-private func plainText(_ html: String) -> String {
-    html
-        .replacingOccurrences(of: "<br>", with: "\n", options: .caseInsensitive)
-        .replacingOccurrences(of: "<br/>", with: "\n", options: .caseInsensitive)
-        .replacingOccurrences(of: "<br />", with: "\n", options: .caseInsensitive)
-        .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-        .replacingOccurrences(of: "&amp;", with: "&")
-        .replacingOccurrences(of: "&lt;", with: "<")
-        .replacingOccurrences(of: "&gt;", with: ">")
-        .replacingOccurrences(of: "&quot;", with: "\"")
-        .replacingOccurrences(of: "&#39;", with: "'")
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-}

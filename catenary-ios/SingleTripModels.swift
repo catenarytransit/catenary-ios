@@ -66,12 +66,12 @@ struct SingleTripStopTime: Codable, Equatable, Identifiable {
     }
 }
 
-struct SingleTripAlertTranslation: Codable, Equatable {
+struct SingleTripAlertTranslation: Codable, Equatable, Sendable {
     let text: String
     let language: String?
 }
 
-struct SingleTripAlertText: Codable, Equatable {
+struct SingleTripAlertText: Codable, Equatable, Sendable {
     let translation: [SingleTripAlertTranslation]
 
     func preferredTranslation(locale: Locale = .current) -> SingleTripAlertTranslation? {
@@ -99,18 +99,51 @@ struct SingleTripAlertText: Codable, Equatable {
     }
 }
 
-struct SingleTripAlertActivePeriod: Codable, Equatable {
+struct SingleTripAlertActivePeriod: Codable, Equatable, Sendable {
     let start: Int64?
     let end: Int64?
 }
 
-struct SingleTripAlert: Codable, Equatable {
+struct SingleTripAlertTripDescriptor: Codable, Equatable, Sendable {
+    let tripID: String?
+    let routeID: String?
+    let directionID: Int?
+    let startTime: String?
+    let startDate: String?
+
+    enum CodingKeys: String, CodingKey {
+        case tripID = "trip_id"
+        case routeID = "route_id"
+        case directionID = "direction_id"
+        case startTime = "start_time"
+        case startDate = "start_date"
+    }
+}
+
+struct SingleTripAlertEntity: Codable, Equatable, Sendable {
+    let agencyID: String?
+    let routeID: String?
+    let routeType: Int?
+    let stopID: String?
+    let trip: SingleTripAlertTripDescriptor?
+
+    enum CodingKeys: String, CodingKey {
+        case agencyID = "agency_id"
+        case routeID = "route_id"
+        case routeType = "route_type"
+        case stopID = "stop_id"
+        case trip
+    }
+}
+
+struct SingleTripAlert: Codable, Equatable, Sendable {
     let cause: Int?
     let effect: Int?
     let url: SingleTripAlertText?
     let headerText: SingleTripAlertText?
     let descriptionText: SingleTripAlertText?
     let activePeriod: [SingleTripAlertActivePeriod]
+    let informedEntity: [SingleTripAlertEntity]?
 
     enum CodingKeys: String, CodingKey {
         case cause
@@ -119,6 +152,7 @@ struct SingleTripAlert: Codable, Equatable {
         case headerText = "header_text"
         case descriptionText = "description_text"
         case activePeriod = "active_period"
+        case informedEntity = "informed_entity"
     }
 
     init(from decoder: Decoder) throws {
@@ -129,6 +163,7 @@ struct SingleTripAlert: Codable, Equatable {
         headerText = try container.decodeIfPresent(SingleTripAlertText.self, forKey: .headerText)
         descriptionText = try container.decodeIfPresent(SingleTripAlertText.self, forKey: .descriptionText)
         activePeriod = try container.decodeIfPresent([SingleTripAlertActivePeriod].self, forKey: .activePeriod) ?? []
+        informedEntity = try container.decodeIfPresent([SingleTripAlertEntity].self, forKey: .informedEntity)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -139,12 +174,21 @@ struct SingleTripAlert: Codable, Equatable {
         try container.encodeIfPresent(headerText, forKey: .headerText)
         try container.encodeIfPresent(descriptionText, forKey: .descriptionText)
         try container.encode(activePeriod, forKey: .activePeriod)
+        try container.encodeIfPresent(informedEntity, forKey: .informedEntity)
     }
 
     func isActive(at epochSeconds: Int64) -> Bool {
         activePeriod.isEmpty || activePeriod.contains { period in
             (period.start == nil || period.start! <= epochSeconds)
                 && (period.end == nil || epochSeconds < period.end!)
+        }
+    }
+
+    func isTripSpecific() -> Bool {
+        guard let informedEntity, !informedEntity.isEmpty else { return false }
+        return informedEntity.allSatisfy { entity in
+            guard let tripID = entity.trip?.tripID else { return false }
+            return !tripID.isEmpty
         }
     }
 }

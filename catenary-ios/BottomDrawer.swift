@@ -136,6 +136,10 @@ private struct CatenaryStackDestinationView: View {
             )
             .id(destination.id)
 
+        case let .route(chateauID, routeID):
+            RouteScreen(chateauID: chateauID, routeID: routeID)
+                .id(destination.id)
+
         case let .nearbyDepartures(_, latitude, longitude):
             NearbyDeparturesView(
                 locationManager: locationManager,
@@ -163,7 +167,7 @@ private struct CatenaryStackDestinationView: View {
             }
 
         default:
-            // Route, vehicle, block, and OSM item screens remain placeholders.
+            // Vehicle, block, and OSM item screens remain placeholders.
             ScrollView {
                 StackDestinationSummary(destination: destination)
                     .padding()

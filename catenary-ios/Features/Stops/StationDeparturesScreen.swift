@@ -12,6 +12,7 @@ struct StationDeparturesScreen: View {
     @State private var activeMode: StopTransitMode?
     @State private var enabledTrainCategories = Set<String>()
     @State private var categoryChateauID: String?
+    @State private var alertsPresented = false
     @State private var hasCenteredMap = false
 
     private let source: StopScreenSource
@@ -123,6 +124,9 @@ struct StationDeparturesScreen: View {
                 longitude: nil
             )
         }
+        .fullScreenCover(isPresented: $alertsPresented) {
+            alertsSheet
+        }
         .onDisappear {
             viewObject.clearSelectedStopContext(id: source.id)
         }
@@ -164,6 +168,10 @@ struct StationDeparturesScreen: View {
     private func departuresList(proxy: ScrollViewProxy) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                if totalAlertCount > 0 {
+                    alertsButton
+                }
+
                 Button {
                     let previousFirstEventID = daySections.first?.events.first?.id
                     let earlierDate = Calendar.current.date(byAdding: .hour, value: -1, to: referenceDate)
@@ -246,6 +254,71 @@ struct StationDeparturesScreen: View {
         .refreshable {
             await model.refreshLoadedPages()
         }
+    }
+
+    private var alertsButton: some View {
+        Button {
+            alertsPresented = true
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                Text(totalAlertCount == 1 ? "1 service alert" : "\(totalAlertCount) service alerts")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.red)
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.red)
+            }
+            .padding(12)
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(.red, lineWidth: 1)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.vertical, 8)
+    }
+
+    private var alertsSheet: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    ForEach(nonTripSpecificAlerts, id: \.chateauID) { group in
+                        AlertsBox(
+                            alerts: group.alerts,
+                            defaultTimezone: timezoneID,
+                            chateauID: group.chateauID,
+                            isScrollable: false,
+                            initiallyExpanded: true
+                        )
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Service alerts")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { alertsPresented = false }
+                }
+            }
+        }
+    }
+
+    private var nonTripSpecificAlerts: [(chateauID: String, alerts: [String: SingleTripAlert])] {
+        model.alerts.keys.sorted().compactMap { chateauID in
+            guard let alerts = model.alerts[chateauID] else { return nil }
+            let filtered = alerts.filter { !$0.value.isTripSpecific() }
+            guard !filtered.isEmpty else { return nil }
+            return (chateauID, filtered)
+        }
+    }
+
+    private var totalAlertCount: Int {
+        nonTripSpecificAlerts.reduce(0) { $0 + $1.alerts.count }
     }
 
     private var referenceDate: Date {

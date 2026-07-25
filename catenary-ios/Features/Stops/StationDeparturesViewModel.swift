@@ -29,6 +29,7 @@ final class StationDeparturesViewModel: ObservableObject {
     @Published private(set) var primary: StopPrimary?
     @Published private(set) var stops: [StopPrimary] = []
     @Published private(set) var routes: [String: [String: StopRouteInfo]] = [:]
+    @Published private(set) var alerts: [String: [String: SingleTripAlert]] = [:]
     @Published private(set) var agencies: [String: [String: StopAgencyInfo]] = [:]
     @Published private(set) var events: [StopEvent] = []
     @Published private(set) var pages: [PageState] = []
@@ -83,6 +84,7 @@ final class StationDeparturesViewModel: ObservableObject {
         primary = nil
         stops = []
         routes = [:]
+        alerts = [:]
         agencies = [:]
         events = []
         pages = []
@@ -217,6 +219,9 @@ final class StationDeparturesViewModel: ObservableObject {
 
         for (chateauID, incomingRoutes) in response.routes ?? [:] {
             routes[chateauID, default: [:]].merge(incomingRoutes) { _, new in new }
+        }
+        for (chateauID, incomingAlerts) in response.alerts ?? [:] {
+            alerts[chateauID, default: [:]].merge(incomingAlerts) { _, new in new }
         }
         for (chateauID, incomingAgencies) in response.agencies ?? [:] {
             agencies[chateauID, default: [:]].merge(incomingAgencies) { _, new in new }
