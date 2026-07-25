@@ -12,16 +12,6 @@ import SwiftUI
 
 var GlobalViewObject: viewObject = viewObject()
 
-private func tintForTab(_ tab: String) -> Color {
-    switch tab {
-        case "Rail":       return .blue
-        case "Metro/Tram": return .purple
-        case "Bus":        return .catenaryBlue
-        case "Other":      return .orange
-        default:           return .catenaryBlue
-    }
-}
-
 @main
 struct CatenaryMapsApp: App {
     @StateObject var viewobject = GlobalViewObject
@@ -32,36 +22,6 @@ struct CatenaryMapsApp: App {
         WindowGroup {
             MainUIView()
                 .environmentObject(viewobject)
-                .onAppear() {
-                    let url = URL(string: "wss://echo.websocket.org")!
-                    let task = URLSession.shared.webSocketTask(with: url)
-                    task.resume()
-                    
-                    task.send(.string("Hello WebSocket")) { error in
-                        if let error = error {
-                            print("Send error:", error)
-                        }
-                    }
-                    
-//                    while task.state != .completed {}
-                    
-                    task.receive { result in
-                        switch result {
-                        case .success(let message):
-                            switch message {
-                            case .string(let text):
-                                print("Received:", text)
-                            case .data(let data):
-                                print("Received data:", data)
-                            @unknown default:
-                                break
-                            }
-                        case .failure(let error):
-                            print("Receive error:", error)
-                        }
-                    }
-                    
-                }
             
             
 //                .environmentObject(liveTransitData)
@@ -185,7 +145,6 @@ struct OverlayRoot: View {
                                     .fontWeight(.semibold)
                                     .fixedSize()
                             }
-                            .sharedBackgroundVisibility(.hidden)
                             
                             ToolbarItem(placement: .topBarTrailing) {
                                 Button {
@@ -330,8 +289,7 @@ struct LayerSelectorSheet: View {
             Tab("More", systemImage: "ellipsis", value: "More") { }
         }
         .ignoresSafeArea(edges: .bottom)
-        .symbolColorRenderingMode(.flat)
-        .tint(tintForTab(tabPage))
+        .symbolRenderingMode(.monochrome)
     
 
     }
@@ -384,9 +342,8 @@ struct InAppNotificationViewModifier: ViewModifier {
                                 .padding(.leading, 10)
                                 
                         }
-                        .glassEffect(.regular.interactive(), in: .capsule)
+                        .catenarySearchBarSurface()
                         .padding()
-                        .ignoresSafeArea(.container, edges: .bottom)
                         .background (
                             GeometryReader { geo in
                                 Color.clear
@@ -402,7 +359,7 @@ struct InAppNotificationViewModifier: ViewModifier {
                                     }
                             }
                         )
-                        .transition(.blurReplace)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
     }
@@ -411,6 +368,20 @@ struct InAppNotificationViewModifier: ViewModifier {
 extension View {
     func inAppSearchOverlay(text: Binding<String>, showField: Binding<Bool>, presDetent: PresentationDetent, confirmedEqual: Bool, keyboardVisible: Bool) -> some View {
         self.modifier(InAppNotificationViewModifier(text: text, showField: showField, presDetent: presDetent, confirmedEqual: confirmedEqual, keyboardVisible: keyboardVisible))
+    }
+}
+
+extension View {
+    /// Matches the Compose search field's Material surface, pill shape, and 4 dp shadow
+    /// without requiring the newer Liquid Glass SDK.
+    func catenarySearchBarSurface() -> some View {
+        self
+            .background(Color(uiColor: .systemBackground), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            }
+            .shadow(color: Color.black.opacity(0.14), radius: 4, x: 0, y: 2)
     }
 }
 

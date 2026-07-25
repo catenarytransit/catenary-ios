@@ -9,10 +9,191 @@ import MapLibreSwiftUI
 import MapLibre
 import MapLibreSwiftDSL
 
+final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecognizerDelegate {
+    private weak var mapView: MLNMapView?
+    private weak var navigator: viewObject?
+    private var recognizer: UITapGestureRecognizer?
+
+    private let selectableLayerIDs: Set<String> = [
+        LayersPerCategory.IntercityRail.Livedots,
+        LayersPerCategory.Metro.Livedots,
+        LayersPerCategory.Tram.Livedots,
+        LayersPerCategory.Bus.Livedots,
+        LayersPerCategory.Other.Livedots,
+        LayersPerCategory.TrajectoryIntercityRail.Livedots,
+        LayersPerCategory.TrajectoryMetro.Livedots,
+        LayersPerCategory.TrajectoryTram.Livedots,
+        LayersPerCategory.TrajectoryBus.Livedots,
+        LayersPerCategory.TrajectoryOther.Livedots,
+        LayersPerCategory.Bus.Shapes,
+        LayersPerCategory.Bus.LabelShapes,
+        LayersPerCategory.Bus.Stops,
+        LayersPerCategory.Bus.LabelStops,
+        LayersPerCategory.IntercityRail.Shapes,
+        LayersPerCategory.IntercityRail.LabelShapes,
+        LayersPerCategory.IntercityRail.Stops,
+        LayersPerCategory.IntercityRail.LabelStops,
+        LayersPerCategory.Metro.Shapes,
+        LayersPerCategory.Metro.LabelShapes,
+        LayersPerCategory.Metro.Stops,
+        LayersPerCategory.Metro.LabelStops,
+        LayersPerCategory.Tram.Shapes,
+        LayersPerCategory.Tram.LabelShapes,
+        LayersPerCategory.Tram.Stops,
+        LayersPerCategory.Tram.LabelStops,
+        LayersPerCategory.Other.Shapes,
+        LayersPerCategory.Other.LabelShapes,
+        LayersPerCategory.Other.Stops,
+        LayersPerCategory.Other.LabelStops,
+        LayersPerCategory.Bus.Stops + "_osm",
+        LayersPerCategory.Bus.LabelStops + "_osm",
+        LayersPerCategory.IntercityRail.Stops + "_osm",
+        LayersPerCategory.IntercityRail.LabelStops + "_osm",
+        LayersPerCategory.Metro.Stops + "_osm",
+        LayersPerCategory.Metro.LabelStops + "_osm",
+        LayersPerCategory.Tram.Stops + "_osm",
+        LayersPerCategory.Tram.LabelStops + "_osm",
+        LayersPerCategory.Other.Stops + "_osm",
+        LayersPerCategory.Other.LabelStops + "_osm"
+    ]
+
+    func install(on mapView: MLNMapView, navigator: viewObject) {
+        self.navigator = navigator
+        guard self.mapView !== mapView else { return }
+
+        if let recognizer, let oldMap = self.mapView {
+            oldMap.removeGestureRecognizer(recognizer)
+        }
+
+        self.mapView = mapView
+        let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+        recognizer.cancelsTouchesInView = false
+        recognizer.delegate = self
+        mapView.addGestureRecognizer(recognizer)
+        self.recognizer = recognizer
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        true
+    }
+
+    @objc private func handleTap(_ recognizer: UITapGestureRecognizer) {
+        guard recognizer.state == .ended, let mapView, let navigator else { return }
+        let point = recognizer.location(in: mapView)
+        let hitArea = CGRect(x: point.x - 22, y: point.y - 22, width: 44, height: 44)
+        let features = mapView.visibleFeatures(
+            in: hitArea,
+            inStyleLayersWithIdentifiers: selectableLayerIDs,
+            predicate: nil
+        )
+
+        var seen = Set<String>()
+        let options = features.compactMap { makeOption(from: $0) }.filter { seen.insert($0.id).inserted }
+        guard !options.isEmpty else { return }
+
+        let destination: CatenaryStackItem
+        if let option = options.first, options.count == 1 {
+            destination = option.destination
+        } else {
+            destination = .mapSelectionScreen(options: options)
+        }
+
+        if let current = navigator.currentStackItem, case .mapSelectionScreen = current {
+            navigator.replaceTop(with: destination)
+        } else {
+            navigator.push(destination)
+        }
+    }
+
+    private func makeOption(from feature: MLNFeature) -> MapSelectionOption? {
+        let latitude = (feature as? MLNPointFeature)?.coordinate.latitude
+        let longitude = (feature as? MLNPointFeature)?.coordinate.longitude
+
+        if string(feature, keys: ["selection_kind"]) == "vehicle",
+           let chateauID = string(feature, keys: ["chateau", "chateau_id"]),
+           let routeType = integer(feature, keys: ["route_type"]) {
+            return MapSelectionOption(data: .vehicle(
+                chateauID: chateauID,
+                vehicleID: string(feature, keys: ["vehicle_id"]),
+                routeID: string(feature, keys: ["route_id"]),
+                headsign: string(feature, keys: ["headsign", "trip_headsign"]) ?? "",
+                tripLabel: string(feature, keys: ["vehicle_label", "display_name"]),
+                colour: string(feature, keys: ["color", "colour"]) ?? "777777",
+                routeShortName: string(feature, keys: ["route_short_name", "route_label"]),
+                routeLongName: string(feature, keys: ["route_long_name"]),
+                routeType: routeType,
+                tripShortName: string(feature, keys: ["trip_short_name"]),
+                textColour: string(feature, keys: ["text_color", "text_colour"]) ?? "FFFFFF",
+                gtfsID: string(feature, keys: ["gtfs_id"]) ?? chateauID,
+                tripID: string(feature, keys: ["trip_id", "unique_trip_id"]),
+                startTime: string(feature, keys: ["start_time"]),
+                startDate: string(feature, keys: ["start_date"])
+            ))
+        }
+
+        if let osmID = string(feature, keys: ["osm_station_id", "osm_id"]),
+           let latitude,
+           let longitude {
+            return MapSelectionOption(data: .osmStation(
+                osmID: osmID,
+                name: string(feature, keys: ["name", "displayname"]) ?? "Station",
+                modeType: string(feature, keys: ["mode_type", "station_type"]) ?? "station",
+                latitude: latitude,
+                longitude: longitude
+            ))
+        }
+
+        if let chateauID = string(feature, keys: ["chateau", "chateau_id"]),
+           let stopID = string(feature, keys: ["stop_id", "gtfs_id"]) {
+            return MapSelectionOption(data: .stop(
+                chateauID: chateauID,
+                stopID: stopID,
+                stopName: string(feature, keys: ["displayname", "stop_name", "name"]) ?? stopID
+            ))
+        }
+
+        if let chateauID = string(feature, keys: ["chateau", "chateau_id"]),
+           let routeID = string(feature, keys: ["route_id"]) {
+            return MapSelectionOption(data: .route(
+                chateauID: chateauID,
+                routeID: routeID,
+                colour: string(feature, keys: ["color", "colour"]) ?? "000000",
+                name: string(feature, keys: ["route_label", "short_name", "long_name"]),
+                routeType: integer(feature, keys: ["route_type"])
+            ))
+        }
+
+        return nil
+    }
+
+    private func string(_ feature: MLNFeature, keys: [String]) -> String? {
+        for key in keys {
+            guard let value = feature.attributes[key], !(value is NSNull) else { continue }
+            if let value = value as? String, !value.isEmpty { return value }
+            if let value = value as? NSNumber { return value.stringValue }
+        }
+        return nil
+    }
+
+    private func integer(_ feature: MLNFeature, keys: [String]) -> Int? {
+        for key in keys {
+            guard let value = feature.attributes[key], !(value is NSNull) else { continue }
+            if let value = value as? NSNumber { return value.intValue }
+            if let value = value as? String, let parsed = Int(value) { return parsed }
+        }
+        return nil
+    }
+}
+
 struct mapLibreView: View {
     @Environment(\.colorScheme) var colorScheme: ColorScheme
     @ObservedObject var locationManager: LocationManager
     @StateObject private var realtimeVM = RealtimeVehicles()
+    @StateObject private var trajectoryVM = RealtimeTrajectories()
+    @StateObject private var featureTapCoordinator = MapFeatureTapCoordinator()
     
     var styleURL: URL {
             URL(string: colorScheme == .light
@@ -816,10 +997,19 @@ struct mapLibreView: View {
                 let feature = MLNPointFeature()
                 feature.coordinate = v.coordinate
                 feature.attributes = [
+                    "selection_kind": "vehicle",
+                    "chateau": v.chateauID,
                     "route_type": Int(v.routeType),
                     "bearing": v.bearing ?? 0,
+                    "vehicle_id": v.vehicleID ?? v.id,
+                    "vehicle_label": v.vehicleLabel ?? "",
+                    "gtfs_id": v.chateauID,
+                    "trip_id": v.tripID ?? "",
                     "route_id": v.routeId ?? "",
-                    "headsign": v.headsign ?? ""
+                    "headsign": v.headsign ?? "",
+                    "trip_short_name": v.tripShortName ?? "",
+                    "start_time": v.startTime ?? "",
+                    "start_date": v.startDate ?? ""
                 ]
                 feature
             }
@@ -881,12 +1071,142 @@ struct mapLibreView: View {
             .visible(viewobject.allLayerSettings.other.visiblerealtimedots)
     }
 
+    /// Synthetic positions interpolated from Spruce trajectory buffers. These
+    /// use a separate source so authoritative GTFS-RT positions and trajectories
+    /// can be cleared and updated independently.
+    @MapViewContentBuilder
+    var trajectoryLayer: some StyleLayerCollection {
+        let source = ShapeSource(identifier: "trajectory-vehicles") {
+            for vehicle in trajectoryVM.vehicles {
+                let feature = MLNPointFeature()
+                feature.coordinate = vehicle.coordinate
+                feature.attributes = [
+                    "selection_kind": "vehicle",
+                    "route_type": vehicle.routeType,
+                    "bearing": vehicle.bearing,
+                    "chateau": vehicle.chateauID,
+                    "gtfs_id": vehicle.chateauID,
+                    "trip_id": vehicle.tripID ?? "",
+                    "route_id": vehicle.routeID ?? "",
+                    "display_name": vehicle.displayName ?? "",
+                    "headsign": vehicle.headsign,
+                    "trip_short_name": vehicle.tripShortName ?? "",
+                    "route_short_name": vehicle.routeShortName ?? "",
+                    "route_long_name": vehicle.routeLongName ?? "",
+                    "color": vehicle.color ?? "777777",
+                    "text_color": vehicle.textColor ?? "FFFFFF",
+                    "start_date": vehicle.startDate ?? "",
+                    "start_time": vehicle.startTime ?? ""
+                ]
+                feature
+            }
+        }
+
+        CircleStyleLayer(identifier: LayersPerCategory.TrajectoryIntercityRail.Livedots, source: source)
+            .color(.systemBlue)
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [3: 2.5, 10: 5, 14: 8]))
+            .strokeColor(.white)
+            .strokeWidth(1.5)
+            .predicate(NSPredicate(format: "route_type == 2"))
+            .minimumZoomLevel(3)
+            .visible(viewobject.allLayerSettings.intercityrail.visiblerealtimedots)
+
+        CircleStyleLayer(identifier: LayersPerCategory.TrajectoryMetro.Livedots, source: source)
+            .color(.systemPurple)
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [4: 2.5, 13: 5, 18: 8]))
+            .strokeColor(.white)
+            .strokeWidth(1.5)
+            .predicate(NSPredicate(format: "route_type == 1 OR route_type == 12 OR route_type == 7"))
+            .minimumZoomLevel(4)
+            .visible(viewobject.allLayerSettings.localrail.visiblerealtimedots)
+
+        CircleStyleLayer(identifier: LayersPerCategory.TrajectoryTram.Livedots, source: source)
+            .color(.systemGreen)
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [4: 2, 13: 4, 18: 7]))
+            .strokeColor(.white)
+            .strokeWidth(1.5)
+            .predicate(NSPredicate(format: "route_type == 0 OR route_type == 5"))
+            .minimumZoomLevel(4)
+            .visible(viewobject.allLayerSettings.localrail.visiblerealtimedots)
+
+        CircleStyleLayer(identifier: LayersPerCategory.TrajectoryBus.Livedots, source: source)
+            .color(.catenaryBlue)
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [9: 2.5, 14: 5, 18: 9]))
+            .strokeColor(.white)
+            .strokeWidth(1.5)
+            .predicate(NSPredicate(format: "route_type == 3 OR route_type == 11"))
+            .minimumZoomLevel(9)
+            .visible(viewobject.allLayerSettings.bus.visiblerealtimedots)
+
+        CircleStyleLayer(identifier: LayersPerCategory.TrajectoryOther.Livedots, source: source)
+            .color(.systemOrange)
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [3: 2.5, 12: 4.5, 18: 7]))
+            .strokeColor(.white)
+            .strokeWidth(1.5)
+            .predicate(NSPredicate(format: "route_type == 4 OR route_type == 6"))
+            .minimumZoomLevel(3)
+            .visible(viewobject.allLayerSettings.other.visiblerealtimedots)
+    }
+
+    @MapViewContentBuilder
+    var selectedStopLayer: some StyleLayerCollection {
+        let source = ShapeSource(identifier: "selected-stop-context") {
+            if let context = viewobject.selectedStopContext {
+                let feature = MLNPointFeature()
+                feature.coordinate = context.coordinate
+                feature.attributes = ["name": context.name]
+                feature
+            }
+        }
+
+        CircleStyleLayer(identifier: "selected-stop-context-circle", source: source)
+            .color(.catenaryBlue)
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [8: 5, 14: 8, 18: 11]))
+            .strokeColor(.white)
+            .strokeWidth(2)
+
+        SymbolStyleLayer(identifier: "selected-stop-context-label", source: source)
+            .text(expression: NSExpression(format: "name"))
+            .textFontNames(["Barlow-Bold"])
+            .textFontSize(12)
+            .textOffset(CGVector(dx: 0, dy: 1.4))
+            .textAnchor("top")
+            .textColor(colorScheme == .dark ? .white : .black)
+            .textHaloColor(colorScheme == .dark ? UIColor.black : UIColor.white)
+            .textHaloWidth(1)
+    }
+
+    private func updateSelectedStopSource(_ context: SelectedStopMapContext?) {
+        guard let source = mapViewRef?.style?.source(
+            withIdentifier: "selected-stop-context"
+        ) as? MLNShapeSource else { return }
+
+        let features: [MLNShape & MLNFeature]
+        if let context {
+            let feature = MLNPointFeature()
+            feature.coordinate = context.coordinate
+            feature.attributes = ["name": context.name]
+            features = [feature]
+        } else {
+            features = []
+        }
+        source.shape = MLNShapeCollectionFeature(shapes: features)
+    }
+
     var body: some View {
         MapView(styleURL: styleURL, camera: $viewobject.camera) {
             shapeLayer
             stationFeaturesLayer
             stopsLayer
             realtimeLayer
+            trajectoryLayer
+            selectedStopLayer
         }
 
         .unsafeMapViewControllerModifier { map in
@@ -894,6 +1214,7 @@ struct mapLibreView: View {
             map.mapView.attributionButton.isHidden = true
             map.mapView.compassView.isHidden = true
             map.mapView.showsUserLocation = true
+            featureTapCoordinator.install(on: map.mapView, navigator: viewobject)
             // Defer @State write off the current view-update pass.
             if mapViewRef == nil {
                 let captured = map.mapView
@@ -903,15 +1224,23 @@ struct mapLibreView: View {
         .onMapViewProxyUpdate(updateMode: .realtime, onViewProxyChanged: { proxy in
                     DispatchQueue.main.async {
                         viewobject.currentRotation = proxy.direction
+                        viewobject.currZoom = proxy.zoomLevel
+                        viewobject.visibleCoordinateBounds = proxy.visibleCoordinateBounds
                         currZoom = proxy.zoomLevel
                         coordinateBounds = proxy.visibleCoordinateBounds
                         realtimeVM.updateBounds(proxy.visibleCoordinateBounds)
                         realtimeVM.updateZoom(proxy.zoomLevel)
                         realtimeVM.updateLayerSettings(viewobject.allLayerSettings)
+                        trajectoryVM.updateBounds(proxy.visibleCoordinateBounds)
+                        trajectoryVM.updateZoom(proxy.zoomLevel)
+                        trajectoryVM.updateLayerSettings(viewobject.allLayerSettings)
                     }
                 })
         .task {
             await realtimeVM.run()
+        }
+        .task {
+            await trajectoryVM.run()
         }
         .onChange(of: realtimeVM.vehicles) { _, newVehicles in
             // MapLibreSwiftDSL caches sources by identifier and won't push
@@ -924,14 +1253,59 @@ struct mapLibreView: View {
                 let f = MLNPointFeature()
                 f.coordinate = v.coordinate
                 f.attributes = [
+                    "selection_kind": "vehicle",
+                    "chateau": v.chateauID,
                     "route_type": Int(v.routeType),
                     "bearing": v.bearing ?? 0,
+                    "vehicle_id": v.vehicleID ?? v.id,
+                    "vehicle_label": v.vehicleLabel ?? "",
+                    "gtfs_id": v.chateauID,
+                    "trip_id": v.tripID ?? "",
                     "route_id": v.routeId ?? "",
-                    "headsign": v.headsign ?? ""
+                    "headsign": v.headsign ?? "",
+                    "trip_short_name": v.tripShortName ?? "",
+                    "start_time": v.startTime ?? "",
+                    "start_date": v.startDate ?? ""
                 ]
                 return f
             }
             source.shape = MLNShapeCollectionFeature(shapes: features)
+        }
+        .onChange(of: trajectoryVM.vehicles) { _, newVehicles in
+            guard let style = mapViewRef?.style,
+                  let source = style.source(withIdentifier: "trajectory-vehicles") as? MLNShapeSource
+            else { return }
+            let features: [MLNShape & MLNFeature] = newVehicles.map { vehicle in
+                let feature = MLNPointFeature()
+                feature.coordinate = vehicle.coordinate
+                feature.attributes = [
+                    "selection_kind": "vehicle",
+                    "route_type": vehicle.routeType,
+                    "bearing": vehicle.bearing,
+                    "chateau": vehicle.chateauID,
+                    "gtfs_id": vehicle.chateauID,
+                    "trip_id": vehicle.tripID ?? "",
+                    "route_id": vehicle.routeID ?? "",
+                    "display_name": vehicle.displayName ?? "",
+                    "headsign": vehicle.headsign,
+                    "trip_short_name": vehicle.tripShortName ?? "",
+                    "route_short_name": vehicle.routeShortName ?? "",
+                    "route_long_name": vehicle.routeLongName ?? "",
+                    "color": vehicle.color ?? "777777",
+                    "text_color": vehicle.textColor ?? "FFFFFF",
+                    "start_date": vehicle.startDate ?? "",
+                    "start_time": vehicle.startTime ?? ""
+                ]
+                return feature
+            }
+            source.shape = MLNShapeCollectionFeature(shapes: features)
+        }
+        .onChange(of: viewobject.selectedStopContext) { _, context in
+            updateSelectedStopSource(context)
+        }
+        .onDisappear {
+            realtimeVM.stop()
+            trajectoryVM.stop()
         }
         .mapUserAnnotationStyle(
             MapUserAnnotationStyle(

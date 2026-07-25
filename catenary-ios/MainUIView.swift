@@ -36,13 +36,32 @@ struct MainUIView: View {
     @State private var animationDuration: CGFloat = 0
     @State private var text = ""
     @State var tempSheetOpacity: CGFloat = 0
+    @State private var nearbyPinActive = false
+    @State private var nearbyPinCoordinate: CLLocationCoordinate2D?
     
     
     var body: some View {
         ZStack {
             mapLibreView(locationManager: locationManager)
+                .onOpenURL { url in
+                    viewobject.openDeepLink(url)
+                    isSheetPresented = true
+                }
+                .onChange(of: viewobject.catenaryStack) { _, stack in
+                    guard !stack.isEmpty else { return }
+                    isSheetPresented = true
+                    if viewobject.presDetent != .large {
+                        viewobject.presDetent = .large
+                    }
+                    focus = false
+                }
                 .sheet(isPresented: $isSheetPresented) {
-                    BottomDrawer(selectedDetent: $viewobject.presDetent, locationManager: locationManager)
+                    BottomDrawer(
+                        selectedDetent: $viewobject.presDetent,
+                        locationManager: locationManager,
+                        nearbyPinActive: $nearbyPinActive,
+                        nearbyPinCoordinate: $nearbyPinCoordinate
+                    )
                         .ignoresSafeArea(.keyboard)
                         .presentationDetents([.height(80), .height(350), .large], selection: $viewobject.presDetent)
                         
@@ -104,6 +123,14 @@ struct MainUIView: View {
                         }
                     }
                 }
+                .overlay {
+                    if nearbyPinActive, nearbyPinCoordinate != nil {
+                        DraggableNearbyPinOverlay(
+                            coordinate: $nearbyPinCoordinate,
+                            bounds: viewobject.visibleCoordinateBounds
+                        )
+                    }
+                }
                 .overlay(alignment: .bottomTrailing) {
                     if isSheetPresented {
                         floatingToolBar()
@@ -124,7 +151,7 @@ struct MainUIView: View {
                                     .padding(.leading, 10)
                                     
                             }
-                            .glassEffect(.regular.interactive(), in: .capsule)
+                            .background(.regularMaterial, in: Capsule())
                             .padding()
                             .ignoresSafeArea(.container, edges: .bottom)
                             .transition(.asymmetric(insertion: .opacity, removal: .opacity))
@@ -152,7 +179,7 @@ struct MainUIView: View {
     
     @ViewBuilder
     func floatingToolBar() -> some View {
-        GlassEffectContainer {
+        Group {
             VStack {
                 if viewobject.currentRotation != 0 {
                     Button {
@@ -162,7 +189,7 @@ struct MainUIView: View {
                         Image(systemName: "location.north.line")
                             .rotationEffect(Angle(degrees: viewobject.currentRotation))
                             .padding()
-                            .glassEffect(.regular.interactive(), in: .circle)
+                            .background(.regularMaterial, in: Circle())
                     }
                     .transition(.opacity.combined(with: .scale))
                     .foregroundStyle(Color.primary)
@@ -187,7 +214,7 @@ struct MainUIView: View {
                     
                 }
                 .padding(.all, 10)
-                .glassEffect(.regular.interactive(), in: .capsule)
+                .background(.regularMaterial, in: Capsule())
                 
             }
             .font(.title3)

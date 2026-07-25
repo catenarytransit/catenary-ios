@@ -20,7 +20,7 @@ import MapLibre
 
 // MARK: - Tile-bounds wire type (shared with SpruceWebSocket.BoundsInput)
 
-struct BoundsInputPerLevel: Encodable {
+struct BoundsInputPerLevel: Encodable, Equatable {
     let min_x: UInt32
     let max_x: UInt32
     let min_y: UInt32
@@ -93,11 +93,18 @@ struct CatenaryRtVehiclePosition: Decodable {
 
 struct RealtimeVehicle: Identifiable, Hashable {
     let id: String
+    let chateauID: String
     let coordinate: CLLocationCoordinate2D
     let routeType: Int16
     let bearing: Double?
+    let vehicleID: String?
+    let vehicleLabel: String?
+    let tripID: String?
     let routeId: String?
     let headsign: String?
+    let tripShortName: String?
+    let startTime: String?
+    let startDate: String?
     let delay: Int32?
 
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
@@ -118,7 +125,7 @@ final class RealtimeVehicles: ObservableObject {
     private var bounds: MLNCoordinateBounds?
     private var currentZoom: Double = 5
     private var layerSettings = AllLayerSettings()
-    private var realtimeChateaus: [ChateauInfo] = []
+    private var activeSubscription: MapSubscription?
 
     /// Accumulator: chateau → category → vehicleID → vehicle.
     /// The Spruce server sends one `map_update` per (chateau, category) pair,
@@ -127,11 +134,9 @@ final class RealtimeVehicles: ObservableObject {
     /// message so the map shows the full union, not just the last delta.
     private var byChateau: [String: [String: [String: RealtimeVehicle]]] = [:]
 
-    /// Minimal info we keep about each realtime-enabled chateau so that
-    /// `sendUpdateMap` can quickly filter to chateaus that intersect the viewport.
-    private struct ChateauInfo {
-        let id: String
-        let bbox: MLNCoordinateBounds
+    private struct MapSubscription: Equatable {
+        let categories: [String]
+        let boundsInput: BoundsInput
     }
 
     /// Coalesces back-to-back context changes (a pan gesture fires
@@ -146,8 +151,6 @@ final class RealtimeVehicles: ObservableObject {
     private var rebuildPublishTask: Task<Void, Never>?
     private var rebuildIsDirty = false
     private let rebuildThrottle: Duration = .milliseconds(250)
-
-    private static let chateausURL = URL(string: "https://birch.catenarymaps.org/getchateaus")!
 
     func updateBounds(_ bounds: MLNCoordinateBounds) {
         self.bounds = bounds
@@ -169,12 +172,8 @@ final class RealtimeVehicles: ObservableObject {
     /// `.task { await vm.run() }` so SwiftUI auto-cancels when the view leaves
     /// the hierarchy.
     func run() async {
-        // Open the WebSocket eagerly so its TLS handshake runs in parallel
-        // with the ~1.6 MB chateau-geometry fetch below.
+        defer { stop() }
         SpruceWebSocket.shared.initConnection()
-        await loadChateaus()
-        // Send the first update now that chateaus are loaded. If the WS isn't
-        // open yet, SpruceWebSocket queues the message and replays it on connect.
         scheduleSend()
 
         // Observe spruceMapData pushes. Server sends one chateau per message
@@ -185,6 +184,16 @@ final class RealtimeVehicles: ObservableObject {
                 apply(mapData)
             }
         }
+    }
+
+    func stop() {
+        sendDebounceTask?.cancel()
+        sendDebounceTask = nil
+        rebuildPublishTask?.cancel()
+        rebuildPublishTask = nil
+        activeSubscription = nil
+        SpruceWebSocket.shared.unsubscribeMap()
+        clearVehicles()
     }
 
     /// Merge a `map_update` payload into `byChateau`, respecting `replaces_all`,
@@ -216,14 +225,21 @@ final class RealtimeVehicles: ObservableObject {
                 for (id, v) in vehicleMap {
                     guard let pos = v.position else { continue }
                     byChateau[chateauID, default: [:]][category, default: [:]][id] = RealtimeVehicle(
-                        id: id,
+                        id: "\(chateauID)|\(id)",
+                        chateauID: chateauID,
                         coordinate: CLLocationCoordinate2D(
                             latitude: Double(pos.latitude),
                             longitude: Double(pos.longitude)),
                         routeType: v.route_type,
                         bearing: pos.bearing.map(Double.init),
+                        vehicleID: v.vehicle?.id ?? id,
+                        vehicleLabel: v.vehicle?.label,
+                        tripID: v.trip?.trip_id,
                         routeId: v.trip?.route_id,
                         headsign: v.trip?.trip_headsign,
+                        tripShortName: v.trip?.trip_short_name,
+                        startTime: v.trip?.start_time,
+                        startDate: v.trip?.start_date,
                         delay: v.trip?.delay
                     )
                     added += 1
@@ -259,78 +275,6 @@ final class RealtimeVehicles: ObservableObject {
         self.vehicles = out
     }
 
-    private func loadChateaus() async {
-        struct Geo: Decodable {
-            let features: [Feature]
-            struct Feature: Decodable {
-                let geometry: Geometry?
-                let properties: Props
-            }
-            struct Geometry: Decodable {
-                // Decode coordinates as a generic JSONValue tree so we handle
-                // both `Polygon` ([[[lon,lat]]]) and `MultiPolygon`
-                // ([[[[lon,lat]]]]) without separate decoders.
-                let coordinates: JSONValue
-            }
-            struct Props: Decodable {
-                let chateau: String
-                let realtime_feeds: [String]
-            }
-        }
-        do {
-            let (data, _) = try await URLSession.shared.data(from: Self.chateausURL)
-            let geo = try JSONDecoder().decode(Geo.self, from: data)
-            self.realtimeChateaus = geo.features.compactMap { f in
-                guard !f.properties.realtime_feeds.isEmpty,
-                      !f.properties.chateau.isEmpty,
-                      let geom = f.geometry else { return nil }
-                var minLon = Double.infinity, maxLon = -Double.infinity
-                var minLat = Double.infinity, maxLat = -Double.infinity
-                Self.walkCoords(geom.coordinates,
-                                minLon: &minLon, maxLon: &maxLon,
-                                minLat: &minLat, maxLat: &maxLat)
-                guard minLon.isFinite, maxLon.isFinite, minLat.isFinite, maxLat.isFinite else {
-                    return nil
-                }
-                return ChateauInfo(
-                    id: f.properties.chateau,
-                    bbox: MLNCoordinateBounds(
-                        sw: CLLocationCoordinate2D(latitude: minLat, longitude: minLon),
-                        ne: CLLocationCoordinate2D(latitude: maxLat, longitude: maxLon))
-                )
-            }
-            print("RealtimeVehicles: loaded \(realtimeChateaus.count) chateaus with realtime + geometry")
-        } catch {
-            print("RealtimeVehicles: error fetching chateaus:", error)
-        }
-    }
-
-    /// Recursively walk a GeoJSON coordinates tree and update the running bbox
-    /// for any `[lon, lat]` pair encountered. Works for any geometry depth.
-    private static func walkCoords(_ value: JSONValue,
-                                   minLon: inout Double, maxLon: inout Double,
-                                   minLat: inout Double, maxLat: inout Double) {
-        if case .array(let arr) = value, arr.count == 2,
-           case .number(let lon) = arr[0], case .number(let lat) = arr[1] {
-            if lon < minLon { minLon = lon }
-            if lon > maxLon { maxLon = lon }
-            if lat < minLat { minLat = lat }
-            if lat > maxLat { maxLat = lat }
-            return
-        }
-        if case .array(let arr) = value {
-            for item in arr {
-                walkCoords(item, minLon: &minLon, maxLon: &maxLon, minLat: &minLat, maxLat: &maxLat)
-            }
-        }
-    }
-
-    /// AABB intersection test, ignoring antimeridian wrap.
-    private static func boundsIntersect(_ a: MLNCoordinateBounds, _ b: MLNCoordinateBounds) -> Bool {
-        a.ne.longitude >= b.sw.longitude && a.sw.longitude <= b.ne.longitude
-            && a.ne.latitude >= b.sw.latitude && a.sw.latitude <= b.ne.latitude
-    }
-
     /// Coalesce rapid setter calls into a single WebSocket message.
     private func scheduleSend() {
         sendDebounceTask?.cancel()
@@ -345,7 +289,7 @@ final class RealtimeVehicles: ObservableObject {
     /// send an `update_map` over the WebSocket. Mirrors Android's
     /// `FetchRealtimeData.sendMapUpdate`.
     private func sendUpdateMap() async {
-        guard let bounds, !realtimeChateaus.isEmpty else { return }
+        guard let bounds else { return }
 
         // Zoom-based category filter + toggle gate
         //   - bus only at zoom >= 8 (massive volume otherwise)
@@ -358,16 +302,9 @@ final class RealtimeVehicles: ObservableObject {
         if layerSettings.localrail.visiblerealtimedots    && currentZoom >= 4 { categories.append("metro") }
         if layerSettings.other.visiblerealtimedots        && currentZoom >= 3 { categories.append("other") }
         guard !categories.isEmpty else {
-            if !self.vehicles.isEmpty { self.vehicles = [] }
-            return
-        }
-
-        // Filter to chateaus whose bbox overlaps the visible viewport.
-        let visibleChateauIDs = realtimeChateaus
-            .filter { Self.boundsIntersect($0.bbox, bounds) }
-            .map { $0.id }
-        guard !visibleChateauIDs.isEmpty else {
-            if !self.vehicles.isEmpty { self.vehicles = [] }
+            activeSubscription = nil
+            SpruceWebSocket.shared.unsubscribeMap()
+            clearVehicles()
             return
         }
 
@@ -386,20 +323,28 @@ final class RealtimeVehicles: ObservableObject {
             level12: Self.tileBoundsForLevel(bounds, zoom: 12, padding: padFor(12))
         )
 
-        // Drop accumulator entries for chateaus no longer in the subscription,
-        // so old ghosts don't linger after the user pans away.
-        let visibleSet = Set(visibleChateauIDs)
-        let beforeKeys = byChateau.keys.count
-        byChateau = byChateau.filter { visibleSet.contains($0.key) }
-        if byChateau.keys.count != beforeKeys { rebuildVehicles() }
+        let subscription = MapSubscription(
+            categories: categories,
+            boundsInput: boundsInput
+        )
+        guard subscription != activeSubscription else { return }
+        activeSubscription = subscription
 
-        print("RealtimeVehicles: ws update chateaus=\(visibleChateauIDs.count)/\(realtimeChateaus.count) cats=\(categories) zoom=\(String(format: "%.1f", currentZoom))")
+        // subscribe_map_v2 can remove server-side chateau subscriptions without
+        // sending another vehicle payload for those removed chateaus. Clear the
+        // previous viewport immediately so stale dots cannot remain on screen.
+        clearVehicles()
 
         SpruceWebSocket.shared.updateMap(
             categories: categories,
-            chateaus: visibleChateauIDs,
             boundsInput: boundsInput
         )
+    }
+
+    private func clearVehicles() {
+        byChateau.removeAll(keepingCapacity: true)
+        rebuildIsDirty = false
+        if !vehicles.isEmpty { vehicles = [] }
     }
 
     /// Convert a lat/lon bounding box into a tile-coordinate rectangle for a given zoom.
