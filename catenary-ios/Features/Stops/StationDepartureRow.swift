@@ -6,39 +6,57 @@ struct StationDepartureRow: View {
     let agency: StopAgencyInfo?
     let timezoneID: String?
     let now: Date
+    let layout: StopDepartureLayout
+    let trainDisplayName: String?
 
     @EnvironmentObject private var viewObject: viewObject
+
+    init(
+        event: StopEvent,
+        routeInfo: StopRouteInfo?,
+        agency: StopAgencyInfo?,
+        timezoneID: String?,
+        now: Date,
+        layout: StopDepartureLayout = .regular,
+        trainDisplayName: String? = nil
+    ) {
+        self.event = event
+        self.routeInfo = routeInfo
+        self.agency = agency
+        self.timezoneID = timezoneID
+        self.now = now
+        self.layout = layout
+        self.trainDisplayName = trainDisplayName
+    }
 
     private var mode: StopTransitMode {
         .from(routeType: routeInfo?.routeType ?? event.routeType)
     }
 
+    private var showsLeadingRoute: Bool {
+        layout != .regular || mode != .rail
+    }
+
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .center, spacing: 6) {
+            if layout == .swiss {
+                leadingRouteButton
+            }
+
             StopDepartureTimeView(
                 event: event,
                 timezoneID: timezoneID,
                 now: now
             )
 
-            Button {
-                viewObject.push(.route(chateauID: event.chateau, routeID: event.routeId))
-            } label: {
-                StopRouteBadge(
-                    shortName: routeInfo?.shortName ?? event.tripShortName,
-                    longName: routeInfo?.longName,
-                    colorHex: routeInfo?.color,
-                    textColorHex: routeInfo?.textColor,
-                    mode: mode
-                )
+            if showsLeadingRoute, layout != .swiss {
+                leadingRouteButton
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Open route")
 
             Button(action: openTrip) {
                 HStack(alignment: .center, spacing: 8) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(event.finalStationName ?? event.headsign ?? "Departure")
+                        Text(destinationText)
                             .font(mode == .rail ? .headline : .subheadline.weight(.semibold))
                             .foregroundStyle(event.isCancelled ? .red : .primary)
                             .strikethrough(event.isCancelled)
@@ -64,9 +82,30 @@ struct StationDepartureRow: View {
     }
 
     @ViewBuilder
+    private var leadingRouteButton: some View {
+        if routeLabel != nil {
+            Button {
+                openRoute()
+            } label: {
+                StopRouteBadge(
+                    chateauID: event.chateau,
+                    shortName: routeInfo?.shortName ?? event.tripShortName,
+                    longName: routeInfo?.longName,
+                    colorHex: routeInfo?.color,
+                    textColorHex: routeInfo?.textColor,
+                    mode: mode,
+                    layout: layout
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open route")
+        }
+    }
+
+    @ViewBuilder
     private var metadataLine: some View {
         let values = [
-            event.tripShortName,
+            mode == .rail ? nil : effectiveTripName,
             event.vehicleNumber,
             mode == .rail ? agency?.agencyName : nil
         ]
@@ -75,12 +114,80 @@ struct StationDepartureRow: View {
             return value
         }
 
-        if !values.isEmpty {
+        if layout == .regular, mode == .rail, routeLabel != nil || !values.isEmpty {
+            HStack(spacing: 5) {
+                if routeLabel != nil {
+                    Button {
+                        openRoute()
+                    } label: {
+                        StopRouteBadge(
+                            chateauID: event.chateau,
+                            shortName: routeInfo?.shortName ?? event.tripShortName,
+                            longName: routeInfo?.longName,
+                            colorHex: routeInfo?.color,
+                            textColorHex: routeInfo?.textColor,
+                            mode: mode,
+                            layout: layout,
+                            compact: true
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open route")
+                }
+
+                if !values.isEmpty {
+                    Text(values.joined(separator: "  •  "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        } else if !values.isEmpty {
             Text(values.joined(separator: "  •  "))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
+    }
+
+    private var destinationText: String {
+        var components: [String] = []
+
+        for candidate in [event.finalStationName, event.headsign] {
+            guard let value = candidate?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty,
+                  !components.contains(where: { $0.caseInsensitiveCompare(value) == .orderedSame }) else {
+                continue
+            }
+            components.append(value)
+        }
+
+        if mode == .rail,
+           let tripName = effectiveTripName,
+           !tripName.isEmpty,
+           !components.contains(where: { $0.caseInsensitiveCompare(tripName) == .orderedSame }) {
+            components.append(tripName)
+        }
+
+        return components.isEmpty ? "Departure" : components.joined(separator: " ")
+    }
+
+    private var effectiveTripName: String? {
+        let value = trainDisplayName ?? event.tripShortName
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return nil
+        }
+        return value
+    }
+
+    private var routeLabel: String? {
+        for value in [routeInfo?.shortName, routeInfo?.longName, event.tripShortName] {
+            if let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty {
+                return value
+            }
+        }
+        return nil
     }
 
     private var platformText: String? {
@@ -91,6 +198,10 @@ struct StationDepartureRow: View {
             .replacingOccurrences(of: "Platform", with: "", options: .caseInsensitive)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? raw : value
+    }
+
+    private func openRoute() {
+        viewObject.push(.route(chateauID: event.chateau, routeID: event.routeId))
     }
 
     private func openTrip() {
@@ -155,7 +266,7 @@ private struct StopDepartureTimeView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .frame(width: 76, alignment: .leading)
+        .frame(width: 70, alignment: .leading)
     }
 }
 
@@ -176,34 +287,51 @@ private struct StopPlatformBadge: View {
 }
 
 private struct StopRouteBadge: View {
+    let chateauID: String
     let shortName: String?
     let longName: String?
     let colorHex: String?
     let textColorHex: String?
     let mode: StopTransitMode
+    let layout: StopDepartureLayout
+    var compact = false
 
     var body: some View {
         Text(label)
-            .font(.caption.weight(.bold))
+            .font(compact ? .caption2.weight(.bold) : .caption.weight(.bold))
             .lineLimit(1)
             .minimumScaleFactor(0.6)
             .foregroundStyle(StopHexColor.color(textColorHex, fallback: .white))
-            .padding(.horizontal, 7)
-            .frame(width: 48)
-            .frame(minHeight: mode == .rail ? 30 : 28)
+            .padding(.horizontal, compact ? 5 : 4)
+            .frame(width: compact ? nil : (layout == .swiss ? 50 : 40), alignment: layout == .swiss ? .leading : .center)
+            .frame(minHeight: compact ? 18 : (mode == .rail ? 30 : 28))
             .background(
                 StopHexColor.color(colorHex, fallback: fallbackColor),
-                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                in: routeShape
             )
     }
 
     private var label: String {
-        if let shortName, !shortName.isEmpty { return shortName }
-        if let longName, !longName.isEmpty { return String(longName.prefix(5)) }
+        if let shortName, !shortName.isEmpty { return shortName.replacingOccurrences(of: " Line", with: "") }
+        if let longName, !longName.isEmpty { return String(longName.replacingOccurrences(of: " Line", with: "").prefix(8)) }
         return mode == .rail ? "Rail" : "—"
     }
 
+    private var routeShape: AnyShape {
+        let isSBahn = (chateauID == "vbb" || chateauID == "deutschland")
+            && label.range(of: #"^S\d+"#, options: .regularExpression) != nil
+        if isSBahn {
+            return AnyShape(Capsule())
+        }
+        return AnyShape(RoundedRectangle(cornerRadius: compact ? 3 : 4, style: .continuous))
+    }
+
     private var fallbackColor: Color {
+        if chateauID == "schweiz",
+           label.hasPrefix("IR") || label.hasPrefix("IC") || label == "EC" {
+            return Color(red: 0.92, green: 0, blue: 0)
+        }
+
         switch mode {
         case .rail: return .railCategory
         case .metro: return .metroCategory

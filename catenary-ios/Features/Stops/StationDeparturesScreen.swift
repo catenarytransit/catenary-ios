@@ -201,6 +201,10 @@ struct StationDeparturesScreen: View {
                     Section {
                         ForEach(section.events) { event in
                             let routeInfo = model.routes[event.chateau]?[event.routeId]
+                            let trainDisplayName = StopDeparturePresentation.dbFernverkehrDisplayName(
+                                event: event,
+                                routeInfo: routeInfo
+                            )
                             StationDepartureRow(
                                 event: event,
                                 routeInfo: routeInfo,
@@ -208,7 +212,9 @@ struct StationDeparturesScreen: View {
                                     model.agencies[event.chateau]?[$0]
                                 },
                                 timezoneID: event.timezone ?? timezoneID,
-                                now: now
+                                now: now,
+                                layout: departureLayout,
+                                trainDisplayName: trainDisplayName
                             )
                             .id(event.id)
 
@@ -322,6 +328,10 @@ struct StationDeparturesScreen: View {
         model.timezoneID
     }
 
+    private var departureLayout: StopDepartureLayout {
+        StopDeparturePresentation.layout(for: model.stationCoordinate ?? destinationCoordinate)
+    }
+
     private var availableModes: [StopTransitMode] {
         let modes = Set(model.events.map { event in
             StopTransitMode.from(
@@ -350,9 +360,11 @@ struct StationDeparturesScreen: View {
             }
 
             if mode == .rail, !trainCategories.isEmpty {
-                let category = StopTrainCategoryClassifier.category(
+                let category = StopDeparturePresentation.trainCategory(
                     chateauID: model.primaryChateauID,
-                    shortName: routeInfo?.shortName
+                    routeShortName: routeInfo?.shortName,
+                    event: event,
+                    routeInfo: routeInfo
                 )
                 return enabledTrainCategories.contains(category)
             }
@@ -500,26 +512,25 @@ private struct StopModePicker: View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
                 ForEach(availableModes) { mode in
+                    let isSelected = selection == mode
                     Button {
                         selection = mode
                     } label: {
-                        Label(mode.title, systemImage: mode.systemImage)
-                            .font(.subheadline.weight(selection == mode ? .semibold : .regular))
+                        VStack(spacing: 4) {
+                            Text(mode.title)
+                                .font(.subheadline.weight(isSelected ? .bold : .regular))
+                                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+
+                            Capsule()
+                                .fill(isSelected ? Color.accentColor : Color.clear)
+                                .frame(width: 20, height: 2)
+                        }
                             .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(
-                                selection == mode ? Color.accentColor.opacity(0.16) : Color.clear,
-                                in: Capsule()
-                            )
-                            .overlay {
-                                Capsule()
-                                    .stroke(
-                                        selection == mode ? Color.accentColor : Color.secondary.opacity(0.35),
-                                        lineWidth: 1
-                                    )
-                            }
+                            .padding(.vertical, 8)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }
             .padding(.vertical, 2)
