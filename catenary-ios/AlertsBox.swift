@@ -693,9 +693,27 @@ private extension SingleTripAlertText {
 
 private extension SingleTripAlert {
     var allTranslationLanguages: [String] {
-        (headerText?.translation.map { $0.language ?? "" } ?? [])
-            + (descriptionText?.translation.map { $0.language ?? "" } ?? [])
-            + (url?.translation.map { $0.language ?? "" } ?? [])
+        var languages: [String] = []
+
+        if let headerText = headerText {
+            languages.append(contentsOf: headerText.translation.map { translation in
+                translation.language ?? ""
+            })
+        }
+
+        if let descriptionText = descriptionText {
+            languages.append(contentsOf: descriptionText.translation.map { translation in
+                translation.language ?? ""
+            })
+        }
+
+        if let url = url {
+            languages.append(contentsOf: url.translation.map { translation in
+                translation.language ?? ""
+            })
+        }
+
+        return languages
     }
 
     func hasTranslation(for language: String) -> Bool {
