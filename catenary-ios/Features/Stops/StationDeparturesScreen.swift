@@ -135,14 +135,9 @@ struct StationDeparturesScreen: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Label {
-                    Text(stationName)
-                        .font(.title2.weight(.semibold))
-                        .lineLimit(2)
-                } icon: {
-                    Image(systemName: stationSystemImage)
-                        .foregroundStyle(.secondary)
-                }
+                Text(stationName)
+                    .font(.title2.weight(.semibold))
+                    .lineLimit(2)
 
                 if let timezoneID {
                     Text(StopDateFormatting.clock(date: now, timezoneID: timezoneID))
@@ -398,18 +393,6 @@ struct StationDeparturesScreen: View {
             return stationName
         }
         return source.explicitChateauID == nil ? "Station" : "Stop"
-    }
-
-    private var stationSystemImage: String {
-        guard case let .osmStation(_, _, modeType, _, _, _) = destination else {
-            return "mappin.circle.fill"
-        }
-        switch modeType {
-        case "rail", "train": return "tram.fill.tunnel"
-        case "subway", "metro", "tram", "light_rail": return "lightrail.fill"
-        case "bus": return "bus.fill"
-        default: return "building.2.fill"
-        }
     }
 
     private func synchronizeFilters() {
