@@ -516,6 +516,7 @@ struct AllLayerSettings: Equatable {
 
 struct LayerCategorySettings: Equatable {
     var visiblerealtimedots: Bool = true
+    var labeltrajectories: Bool = false
     var labelshapes: Bool = true
     var stops: Bool = true
     var shapes: Bool = true
@@ -584,9 +585,11 @@ enum LayersPerCategory {
 
     struct TrajectoryCategory {
         let Livedots: String
+        let Labeldots: String
 
         init(prefix: String) {
             Livedots = "\(prefix)-livedots"
+            Labeldots = "\(prefix)-labeldots"
         }
     }
 

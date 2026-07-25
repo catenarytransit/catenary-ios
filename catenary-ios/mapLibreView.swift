@@ -9,10 +9,390 @@ import MapLibreSwiftUI
 import MapLibre
 import MapLibreSwiftDSL
 
+
+private enum VehicleFeatureBuilder {
+    private struct RGB {
+        let r: Int
+        let g: Int
+        let b: Int
+    }
+
+    private struct HSL {
+        let h: Double
+        let s: Double
+        let l: Double
+    }
+
+    static func realtime(_ vehicle: RealtimeVehicle, settings: AllLayerSettings) -> MLNPointFeature {
+        let feature = MLNPointFeature()
+        feature.coordinate = vehicle.coordinate
+
+        let labelSettings = categorySettings(for: Int(vehicle.routeType), settings: settings)
+        let color = normalizedHex(vehicle.color, fallback: "AAAAAA")
+        let textColor = normalizedHex(vehicle.textColor, fallback: "000000")
+        let darkColors = processedColor(color, isDark: true)
+        let lightColors = processedColor(color, isDark: false)
+        let routeTag = cleanedRouteTag(
+            chateauID: vehicle.chateauID,
+            routeID: vehicle.routeId,
+            shortName: vehicle.routeShortName,
+            longName: vehicle.routeLongName
+        )
+        let tripLabel = cleanedTripLabel(vehicle.tripShortName, tripID: vehicle.tripID)
+        let vehicleLabel = cleanedVehicleLabel(vehicle.vehicleLabel ?? vehicle.vehicleID ?? "")
+        let headsign = cleanedHeadsign(vehicle.headsign ?? "", chateauID: vehicle.chateauID)
+        let speed = vehicle.speedMetresPerSecond.map {
+            String(format: "%.1f km/h", $0 * 3.6)
+        } ?? ""
+        let crowd = occupancySymbol(vehicle.occupancyStatus)
+        let delay = delayLabel(vehicle.delay)
+
+        feature.attributes = [
+            "selection_kind": "vehicle",
+            "chateau": vehicle.chateauID,
+            "route_type": Int(vehicle.routeType),
+            "bearing": vehicle.bearing ?? 0,
+            "has_bearing": vehicle.bearing != nil,
+            "vehicle_id": vehicle.vehicleID ?? vehicle.id,
+            "vehicle_label": vehicle.vehicleLabel ?? "",
+            "vehicleIdLabel": vehicleLabel,
+            "gtfs_id": vehicle.chateauID,
+            "trip_id": vehicle.tripID ?? "",
+            "route_id": vehicle.routeId ?? "",
+            "routeId": vehicle.routeId ?? "",
+            "headsign": headsign,
+            "trip_short_name": vehicle.tripShortName ?? "",
+            "tripIdLabel": tripLabel,
+            "route_short_name": vehicle.routeShortName ?? "",
+            "route_long_name": vehicle.routeLongName ?? "",
+            "maptag": routeTag,
+            "speed": speed,
+            "crowd_symbol": crowd,
+            "delay_label": delay,
+            "color": color,
+            "text_color": textColor,
+            "contrastdarkmode": darkColors.label,
+            "contrastdarkmodebearing": darkColors.bearing,
+            "contrastlightmode": lightColors.label,
+            "label_text": labelText(
+                settings: labelSettings,
+                route: routeTag,
+                trip: tripLabel,
+                vehicle: vehicleLabel,
+                headsign: headsign,
+                speed: speed,
+                occupancy: crowd,
+                delay: delay
+            ),
+            "start_time": vehicle.startTime ?? "",
+            "start_date": vehicle.startDate ?? ""
+        ]
+        return feature
+    }
+
+    static func trajectory(_ vehicle: RealtimeTrajectoryVehicle, settings: AllLayerSettings) -> MLNPointFeature {
+        let feature = MLNPointFeature()
+        feature.coordinate = vehicle.coordinate
+
+        let labelSettings = categorySettings(for: vehicle.routeType, settings: settings)
+        let color = normalizedHex(vehicle.color, fallback: "777777")
+        let textColor = normalizedHex(vehicle.textColor, fallback: "FFFFFF")
+        let darkColors = processedColor(color, isDark: true)
+        let lightColors = processedColor(color, isDark: false)
+        let routeTag = cleanedRouteTag(
+            chateauID: vehicle.chateauID,
+            routeID: vehicle.routeID,
+            shortName: vehicle.routeShortName,
+            longName: vehicle.routeLongName
+        )
+        let tripLabel = cleanedTripLabel(vehicle.tripShortName, tripID: vehicle.tripID)
+        let vehicleLabel = cleanedVehicleLabel(vehicle.displayName ?? "")
+        let headsign = cleanedHeadsign(vehicle.headsign, chateauID: vehicle.chateauID)
+
+        feature.attributes = [
+            "selection_kind": "vehicle",
+            "route_type": vehicle.routeType,
+            "bearing": vehicle.bearing,
+            "has_bearing": true,
+            "chateau": vehicle.chateauID,
+            "gtfs_id": vehicle.chateauID,
+            "vehicle_id": vehicle.id,
+            "vehicle_label": vehicle.displayName ?? "",
+            "vehicleIdLabel": vehicleLabel,
+            "trip_id": vehicle.tripID ?? "",
+            "route_id": vehicle.routeID ?? "",
+            "routeId": vehicle.routeID ?? "",
+            "display_name": vehicle.displayName ?? "",
+            "headsign": headsign,
+            "trip_short_name": vehicle.tripShortName ?? "",
+            "tripIdLabel": tripLabel,
+            "route_short_name": vehicle.routeShortName ?? "",
+            "route_long_name": vehicle.routeLongName ?? "",
+            "maptag": routeTag,
+            "speed": "",
+            "crowd_symbol": "",
+            "delay_label": "",
+            "color": color,
+            "text_color": textColor,
+            "contrastdarkmode": darkColors.label,
+            "contrastdarkmodebearing": darkColors.bearing,
+            "contrastlightmode": lightColors.label,
+            "label_text": labelText(
+                settings: labelSettings,
+                route: routeTag,
+                trip: tripLabel,
+                vehicle: vehicleLabel,
+                headsign: headsign,
+                speed: "",
+                occupancy: "",
+                delay: ""
+            ),
+            "start_date": vehicle.startDate ?? "",
+            "start_time": vehicle.startTime ?? ""
+        ]
+        return feature
+    }
+
+    private static func categorySettings(
+        for routeType: Int,
+        settings: AllLayerSettings
+    ) -> LabelSettings {
+        switch routeType {
+        case 2, 100, 101, 102, 103, 106, 107:
+            return settings.intercityrail.labelrealtimedots
+        case 0, 1, 5, 7, 12, 900:
+            return settings.localrail.labelrealtimedots
+        case 3, 11, 700...799:
+            return settings.bus.labelrealtimedots
+        default:
+            return settings.other.labelrealtimedots
+        }
+    }
+
+    private static func labelText(
+        settings: LabelSettings,
+        route: String,
+        trip: String,
+        vehicle: String,
+        headsign: String,
+        speed: String,
+        occupancy: String,
+        delay: String
+    ) -> String {
+        var firstRow: [String] = []
+        if settings.route, !route.isEmpty { firstRow.append(route) }
+        if settings.trip, !trip.isEmpty { firstRow.append(trip) }
+        if settings.vehicle, !vehicle.isEmpty { firstRow.append(vehicle) }
+
+        var secondRow: [String] = []
+        if settings.headsign, !headsign.isEmpty { secondRow.append(headsign) }
+        if settings.speed, !speed.isEmpty { secondRow.append(speed) }
+        if settings.occupancy, !occupancy.isEmpty { secondRow.append(occupancy) }
+        if settings.delay, !delay.isEmpty { secondRow.append(delay) }
+
+        if firstRow.isEmpty { return secondRow.joined(separator: " ") }
+        if secondRow.isEmpty { return firstRow.joined(separator: " ") }
+        return firstRow.joined(separator: " ") + "\n" + secondRow.joined(separator: " ")
+    }
+
+    private static func cleanedVehicleLabel(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "ineo-tram:", with: "")
+            .replacingOccurrences(of: "ineo-bus:", with: "")
+    }
+
+    private static func cleanedTripLabel(_ shortName: String?, tripID: String?) -> String {
+        if let shortName, !shortName.isEmpty { return shortName }
+        guard let tripID else { return "" }
+        let pieces = tripID.split(separator: "_", omittingEmptySubsequences: true)
+        guard pieces.count > 1 else { return "" }
+        return pieces[1].filter(\.isNumber)
+    }
+
+    private static func cleanedHeadsign(_ value: String, chateauID: String) -> String {
+        var result = value
+        if !result.isEmpty, result == result.uppercased() {
+            result = result.lowercased().localizedCapitalized
+        }
+        if chateauID == "new-south-wales" {
+            result = result.replacingOccurrences(of: " Station", with: "")
+        }
+        if chateauID == "metro~losangeles", result.contains("Line  - ") {
+            result = result.split(separator: "-").dropFirst().joined(separator: "-")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return result
+            .replacingOccurrences(of: "Counterclockwise", with: "ACW")
+            .replacingOccurrences(of: "Clockwise", with: "CW")
+    }
+
+    private static func cleanedRouteTag(
+        chateauID: String,
+        routeID: String?,
+        shortName: String?,
+        longName: String?
+    ) -> String {
+        var result = [shortName, longName].compactMap { value in
+            guard let value, !value.isEmpty else { return nil }
+            return value
+        }.first ?? ""
+
+        let aliases = [
+            "Metro E Line": "E",
+            "Metro A Line": "A",
+            "Metro B Line": "B",
+            "Metro C Line": "C",
+            "Metro D Line": "D",
+            "Metro L Line": "L",
+            "Metro K Line": "K",
+            "Metrolink Ventura County Line": "Ventura",
+            "Metrolink Antelope Valley Line": "Antelope",
+            "Metrolink San Bernardino Line": "SB",
+            "Metrolink Riverside Line": "Riverside",
+            "Metrolink Orange County Line": "Orange",
+            "Metrolink 91/Perris Valley Line": "91/Perris",
+            "Metrolink Inland Empire-Orange County Line": "IE-OC"
+        ]
+        result = aliases[result] ?? result
+        return result
+            .replacingOccurrences(of: " Branch", with: "")
+            .replacingOccurrences(of: " Line", with: "")
+            .replacingOccurrences(of: "Counterclockwise", with: "ACW")
+            .replacingOccurrences(of: "Clockwise", with: "CW")
+    }
+
+    private static func occupancySymbol(_ status: Int32?) -> String {
+        switch status {
+        case 0: return "\u{2205}"
+        case 1: return "\u{25A2}"
+        case 2: return "\u{25A3}"
+        case 3: return "\u{256C}"
+        case 4: return "\u{256C}\u{2639}\u{256C}"
+        case 5: return "\u{25A0}"
+        case 6, 8: return "\u{2717}"
+        default: return ""
+        }
+    }
+
+    private static func delayLabel(_ delay: Int32?) -> String {
+        guard let delay else { return "" }
+        let prefix = delay < 0 ? "-" : "+"
+        let totalMinutes = abs(Int(delay)) / 60
+        let hours = totalMinutes / 60
+        let minutes = totalMinutes % 60
+        return prefix + (hours > 0 ? "\(hours)h" : "") + "\(minutes)m"
+    }
+
+    private static func normalizedHex(_ input: String?, fallback: String) -> String {
+        let value = (input ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "#", with: "")
+        guard value.count == 6, value.allSatisfy(\.isHexDigit) else {
+            return fallback.uppercased()
+        }
+        return value.uppercased()
+    }
+
+    private static func processedColor(_ input: String, isDark: Bool) -> (label: String, bearing: String) {
+        guard let rgb = rgb(from: input) else { return (input, input) }
+        if isDark {
+            let hsl = rgbToHsl(rgb)
+            var newLightness = hsl.l
+            if hsl.l < 60 {
+                let blueOffset = rgb.b > 40 ? 30 * (Double(rgb.b) / 255.0) : 0
+                newLightness = hsl.l + 10 + 25 * ((100 - hsl.s) / 100) + blueOffset
+                if newLightness > 60 { newLightness = 60 + blueOffset }
+                newLightness = min(sqrt(hsl.l * 25) + 40, 100)
+            }
+            let label = hslToRgb(HSL(h: hsl.h, s: hsl.s, l: newLightness))
+            let bearing = hslToRgb(HSL(h: hsl.h, s: hsl.s, l: (newLightness + hsl.l) / 2))
+            return (hex(label), hex(bearing))
+        }
+
+        let gamma = (0.299 * Double(rgb.r) + 0.587 * Double(rgb.g) + 0.114 * Double(rgb.b)) / 255
+        guard gamma > 0.55 else { return (hex(rgb), hex(rgb)) }
+        let factor = 0.55 / gamma
+        let adjusted = RGB(
+            r: min(255, max(0, Int((Double(rgb.r) * factor).rounded()))),
+            g: min(255, max(0, Int((Double(rgb.g) * factor).rounded()))),
+            b: min(255, max(0, Int((Double(rgb.b) * factor).rounded())))
+        )
+        return (hex(adjusted), hex(adjusted))
+    }
+
+    private static func rgb(from hex: String) -> RGB? {
+        let value = normalizedHex(hex, fallback: "")
+        guard value.count == 6,
+              let r = Int(value.prefix(2), radix: 16),
+              let g = Int(value.dropFirst(2).prefix(2), radix: 16),
+              let b = Int(value.suffix(2), radix: 16) else { return nil }
+        return RGB(r: r, g: g, b: b)
+    }
+
+    private static func hex(_ rgb: RGB) -> String {
+        String(format: "%02X%02X%02X", rgb.r, rgb.g, rgb.b)
+    }
+
+    private static func rgbToHsl(_ rgb: RGB) -> HSL {
+        let r = Double(rgb.r) / 255
+        let g = Double(rgb.g) / 255
+        let b = Double(rgb.b) / 255
+        let maximum = max(r, max(g, b))
+        let minimum = min(r, min(g, b))
+        let delta = maximum - minimum
+        let lightness = (maximum + minimum) / 2
+        let saturation = delta == 0 ? 0 : delta / (1 - abs(2 * lightness - 1))
+        var hue = 0.0
+        if delta != 0 {
+            if maximum == r {
+                hue = ((g - b) / delta).truncatingRemainder(dividingBy: 6)
+            } else if maximum == g {
+                hue = (b - r) / delta + 2
+            } else {
+                hue = (r - g) / delta + 4
+            }
+            hue *= 60
+            if hue < 0 { hue += 360 }
+        }
+        return HSL(h: hue, s: saturation * 100, l: lightness * 100)
+    }
+
+    private static func hslToRgb(_ hsl: HSL) -> RGB {
+        let hue = ((hsl.h.truncatingRemainder(dividingBy: 360)) + 360)
+            .truncatingRemainder(dividingBy: 360)
+        let saturation = min(100, max(0, hsl.s)) / 100
+        let lightness = min(100, max(0, hsl.l)) / 100
+        if saturation == 0 {
+            let value = Int((lightness * 255).rounded())
+            return RGB(r: value, g: value, b: value)
+        }
+        let chroma = (1 - abs(2 * lightness - 1)) * saturation
+        let x = chroma * (1 - abs((hue / 60).truncatingRemainder(dividingBy: 2) - 1))
+        let m = lightness - chroma / 2
+        let channels: (Double, Double, Double)
+        switch hue {
+        case ..<60: channels = (chroma, x, 0)
+        case ..<120: channels = (x, chroma, 0)
+        case ..<180: channels = (0, chroma, x)
+        case ..<240: channels = (0, x, chroma)
+        case ..<300: channels = (x, 0, chroma)
+        default: channels = (chroma, 0, x)
+        }
+        return RGB(
+            r: Int(((channels.0 + m) * 255).rounded()),
+            g: Int(((channels.1 + m) * 255).rounded()),
+            b: Int(((channels.2 + m) * 255).rounded())
+        )
+    }
+}
+
+
 final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecognizerDelegate {
     private weak var mapView: MLNMapView?
     private weak var navigator: viewObject?
     private var recognizer: UITapGestureRecognizer?
+    private var layerSettings = AllLayerSettings()
+    private var realtimeVehicles: [RealtimeVehicle] = []
+    private var trajectoryVehicles: [RealtimeTrajectoryVehicle] = []
 
     private let selectableLayerIDs: Set<String> = [
         LayersPerCategory.IntercityRail.Livedots,
@@ -20,11 +400,13 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         LayersPerCategory.Tram.Livedots,
         LayersPerCategory.Bus.Livedots,
         LayersPerCategory.Other.Livedots,
+        LayersPerCategory.Other.Livedots + "_aerial",
         LayersPerCategory.TrajectoryIntercityRail.Livedots,
         LayersPerCategory.TrajectoryMetro.Livedots,
         LayersPerCategory.TrajectoryTram.Livedots,
         LayersPerCategory.TrajectoryBus.Livedots,
         LayersPerCategory.TrajectoryOther.Livedots,
+        LayersPerCategory.TrajectoryOther.Livedots + "_aerial",
         LayersPerCategory.Bus.Shapes,
         LayersPerCategory.Bus.LabelShapes,
         LayersPerCategory.Bus.Stops,
@@ -178,61 +560,38 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         return nil
     }
 
+    func updateLayerSettings(_ settings: AllLayerSettings) {
+        layerSettings = settings
+        rebuildRealtimeSource()
+        rebuildTrajectorySource()
+    }
+
     func updateRealtimeVehicles(_ vehicles: [RealtimeVehicle]) {
+        realtimeVehicles = vehicles
+        rebuildRealtimeSource()
+    }
+
+    func updateTrajectoryVehicles(_ vehicles: [RealtimeTrajectoryVehicle]) {
+        trajectoryVehicles = vehicles
+        rebuildTrajectorySource()
+    }
+
+    private func rebuildRealtimeSource() {
         guard let source = mapView?.style?.source(
             withIdentifier: "realtime-vehicles"
         ) as? MLNShapeSource else { return }
-
-        let features: [MLNShape & MLNFeature] = vehicles.map { vehicle in
-            let feature = MLNPointFeature()
-            feature.coordinate = vehicle.coordinate
-            feature.attributes = [
-                "selection_kind": "vehicle",
-                "chateau": vehicle.chateauID,
-                "route_type": Int(vehicle.routeType),
-                "bearing": vehicle.bearing ?? 0,
-                "vehicle_id": vehicle.vehicleID ?? vehicle.id,
-                "vehicle_label": vehicle.vehicleLabel ?? "",
-                "gtfs_id": vehicle.chateauID,
-                "trip_id": vehicle.tripID ?? "",
-                "route_id": vehicle.routeId ?? "",
-                "headsign": vehicle.headsign ?? "",
-                "trip_short_name": vehicle.tripShortName ?? "",
-                "start_time": vehicle.startTime ?? "",
-                "start_date": vehicle.startDate ?? ""
-            ]
-            return feature
+        let features: [MLNShape & MLNFeature] = realtimeVehicles.map {
+            VehicleFeatureBuilder.realtime($0, settings: layerSettings)
         }
         source.shape = MLNShapeCollectionFeature(shapes: features)
     }
 
-    func updateTrajectoryVehicles(_ vehicles: [RealtimeTrajectoryVehicle]) {
+    private func rebuildTrajectorySource() {
         guard let source = mapView?.style?.source(
             withIdentifier: "trajectory-vehicles"
         ) as? MLNShapeSource else { return }
-
-        let features: [MLNShape & MLNFeature] = vehicles.map { vehicle in
-            let feature = MLNPointFeature()
-            feature.coordinate = vehicle.coordinate
-            feature.attributes = [
-                "selection_kind": "vehicle",
-                "route_type": vehicle.routeType,
-                "bearing": vehicle.bearing,
-                "chateau": vehicle.chateauID,
-                "gtfs_id": vehicle.chateauID,
-                "trip_id": vehicle.tripID ?? "",
-                "route_id": vehicle.routeID ?? "",
-                "display_name": vehicle.displayName ?? "",
-                "headsign": vehicle.headsign,
-                "trip_short_name": vehicle.tripShortName ?? "",
-                "route_short_name": vehicle.routeShortName ?? "",
-                "route_long_name": vehicle.routeLongName ?? "",
-                "color": vehicle.color ?? "777777",
-                "text_color": vehicle.textColor ?? "FFFFFF",
-                "start_date": vehicle.startDate ?? "",
-                "start_time": vehicle.startTime ?? ""
-            ]
-            return feature
+        let features: [MLNShape & MLNFeature] = trajectoryVehicles.map {
+            VehicleFeatureBuilder.trajectory($0, settings: layerSettings)
         }
         source.shape = MLNShapeCollectionFeature(shapes: features)
     }
@@ -1055,169 +1414,414 @@ struct mapLibreView: View {
         .minimumZoomLevel(14.2)
     }
 
-    /// Live vehicle position dots, driven by `RealtimeVehicles`'s polled feed.
-    /// Re-renders automatically when `realtimeVM.vehicles` publishes.
+    /// Live vehicle position dots, enriched with route metadata from Birch.
     @MapViewContentBuilder
     var realtimeLayer: some StyleLayerCollection {
         let source = ShapeSource(identifier: "realtime-vehicles") {
-            for v in realtimeVM.vehicles {
-                let feature = MLNPointFeature()
-                feature.coordinate = v.coordinate
-                feature.attributes = [
-                    "selection_kind": "vehicle",
-                    "chateau": v.chateauID,
-                    "route_type": Int(v.routeType),
-                    "bearing": v.bearing ?? 0,
-                    "vehicle_id": v.vehicleID ?? v.id,
-                    "vehicle_label": v.vehicleLabel ?? "",
-                    "gtfs_id": v.chateauID,
-                    "trip_id": v.tripID ?? "",
-                    "route_id": v.routeId ?? "",
-                    "headsign": v.headsign ?? "",
-                    "trip_short_name": v.tripShortName ?? "",
-                    "start_time": v.startTime ?? "",
-                    "start_date": v.startDate ?? ""
-                ]
-                feature
+            for vehicle in realtimeVM.vehicles {
+                VehicleFeatureBuilder.realtime(vehicle, settings: viewobject.allLayerSettings)
             }
         }
+        let dotStroke = colorScheme == .dark
+            ? UIColor(red: 46/255, green: 57/255, blue: 75/255, alpha: 1)
+            : UIColor.white
+        let labelHalo = colorScheme == .dark
+            ? UIColor(red: 30/255, green: 41/255, blue: 59/255, alpha: 1)
+            : UIColor(red: 237/255, green: 237/255, blue: 237/255, alpha: 1)
+        let labelColor = NSExpression(
+            format: "FUNCTION('#', 'stringByAppendingString:', \(colorScheme == .dark ? "contrastdarkmode" : "contrastlightmode"))"
+        )
+        let otherPredicate = NSPredicate(
+            format: "route_type != 0 AND route_type != 1 AND route_type != 2 AND route_type != 3 AND route_type != 5 AND route_type != 6 AND route_type != 11 AND route_type != 12"
+        )
 
-        // Intercity rail
         CircleStyleLayer(identifier: LayersPerCategory.IntercityRail.Livedots, source: source)
-            .color(.systemBlue)
+            .color(expression: lineColorExpression)
             .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
-                    stops: NSExpression(forConstantValue: [5: 3, 10: 5, 14: 8]))
-            .strokeColor(.white)
-            .strokeWidth(1.5)
+                    stops: NSExpression(forConstantValue: [1: 0.8, 3: 2.0, 6: 2.3, 8: 3.5, 11: 5.5, 16: 9.5]))
+            .strokeColor(dotStroke)
+            .strokeWidth(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                         stops: NSExpression(forConstantValue: [3: 0.6, 5: 0.7, 7: 0.8]))
+            .circleOpacity(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                           stops: NSExpression(forConstantValue: [4: 0.8, 7: 0.9, 11: 1.0]))
+            .circleStrokeOpacity(1)
             .predicate(NSPredicate(format: "route_type == 2"))
-            .minimumZoomLevel(5)
+            .minimumZoomLevel(1)
             .visible(viewobject.allLayerSettings.intercityrail.visiblerealtimedots)
 
-        // Metro
+        SymbolStyleLayer(identifier: LayersPerCategory.IntercityRail.Labeldots, source: source)
+            .text(expression: NSExpression(format: "label_text"))
+            .textFontNames(["Arimo-Medium"])
+            .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                          stops: NSExpression(forConstantValue: [6: 8, 9: 8, 11: 9.6, 13: 11.2, 16: 14.4]))
+            .textOffset(CGVector(dx: 0.8, dy: 0.1))
+            .textColor(expression: labelColor)
+            .textHaloColor(labelHalo)
+            .textHaloWidth(colorScheme == .dark ? 2.4 : 1)
+            .textHaloBlur(1)
+            .textAllowsOverlap(false)
+            .textAnchor("left")
+            .predicate(NSPredicate(format: "route_type == 2"))
+            .minimumZoomLevel(2.5)
+            .visible(viewobject.allLayerSettings.intercityrail.visiblerealtimedots)
+
         CircleStyleLayer(identifier: LayersPerCategory.Metro.Livedots, source: source)
-            .color(.systemPurple)
+            .color(expression: lineColorExpression)
             .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
-                    stops: NSExpression(forConstantValue: [8: 2.5, 13: 5, 18: 8]))
-            .strokeColor(.white)
-            .strokeWidth(1.5)
-            .predicate(NSPredicate(format: "route_type == 1 OR route_type == 12 OR route_type == 7"))
+                    stops: NSExpression(forConstantValue: [6: 2.5, 8: 2.3, 10: 3.0, 11: 4.5, 14: 6.5, 16: 10.5]))
+            .strokeColor(dotStroke)
+            .strokeWidth(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                         stops: NSExpression(forConstantValue: [8: 0.8, 10: 1.2]))
+            .circleOpacity(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                           stops: NSExpression(forConstantValue: [7: 0.8, 9: 1.0]))
+            .circleStrokeOpacity(1)
+            .predicate(NSPredicate(format: "route_type == 1 OR route_type == 12"))
+            .minimumZoomLevel(6)
+            .visible(viewobject.allLayerSettings.localrail.visiblerealtimedots)
+
+        SymbolStyleLayer(identifier: LayersPerCategory.Metro.Labeldots, source: source)
+            .text(expression: NSExpression(format: "label_text"))
+            .textFontNames(["Arimo-Medium"])
+            .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                          stops: NSExpression(forConstantValue: [6: 5, 9: 6.4, 10: 7.2, 11: 8, 13: 9.6, 15: 12.8]))
+            .textOffset(CGVector(dx: 0.8, dy: 0.1))
+            .textColor(expression: labelColor)
+            .textHaloColor(labelHalo)
+            .textHaloWidth(colorScheme == .dark ? 2.4 : 1)
+            .textHaloBlur(1)
+            .textAllowsOverlap(false)
+            .textAnchor("left")
+            .predicate(NSPredicate(format: "route_type == 1 OR route_type == 12"))
             .minimumZoomLevel(8)
             .visible(viewobject.allLayerSettings.localrail.visiblerealtimedots)
 
-        // Tram / light rail
         CircleStyleLayer(identifier: LayersPerCategory.Tram.Livedots, source: source)
-            .color(.systemGreen)
+            .color(expression: lineColorExpression)
             .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
-                    stops: NSExpression(forConstantValue: [9: 2, 13: 4, 18: 7]))
-            .strokeColor(.white)
-            .strokeWidth(1.5)
+                    stops: NSExpression(forConstantValue: [6: 1.5, 8: 2.0, 10: 3.5, 11: 4.0, 13: 5.5, 15: 4.5, 16: 9.5]))
+            .strokeColor(dotStroke)
+            .strokeWidth(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                         stops: NSExpression(forConstantValue: [8: 0.5, 9: 0.6, 10: 1.0]))
+            .circleOpacity(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                           stops: NSExpression(forConstantValue: [7: 0.8, 9: 1.0]))
+            .circleStrokeOpacity(1)
             .predicate(NSPredicate(format: "route_type == 0 OR route_type == 5"))
-            .minimumZoomLevel(9)
+            .minimumZoomLevel(6.5)
             .visible(viewobject.allLayerSettings.localrail.visiblerealtimedots)
 
-        // Bus
+        SymbolStyleLayer(identifier: LayersPerCategory.Tram.Labeldots, source: source)
+            .text(expression: NSExpression(format: "label_text"))
+            .textFontNames(["Arimo-Medium"])
+            .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                          stops: NSExpression(forConstantValue: [6: 4, 9: 6, 10: 7, 11: 6.4, 13: 8, 15: 11.2]))
+            .textOffset(CGVector(dx: 0.8, dy: 0.1))
+            .textColor(expression: labelColor)
+            .textHaloColor(labelHalo)
+            .textHaloWidth(colorScheme == .dark ? 2.4 : 1)
+            .textHaloBlur(1)
+            .textAllowsOverlap(false)
+            .textAnchor("left")
+            .predicate(NSPredicate(format: "route_type == 0 OR route_type == 5"))
+            .minimumZoomLevel(8)
+            .visible(viewobject.allLayerSettings.localrail.visiblerealtimedots)
+
         CircleStyleLayer(identifier: LayersPerCategory.Bus.Livedots, source: source)
-            .color(.catenaryBlue)
+            .color(expression: lineColorExpression)
             .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
-                    stops: NSExpression(forConstantValue: [10: 2.5, 14: 5, 18: 9]))
-            .strokeColor(.white)
-            .strokeWidth(1.5)
+                    stops: NSExpression(forConstantValue: [7: 1.2, 8: 1.6, 9: 1.7, 10: 2.0, 16: 6.0]))
+            .strokeColor(dotStroke)
+            .strokeWidth(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                         stops: NSExpression(forConstantValue: [9: railInFrame ? 0.4 : 0.8, 14: 1.0]))
+            .circleOpacity(railInFrame ? 0.5 : 0.8)
+            .circleStrokeOpacity(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                                 stops: NSExpression(forConstantValue: [7.9: 0.0, 8: 0.3, 9: 0.5, 13: 0.9]))
             .predicate(NSPredicate(format: "route_type == 3 OR route_type == 11"))
-            .minimumZoomLevel(11)
+            .minimumZoomLevel(9)
             .visible(viewobject.allLayerSettings.bus.visiblerealtimedots)
 
-        // Other (ferry, cable car, funicular)
+        SymbolStyleLayer(identifier: LayersPerCategory.Bus.Labeldots, source: source)
+            .text(expression: NSExpression(format: "label_text"))
+            .textFontNames(["Arimo-SemiBold"])
+            .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                          stops: NSExpression(forConstantValue: viewobject.allLayerSettings.bus.labelrealtimedots.headsign
+                              ? [9: 4, 11: 5, 12: 7, 13: 9, 15: 11]
+                              : [9: 5, 11: 7, 13: 10, 15: 13]))
+            .textOffset(CGVector(dx: 0.8, dy: 0.1))
+            .textColor(expression: labelColor)
+            .textHaloColor(labelHalo)
+            .textHaloWidth(colorScheme == .dark ? 2 : 1)
+            .textHaloBlur(1)
+            .textAllowsOverlap(false)
+            .textAnchor("left")
+            .predicate(NSPredicate(format: "route_type == 3 OR route_type == 11"))
+            .minimumZoomLevel(13)
+            .visible(viewobject.allLayerSettings.bus.visiblerealtimedots)
+
         CircleStyleLayer(identifier: LayersPerCategory.Other.Livedots, source: source)
-            .color(.systemOrange)
+            .color(expression: lineColorExpression)
             .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
-                    stops: NSExpression(forConstantValue: [6: 2.5, 12: 4.5, 18: 7]))
-            .strokeColor(.white)
-            .strokeWidth(1.5)
-            .predicate(NSPredicate(format: "route_type == 4 OR route_type == 6"))
-            .minimumZoomLevel(6)
+                    stops: NSExpression(forConstantValue: [8: 5.0, 10: 6.0, 16: 8.0]))
+            .strokeColor(dotStroke)
+            .strokeWidth(1)
+            .circleOpacity(0.5)
+            .circleStrokeOpacity(1)
+            .predicate(otherPredicate)
+            .minimumZoomLevel(3)
+            .visible(viewobject.allLayerSettings.other.visiblerealtimedots)
+
+        SymbolStyleLayer(identifier: LayersPerCategory.Other.Labeldots, source: source)
+            .text(expression: NSExpression(format: "label_text"))
+            .textFontNames(["Arimo-Medium"])
+            .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                          stops: NSExpression(forConstantValue: [9: 8.5, 11: 13, 13: 16]))
+            .textOffset(CGVector(dx: 0.8, dy: 0.1))
+            .textColor(expression: labelColor)
+            .textHaloColor(labelHalo)
+            .textHaloWidth(colorScheme == .dark ? 2.4 : 1)
+            .textHaloBlur(1)
+            .textAllowsOverlap(false)
+            .textAnchor("left")
+            .predicate(otherPredicate)
+            .minimumZoomLevel(3)
+            .visible(viewobject.allLayerSettings.other.visiblerealtimedots)
+
+        CircleStyleLayer(identifier: LayersPerCategory.Other.Livedots + "_aerial", source: source)
+            .color(expression: lineColorExpression)
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [6: 1.5, 8: 2.0, 10: 3.5, 11: 4.0, 13: 5.5, 15: 4.5, 16: 9.5]))
+            .strokeColor(dotStroke)
+            .strokeWidth(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                         stops: NSExpression(forConstantValue: [8: 0.5, 9: 0.6, 10: 1.0]))
+            .circleOpacity(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                           stops: NSExpression(forConstantValue: [7: 0.8, 9: 1.0]))
+            .circleStrokeOpacity(1)
+            .predicate(NSPredicate(format: "route_type == 6"))
+            .minimumZoomLevel(6.5)
+            .visible(viewobject.allLayerSettings.other.visiblerealtimedots)
+
+        SymbolStyleLayer(identifier: LayersPerCategory.Other.Labeldots + "_aerial", source: source)
+            .text(expression: NSExpression(format: "label_text"))
+            .textFontNames(["Arimo-Medium"])
+            .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                          stops: NSExpression(forConstantValue: [6: 4, 9: 6, 10: 7, 11: 6.4, 13: 8, 15: 11.2]))
+            .textOffset(CGVector(dx: 0.8, dy: 0.1))
+            .textColor(expression: labelColor)
+            .textHaloColor(labelHalo)
+            .textHaloWidth(colorScheme == .dark ? 2.4 : 1)
+            .textHaloBlur(1)
+            .textAllowsOverlap(false)
+            .textAnchor("left")
+            .predicate(NSPredicate(format: "route_type == 6"))
+            .minimumZoomLevel(8)
             .visible(viewobject.allLayerSettings.other.visiblerealtimedots)
     }
 
-    /// Synthetic positions interpolated from Spruce trajectory buffers. These
-    /// use a separate source so authoritative GTFS-RT positions and trajectories
-    /// can be cleared and updated independently.
+    /// Synthetic positions interpolated from Spruce trajectory buffers.
     @MapViewContentBuilder
     var trajectoryLayer: some StyleLayerCollection {
         let source = ShapeSource(identifier: "trajectory-vehicles") {
             for vehicle in trajectoryVM.vehicles {
-                let feature = MLNPointFeature()
-                feature.coordinate = vehicle.coordinate
-                feature.attributes = [
-                    "selection_kind": "vehicle",
-                    "route_type": vehicle.routeType,
-                    "bearing": vehicle.bearing,
-                    "chateau": vehicle.chateauID,
-                    "gtfs_id": vehicle.chateauID,
-                    "trip_id": vehicle.tripID ?? "",
-                    "route_id": vehicle.routeID ?? "",
-                    "display_name": vehicle.displayName ?? "",
-                    "headsign": vehicle.headsign,
-                    "trip_short_name": vehicle.tripShortName ?? "",
-                    "route_short_name": vehicle.routeShortName ?? "",
-                    "route_long_name": vehicle.routeLongName ?? "",
-                    "color": vehicle.color ?? "777777",
-                    "text_color": vehicle.textColor ?? "FFFFFF",
-                    "start_date": vehicle.startDate ?? "",
-                    "start_time": vehicle.startTime ?? ""
-                ]
-                feature
+                VehicleFeatureBuilder.trajectory(vehicle, settings: viewobject.allLayerSettings)
             }
         }
+        let dotStroke = colorScheme == .dark
+            ? UIColor(red: 46/255, green: 57/255, blue: 75/255, alpha: 1)
+            : UIColor.white
+        let labelHalo = colorScheme == .dark
+            ? UIColor(red: 30/255, green: 41/255, blue: 59/255, alpha: 1)
+            : UIColor(red: 237/255, green: 237/255, blue: 237/255, alpha: 1)
+        let labelColor = NSExpression(
+            format: "FUNCTION('#', 'stringByAppendingString:', \(colorScheme == .dark ? "contrastdarkmode" : "contrastlightmode"))"
+        )
+        let otherPredicate = NSPredicate(
+            format: "route_type != 0 AND route_type != 1 AND route_type != 2 AND route_type != 3 AND route_type != 5 AND route_type != 6 AND route_type != 11 AND route_type != 12"
+        )
 
         CircleStyleLayer(identifier: LayersPerCategory.TrajectoryIntercityRail.Livedots, source: source)
-            .color(.systemBlue)
+            .color(expression: lineColorExpression)
             .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
-                    stops: NSExpression(forConstantValue: [3: 2.5, 10: 5, 14: 8]))
-            .strokeColor(.white)
-            .strokeWidth(1.5)
+                    stops: NSExpression(forConstantValue: [1: 0.8, 3: 2.0, 6: 2.3, 8: 3.5, 11: 5.5, 16: 9.5]))
+            .strokeColor(dotStroke)
+            .strokeWidth(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                         stops: NSExpression(forConstantValue: [3: 0.6, 5: 0.7, 7: 0.8]))
+            .circleOpacity(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                           stops: NSExpression(forConstantValue: [4: 0.8, 7: 0.9, 11: 1.0]))
+            .circleStrokeOpacity(1)
             .predicate(NSPredicate(format: "route_type == 2"))
-            .minimumZoomLevel(3)
+            .minimumZoomLevel(1)
             .visible(viewobject.allLayerSettings.intercityrail.visiblerealtimedots)
 
+        SymbolStyleLayer(identifier: LayersPerCategory.TrajectoryIntercityRail.Labeldots, source: source)
+            .text(expression: NSExpression(format: "label_text"))
+            .textFontNames(["Arimo-Medium"])
+            .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                          stops: NSExpression(forConstantValue: [6: 8, 9: 8, 11: 9.6, 13: 11.2, 16: 14.4]))
+            .textOffset(CGVector(dx: 0.8, dy: 0.1))
+            .textColor(expression: labelColor)
+            .textHaloColor(labelHalo)
+            .textHaloWidth(colorScheme == .dark ? 2.4 : 1)
+            .textHaloBlur(1)
+            .textAllowsOverlap(false)
+            .textAnchor("left")
+            .predicate(NSPredicate(format: "route_type == 2"))
+            .minimumZoomLevel(3)
+            .visible(viewobject.allLayerSettings.intercityrail.visiblerealtimedots
+                     && viewobject.allLayerSettings.intercityrail.labeltrajectories)
+
         CircleStyleLayer(identifier: LayersPerCategory.TrajectoryMetro.Livedots, source: source)
-            .color(.systemPurple)
+            .color(expression: lineColorExpression)
             .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
-                    stops: NSExpression(forConstantValue: [4: 2.5, 13: 5, 18: 8]))
-            .strokeColor(.white)
-            .strokeWidth(1.5)
-            .predicate(NSPredicate(format: "route_type == 1 OR route_type == 12 OR route_type == 7"))
-            .minimumZoomLevel(4)
+                    stops: NSExpression(forConstantValue: [6: 2.5, 8: 2.3, 10: 3.0, 11: 4.5, 14: 6.5, 16: 10.5]))
+            .strokeColor(dotStroke)
+            .strokeWidth(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                         stops: NSExpression(forConstantValue: [8: 0.8, 10: 1.2]))
+            .circleOpacity(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                           stops: NSExpression(forConstantValue: [7: 0.8, 9: 1.0]))
+            .circleStrokeOpacity(1)
+            .predicate(NSPredicate(format: "route_type == 1 OR route_type == 12"))
+            .minimumZoomLevel(6)
             .visible(viewobject.allLayerSettings.localrail.visiblerealtimedots)
+
+        SymbolStyleLayer(identifier: LayersPerCategory.TrajectoryMetro.Labeldots, source: source)
+            .text(expression: NSExpression(format: "label_text"))
+            .textFontNames(["Arimo-Medium"])
+            .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                          stops: NSExpression(forConstantValue: [6: 5, 9: 6.4, 10: 7.2, 11: 8, 13: 9.6, 15: 12.8]))
+            .textOffset(CGVector(dx: 0.8, dy: 0.1))
+            .textColor(expression: labelColor)
+            .textHaloColor(labelHalo)
+            .textHaloWidth(colorScheme == .dark ? 2.4 : 1)
+            .textHaloBlur(1)
+            .textAllowsOverlap(false)
+            .textAnchor("left")
+            .predicate(NSPredicate(format: "route_type == 1 OR route_type == 12"))
+            .minimumZoomLevel(6)
+            .visible(viewobject.allLayerSettings.localrail.visiblerealtimedots
+                     && viewobject.allLayerSettings.localrail.labeltrajectories)
 
         CircleStyleLayer(identifier: LayersPerCategory.TrajectoryTram.Livedots, source: source)
-            .color(.systemGreen)
+            .color(expression: lineColorExpression)
             .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
-                    stops: NSExpression(forConstantValue: [4: 2, 13: 4, 18: 7]))
-            .strokeColor(.white)
-            .strokeWidth(1.5)
+                    stops: NSExpression(forConstantValue: [6: 1.5, 8: 2.0, 10: 3.5, 11: 4.0, 13: 5.5, 15: 4.5, 16: 9.5]))
+            .strokeColor(dotStroke)
+            .strokeWidth(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                         stops: NSExpression(forConstantValue: [8: 0.5, 9: 0.6, 10: 1.0]))
+            .circleOpacity(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                           stops: NSExpression(forConstantValue: [7: 0.8, 9: 1.0]))
+            .circleStrokeOpacity(1)
             .predicate(NSPredicate(format: "route_type == 0 OR route_type == 5"))
-            .minimumZoomLevel(4)
+            .minimumZoomLevel(6.5)
             .visible(viewobject.allLayerSettings.localrail.visiblerealtimedots)
 
+        SymbolStyleLayer(identifier: LayersPerCategory.TrajectoryTram.Labeldots, source: source)
+            .text(expression: NSExpression(format: "label_text"))
+            .textFontNames(["Arimo-Medium"])
+            .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                          stops: NSExpression(forConstantValue: [6: 4, 9: 6, 10: 7, 11: 6.4, 13: 8, 15: 11.2]))
+            .textOffset(CGVector(dx: 0.8, dy: 0.1))
+            .textColor(expression: labelColor)
+            .textHaloColor(labelHalo)
+            .textHaloWidth(colorScheme == .dark ? 2.4 : 1)
+            .textHaloBlur(1)
+            .textAllowsOverlap(false)
+            .textAnchor("left")
+            .predicate(NSPredicate(format: "route_type == 0 OR route_type == 5"))
+            .minimumZoomLevel(6.5)
+            .visible(viewobject.allLayerSettings.localrail.visiblerealtimedots
+                     && viewobject.allLayerSettings.localrail.labeltrajectories)
+
         CircleStyleLayer(identifier: LayersPerCategory.TrajectoryBus.Livedots, source: source)
-            .color(.catenaryBlue)
+            .color(expression: lineColorExpression)
             .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
-                    stops: NSExpression(forConstantValue: [9: 2.5, 14: 5, 18: 9]))
-            .strokeColor(.white)
-            .strokeWidth(1.5)
+                    stops: NSExpression(forConstantValue: [7: 1.2, 8: 1.6, 9: 1.7, 10: 2.0, 16: 6.0]))
+            .strokeColor(dotStroke)
+            .strokeWidth(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                         stops: NSExpression(forConstantValue: [9: railInFrame ? 0.4 : 0.8, 14: 1.0]))
+            .circleOpacity(railInFrame ? 0.5 : 0.8)
+            .circleStrokeOpacity(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                                 stops: NSExpression(forConstantValue: [7.9: 0.0, 8: 0.3, 9: 0.5, 13: 0.9]))
             .predicate(NSPredicate(format: "route_type == 3 OR route_type == 11"))
             .minimumZoomLevel(9)
             .visible(viewobject.allLayerSettings.bus.visiblerealtimedots)
 
+        SymbolStyleLayer(identifier: LayersPerCategory.TrajectoryBus.Labeldots, source: source)
+            .text(expression: NSExpression(format: "label_text"))
+            .textFontNames(["Arimo-SemiBold"])
+            .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                          stops: NSExpression(forConstantValue: viewobject.allLayerSettings.bus.labelrealtimedots.headsign
+                              ? [9: 4, 11: 5, 12: 7, 13: 9, 15: 11]
+                              : [9: 5, 11: 7, 13: 10, 15: 13]))
+            .textOffset(CGVector(dx: 0.8, dy: 0.1))
+            .textColor(expression: labelColor)
+            .textHaloColor(labelHalo)
+            .textHaloWidth(colorScheme == .dark ? 2 : 1)
+            .textHaloBlur(1)
+            .textAllowsOverlap(false)
+            .textAnchor("left")
+            .predicate(NSPredicate(format: "route_type == 3 OR route_type == 11"))
+            .minimumZoomLevel(9)
+            .visible(viewobject.allLayerSettings.bus.visiblerealtimedots
+                     && viewobject.allLayerSettings.bus.labeltrajectories)
+
         CircleStyleLayer(identifier: LayersPerCategory.TrajectoryOther.Livedots, source: source)
-            .color(.systemOrange)
+            .color(expression: lineColorExpression)
             .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
-                    stops: NSExpression(forConstantValue: [3: 2.5, 12: 4.5, 18: 7]))
-            .strokeColor(.white)
-            .strokeWidth(1.5)
-            .predicate(NSPredicate(format: "route_type == 4 OR route_type == 6"))
+                    stops: NSExpression(forConstantValue: [8: 5.0, 10: 6.0, 16: 8.0]))
+            .strokeColor(dotStroke)
+            .strokeWidth(1)
+            .circleOpacity(0.5)
+            .circleStrokeOpacity(1)
+            .predicate(otherPredicate)
             .minimumZoomLevel(3)
             .visible(viewobject.allLayerSettings.other.visiblerealtimedots)
+
+        SymbolStyleLayer(identifier: LayersPerCategory.TrajectoryOther.Labeldots, source: source)
+            .text(expression: NSExpression(format: "label_text"))
+            .textFontNames(["Arimo-Medium"])
+            .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                          stops: NSExpression(forConstantValue: [9: 8.5, 11: 13, 13: 16]))
+            .textOffset(CGVector(dx: 0.8, dy: 0.1))
+            .textColor(expression: labelColor)
+            .textHaloColor(labelHalo)
+            .textHaloWidth(colorScheme == .dark ? 2.4 : 1)
+            .textHaloBlur(1)
+            .textAllowsOverlap(false)
+            .textAnchor("left")
+            .predicate(otherPredicate)
+            .minimumZoomLevel(3)
+            .visible(viewobject.allLayerSettings.other.visiblerealtimedots
+                     && viewobject.allLayerSettings.other.labeltrajectories)
+
+        CircleStyleLayer(identifier: LayersPerCategory.TrajectoryOther.Livedots + "_aerial", source: source)
+            .color(expression: lineColorExpression)
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [6: 1.5, 8: 2.0, 10: 3.5, 11: 4.0, 13: 5.5, 15: 4.5, 16: 9.5]))
+            .strokeColor(dotStroke)
+            .strokeWidth(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                         stops: NSExpression(forConstantValue: [8: 0.5, 9: 0.6, 10: 1.0]))
+            .circleOpacity(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                           stops: NSExpression(forConstantValue: [7: 0.8, 9: 1.0]))
+            .circleStrokeOpacity(1)
+            .predicate(NSPredicate(format: "route_type == 6"))
+            .minimumZoomLevel(6.5)
+            .visible(viewobject.allLayerSettings.other.visiblerealtimedots)
+
+        SymbolStyleLayer(identifier: LayersPerCategory.TrajectoryOther.Labeldots + "_aerial", source: source)
+            .text(expression: NSExpression(format: "label_text"))
+            .textFontNames(["Arimo-Medium"])
+            .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                          stops: NSExpression(forConstantValue: [6: 4, 9: 6, 10: 7, 11: 6.4, 13: 8, 15: 11.2]))
+            .textOffset(CGVector(dx: 0.8, dy: 0.1))
+            .textColor(expression: labelColor)
+            .textHaloColor(labelHalo)
+            .textHaloWidth(colorScheme == .dark ? 2.4 : 1)
+            .textHaloBlur(1)
+            .textAllowsOverlap(false)
+            .textAnchor("left")
+            .predicate(NSPredicate(format: "route_type == 6"))
+            .minimumZoomLevel(6.5)
+            .visible(viewobject.allLayerSettings.other.visiblerealtimedots
+                     && viewobject.allLayerSettings.other.labeltrajectories)
     }
 
     @MapViewContentBuilder
@@ -1265,6 +1869,7 @@ struct mapLibreView: View {
             map.mapView.compassView.isHidden = true
             map.mapView.showsUserLocation = true
             featureTapCoordinator.install(on: map.mapView, navigator: viewobject)
+            featureTapCoordinator.updateLayerSettings(viewobject.allLayerSettings)
 
             let sourceCoordinator = featureTapCoordinator
             realtimeVM.onVehiclesChanged = { [weak sourceCoordinator] vehicles in
@@ -1296,6 +1901,7 @@ struct mapLibreView: View {
             await trajectoryVM.run()
         }
         .onChange(of: viewobject.allLayerSettings) { _, settings in
+            featureTapCoordinator.updateLayerSettings(settings)
             realtimeVM.updateLayerSettings(settings)
             trajectoryVM.updateLayerSettings(settings)
         }

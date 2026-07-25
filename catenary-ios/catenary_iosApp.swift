@@ -134,7 +134,7 @@ struct OverlayRoot: View {
                 
                 NavigationStack {
                     LayerSelectorSheet(tabPage: $currentPage)
-                        .presentationDetents([.height(230)])
+                        .presentationDetents([.height(430), .medium])
                         .presentationBackgroundInteraction(PresentationBackgroundInteraction.disabled)
                         
                         .interactiveDismissDisabled(false)
@@ -234,10 +234,15 @@ extension View {
 struct layerTabView: View {
     @Environment(\.colorScheme) var colorScheme: ColorScheme
     @Binding var layerSettings: LayerCategorySettings
-    var accentColor: Color = .catenaryBlue       // ← new
+    @State private var showVehicleLabels = false
+    var accentColor: Color = .catenaryBlue
+
+    private let labelColumns = [
+        GridItem(.adaptive(minimum: 135), spacing: 12, alignment: .leading)
+    ]
 
     var body: some View {
-        VStack {
+        VStack(spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 layerSettingButton(specificLayerSetting: $layerSettings.shapes,
                                    imageName: "routesicon", label: "Routes",
@@ -255,9 +260,24 @@ struct layerTabView: View {
                 layerSettingButton(specificLayerSetting: $layerSettings.visiblerealtimedots,
                                    imageName: "vehiclesicon", label: "Vehicles",
                                    accentColor: accentColor)
-                    .contextMenu { /* unchanged */ }
-                    .menuActionDismissBehavior(.disabled)
             }
+            .padding(.horizontal)
+
+            DisclosureGroup("Vehicle labels", isExpanded: $showVehicleLabels) {
+                LazyVGrid(columns: labelColumns, alignment: .leading, spacing: 8) {
+                    Toggle("Route", isOn: $layerSettings.labelrealtimedots.route)
+                    Toggle("Trip", isOn: $layerSettings.labelrealtimedots.trip)
+                    Toggle("Vehicle", isOn: $layerSettings.labelrealtimedots.vehicle)
+                    Toggle("Headsign", isOn: $layerSettings.labelrealtimedots.headsign)
+                    Toggle("Speed", isOn: $layerSettings.labelrealtimedots.speed)
+                    Toggle("Occupancy", isOn: $layerSettings.labelrealtimedots.occupancy)
+                    Toggle("Delay", isOn: $layerSettings.labelrealtimedots.delay)
+                }
+                .padding(.vertical, 8)
+
+                Toggle("Label interpolated trajectories", isOn: $layerSettings.labeltrajectories)
+            }
+            .font(.subheadline)
             .padding(.horizontal)
         }
     }

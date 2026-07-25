@@ -106,6 +106,38 @@ struct RealtimeVehicle: Identifiable, Hashable {
     let startTime: String?
     let startDate: String?
     let delay: Int32?
+    let speedMetresPerSecond: Double?
+    let occupancyStatus: Int32?
+    let color: String
+    let textColor: String
+    let routeShortName: String?
+    let routeLongName: String?
+
+    func applying(route: RouteCacheEntry?) -> RealtimeVehicle {
+        guard let route else { return self }
+        return RealtimeVehicle(
+            id: id,
+            chateauID: chateauID,
+            coordinate: coordinate,
+            routeType: routeType,
+            bearing: bearing,
+            vehicleID: vehicleID,
+            vehicleLabel: vehicleLabel,
+            tripID: tripID,
+            routeId: routeId,
+            headsign: headsign,
+            tripShortName: tripShortName,
+            startTime: startTime,
+            startDate: startDate,
+            delay: delay,
+            speedMetresPerSecond: speedMetresPerSecond,
+            occupancyStatus: occupancyStatus,
+            color: route.color,
+            textColor: route.text_color,
+            routeShortName: route.short_name,
+            routeLongName: route.long_name
+        )
+    }
 
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
     static func == (l: RealtimeVehicle, r: RealtimeVehicle) -> Bool {
@@ -113,6 +145,22 @@ struct RealtimeVehicle: Identifiable, Hashable {
             && l.coordinate.latitude == r.coordinate.latitude
             && l.coordinate.longitude == r.coordinate.longitude
             && l.routeType == r.routeType
+            && l.bearing == r.bearing
+            && l.vehicleID == r.vehicleID
+            && l.vehicleLabel == r.vehicleLabel
+            && l.tripID == r.tripID
+            && l.routeId == r.routeId
+            && l.headsign == r.headsign
+            && l.tripShortName == r.tripShortName
+            && l.startTime == r.startTime
+            && l.startDate == r.startDate
+            && l.delay == r.delay
+            && l.speedMetresPerSecond == r.speedMetresPerSecond
+            && l.occupancyStatus == r.occupancyStatus
+            && l.color == r.color
+            && l.textColor == r.textColor
+            && l.routeShortName == r.routeShortName
+            && l.routeLongName == r.routeLongName
     }
 }
 
@@ -127,6 +175,16 @@ final class RealtimeVehicles: ObservableObject {
     private var currentZoom: Double = 5
     private var layerSettings = AllLayerSettings()
     private var activeSubscription: MapSubscription?
+
+    private var routesByChateau: [String: [String: RouteCacheEntry]] = [:]
+    private var knownRouteAgencies: [String: Set<String>] = [:]
+    private var routeFetchesInFlight: Set<String> = []
+    private var fetchedAllRoutesForChateau: Set<String> = []
+
+    private struct AgencyFilterRequest: Encodable {
+        let agency_filter: [String]?
+        let chateau: String
+    }
 
     /// Accumulator: chateau → category → vehicleID → vehicle.
     /// The Spruce server sends one `map_update` per (chateau, category) pair,
@@ -217,10 +275,15 @@ final class RealtimeVehicles: ObservableObject {
         }
         guard let xs = payload.vehicle_positions else { return 0 }
         var added = 0
+        var hasMissingRoutes = false
         for ys in xs.values {
             for vehicleMap in ys.values {
                 for (id, v) in vehicleMap {
                     guard let pos = v.position else { continue }
+                    if let routeID = v.trip?.route_id,
+                       routesByChateau[chateauID]?[routeID] == nil {
+                        hasMissingRoutes = true
+                    }
                     byChateau[chateauID, default: [:]][category, default: [:]][id] = RealtimeVehicle(
                         id: "\(chateauID)|\(id)",
                         chateauID: chateauID,
@@ -237,13 +300,91 @@ final class RealtimeVehicles: ObservableObject {
                         tripShortName: v.trip?.trip_short_name,
                         startTime: v.trip?.start_time,
                         startDate: v.trip?.start_date,
-                        delay: v.trip?.delay
+                        delay: v.trip?.delay,
+                        speedMetresPerSecond: pos.speed.map(Double.init),
+                        occupancyStatus: v.occupancy_status,
+                        color: "AAAAAA",
+                        textColor: "000000",
+                        routeShortName: nil,
+                        routeLongName: nil
                     )
                     added += 1
                 }
             }
         }
+        if hasMissingRoutes {
+            requestRoutes(for: chateauID, agencyIDs: payload.list_of_agency_ids ?? [])
+        }
         return added
+    }
+
+    private func requestRoutes(for chateauID: String, agencyIDs: [String]) {
+        let suppliedAgencies = Set(agencyIDs)
+        let newAgencies = suppliedAgencies.subtracting(knownRouteAgencies[chateauID] ?? [])
+        let fetchAll = suppliedAgencies.isEmpty
+
+        if fetchAll {
+            guard !fetchedAllRoutesForChateau.contains(chateauID) else { return }
+        } else {
+            guard !newAgencies.isEmpty else { return }
+        }
+
+        let requestAgencies = fetchAll ? [] : newAgencies.sorted()
+        let requestKey = "\(chateauID)|\(requestAgencies.joined(separator: ","))"
+        guard routeFetchesInFlight.insert(requestKey).inserted else { return }
+
+        Task { [weak self] in
+            await self?.fetchRoutes(
+                for: chateauID,
+                agencyIDs: requestAgencies,
+                fetchAll: fetchAll,
+                requestKey: requestKey
+            )
+        }
+    }
+
+    private func fetchRoutes(
+        for chateauID: String,
+        agencyIDs: [String],
+        fetchAll: Bool,
+        requestKey: String
+    ) async {
+        defer { routeFetchesInFlight.remove(requestKey) }
+        guard let url = URL(string: "https://birch.catenarymaps.org/getroutesofchateauwithagencyv2") else {
+            return
+        }
+
+        do {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONEncoder().encode(AgencyFilterRequest(
+                agency_filter: fetchAll ? nil : agencyIDs,
+                chateau: chateauID
+            ))
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode) else {
+                return
+            }
+
+            let routes = try JSONDecoder().decode([RouteCacheEntry].self, from: data)
+            var chateauRoutes = routesByChateau[chateauID] ?? [:]
+            for route in routes {
+                chateauRoutes[route.route_id] = route
+            }
+            routesByChateau[chateauID] = chateauRoutes
+
+            if fetchAll {
+                fetchedAllRoutesForChateau.insert(chateauID)
+            } else {
+                knownRouteAgencies[chateauID, default: []].formUnion(agencyIDs)
+            }
+            rebuildVehicles()
+        } catch {
+            print("RealtimeVehicles: route metadata fetch failed for \(chateauID): \(error)")
+        }
     }
 
     /// Mark the accumulator dirty and schedule a single throttled publish.
@@ -266,7 +407,12 @@ final class RealtimeVehicles: ObservableObject {
         var out: [RealtimeVehicle] = []
         for chateauMap in byChateau.values {
             for catMap in chateauMap.values {
-                out.append(contentsOf: catMap.values)
+                for vehicle in catMap.values {
+                    let route = vehicle.routeId.flatMap {
+                        routesByChateau[vehicle.chateauID]?[$0]
+                    }
+                    out.append(vehicle.applying(route: route))
+                }
             }
         }
         out.sort { $0.id < $1.id }
