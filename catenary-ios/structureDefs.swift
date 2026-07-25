@@ -485,7 +485,7 @@ enum shapeTileSources {
     }
 }
 
-struct AllLayerSettings {
+struct AllLayerSettings: Equatable {
     var bus: LayerCategorySettings = LayerCategorySettings()
     var localrail: LayerCategorySettings = LayerCategorySettings()
     var intercityrail: LayerCategorySettings = LayerCategorySettings(labelrealtimedots: LabelSettings(trip: true))
@@ -514,7 +514,7 @@ struct AllLayerSettings {
     
 }
 
-struct LayerCategorySettings {
+struct LayerCategorySettings: Equatable {
     var visiblerealtimedots: Bool = true
     var labelshapes: Bool = true
     var stops: Bool = true
@@ -523,7 +523,7 @@ struct LayerCategorySettings {
     var labelrealtimedots: LabelSettings = LabelSettings()
 }
 
-struct LabelSettings {
+struct LabelSettings: Equatable {
     var route: Bool = true
     var trip: Bool = false
     var vehicle: Bool = false
@@ -534,7 +534,7 @@ struct LabelSettings {
     var delay: Bool = true
 }
 
-struct MoreSettings {
+struct MoreSettings: Equatable {
     var foamermode: FoamermodeSettings = FoamermodeSettings()
     var showstationentrances: Bool = true
     var showstationart: Bool = false
@@ -542,7 +542,7 @@ struct MoreSettings {
     var showcoords: Bool = false
 }
 
-struct FoamermodeSettings {
+struct FoamermodeSettings: Equatable {
     var infra: Bool = false
     var maxspeed: Bool = false
     var signalling: Bool = false

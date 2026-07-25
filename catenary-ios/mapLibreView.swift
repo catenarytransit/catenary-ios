@@ -178,6 +178,82 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         return nil
     }
 
+    func updateRealtimeVehicles(_ vehicles: [RealtimeVehicle]) {
+        guard let source = mapView?.style?.source(
+            withIdentifier: "realtime-vehicles"
+        ) as? MLNShapeSource else { return }
+
+        let features: [MLNShape & MLNFeature] = vehicles.map { vehicle in
+            let feature = MLNPointFeature()
+            feature.coordinate = vehicle.coordinate
+            feature.attributes = [
+                "selection_kind": "vehicle",
+                "chateau": vehicle.chateauID,
+                "route_type": Int(vehicle.routeType),
+                "bearing": vehicle.bearing ?? 0,
+                "vehicle_id": vehicle.vehicleID ?? vehicle.id,
+                "vehicle_label": vehicle.vehicleLabel ?? "",
+                "gtfs_id": vehicle.chateauID,
+                "trip_id": vehicle.tripID ?? "",
+                "route_id": vehicle.routeId ?? "",
+                "headsign": vehicle.headsign ?? "",
+                "trip_short_name": vehicle.tripShortName ?? "",
+                "start_time": vehicle.startTime ?? "",
+                "start_date": vehicle.startDate ?? ""
+            ]
+            return feature
+        }
+        source.shape = MLNShapeCollectionFeature(shapes: features)
+    }
+
+    func updateTrajectoryVehicles(_ vehicles: [RealtimeTrajectoryVehicle]) {
+        guard let source = mapView?.style?.source(
+            withIdentifier: "trajectory-vehicles"
+        ) as? MLNShapeSource else { return }
+
+        let features: [MLNShape & MLNFeature] = vehicles.map { vehicle in
+            let feature = MLNPointFeature()
+            feature.coordinate = vehicle.coordinate
+            feature.attributes = [
+                "selection_kind": "vehicle",
+                "route_type": vehicle.routeType,
+                "bearing": vehicle.bearing,
+                "chateau": vehicle.chateauID,
+                "gtfs_id": vehicle.chateauID,
+                "trip_id": vehicle.tripID ?? "",
+                "route_id": vehicle.routeID ?? "",
+                "display_name": vehicle.displayName ?? "",
+                "headsign": vehicle.headsign,
+                "trip_short_name": vehicle.tripShortName ?? "",
+                "route_short_name": vehicle.routeShortName ?? "",
+                "route_long_name": vehicle.routeLongName ?? "",
+                "color": vehicle.color ?? "777777",
+                "text_color": vehicle.textColor ?? "FFFFFF",
+                "start_date": vehicle.startDate ?? "",
+                "start_time": vehicle.startTime ?? ""
+            ]
+            return feature
+        }
+        source.shape = MLNShapeCollectionFeature(shapes: features)
+    }
+
+    func updateSelectedStop(_ context: SelectedStopMapContext?) {
+        guard let source = mapView?.style?.source(
+            withIdentifier: "selected-stop-context"
+        ) as? MLNShapeSource else { return }
+
+        let features: [MLNShape & MLNFeature]
+        if let context {
+            let feature = MLNPointFeature()
+            feature.coordinate = context.coordinate
+            feature.attributes = ["name": context.name]
+            features = [feature]
+        } else {
+            features = []
+        }
+        source.shape = MLNShapeCollectionFeature(shapes: features)
+    }
+
     private func integer(_ feature: MLNFeature, keys: [String]) -> Int? {
         for key in keys {
             guard let value = feature.attributes[key], !(value is NSNull) else { continue }
@@ -204,12 +280,6 @@ struct mapLibreView: View {
     @State var railInFrame = false
     
     @State private var userFeature: [String: Any]? = nil
-
-    /// Captured reference to the underlying MLNMapView. Used to push fresh
-    /// features into the `realtime-vehicles` source when `realtimeVM.vehicles`
-    /// publishes — MapLibreSwiftDSL only adds shape sources once and never
-    /// updates their data, so we mutate the source directly.
-    @State private var mapViewRef: MLNMapView?
 
     let lineColorExpression = NSExpression(
         format: "FUNCTION('#', 'stringByAppendingString:', color)"
@@ -265,9 +335,6 @@ struct mapLibreView: View {
     
     
 
-    @State var currZoom = 5.0
-    @State var coordinateBounds = MLNCoordinateBounds(sw: CLLocationCoordinate2D(), ne: CLLocationCoordinate2D())
-    
     @MapViewContentBuilder
     var shapeLayer: some StyleLayerCollection {
         //bus
@@ -1182,23 +1249,6 @@ struct mapLibreView: View {
             .textHaloWidth(1)
     }
 
-    private func updateSelectedStopSource(_ context: SelectedStopMapContext?) {
-        guard let source = mapViewRef?.style?.source(
-            withIdentifier: "selected-stop-context"
-        ) as? MLNShapeSource else { return }
-
-        let features: [MLNShape & MLNFeature]
-        if let context {
-            let feature = MLNPointFeature()
-            feature.coordinate = context.coordinate
-            feature.attributes = ["name": context.name]
-            features = [feature]
-        } else {
-            features = []
-        }
-        source.shape = MLNShapeCollectionFeature(shapes: features)
-    }
-
     var body: some View {
         MapView(styleURL: styleURL, camera: $viewobject.camera) {
             shapeLayer
@@ -1215,93 +1265,42 @@ struct mapLibreView: View {
             map.mapView.compassView.isHidden = true
             map.mapView.showsUserLocation = true
             featureTapCoordinator.install(on: map.mapView, navigator: viewobject)
-            // Defer @State write off the current view-update pass.
-            if mapViewRef == nil {
-                let captured = map.mapView
-                DispatchQueue.main.async { mapViewRef = captured }
+
+            let sourceCoordinator = featureTapCoordinator
+            realtimeVM.onVehiclesChanged = { [weak sourceCoordinator] vehicles in
+                sourceCoordinator?.updateRealtimeVehicles(vehicles)
+            }
+            trajectoryVM.onVehiclesChanged = { [weak sourceCoordinator] vehicles in
+                sourceCoordinator?.updateTrajectoryVehicles(vehicles)
             }
         }
-        .onMapViewProxyUpdate(updateMode: .realtime, onViewProxyChanged: { proxy in
-                    DispatchQueue.main.async {
-                        viewobject.currentRotation = proxy.direction
-                        viewobject.currZoom = proxy.zoomLevel
-                        viewobject.visibleCoordinateBounds = proxy.visibleCoordinateBounds
-                        currZoom = proxy.zoomLevel
-                        coordinateBounds = proxy.visibleCoordinateBounds
-                        realtimeVM.updateBounds(proxy.visibleCoordinateBounds)
-                        realtimeVM.updateZoom(proxy.zoomLevel)
-                        realtimeVM.updateLayerSettings(viewobject.allLayerSettings)
-                        trajectoryVM.updateBounds(proxy.visibleCoordinateBounds)
-                        trajectoryVM.updateZoom(proxy.zoomLevel)
-                        trajectoryVM.updateLayerSettings(viewobject.allLayerSettings)
-                    }
-                })
+        .onMapViewProxyUpdate(updateMode: .onFinish, onViewProxyChanged: { proxy in
+            viewobject.currentRotation = proxy.direction
+            viewobject.currZoom = proxy.zoomLevel
+            viewobject.visibleCoordinateBounds = proxy.visibleCoordinateBounds
+            realtimeVM.updateViewport(
+                bounds: proxy.visibleCoordinateBounds,
+                zoom: proxy.zoomLevel
+            )
+            trajectoryVM.updateViewport(
+                bounds: proxy.visibleCoordinateBounds,
+                zoom: proxy.zoomLevel
+            )
+        })
         .task {
+            realtimeVM.updateLayerSettings(viewobject.allLayerSettings)
             await realtimeVM.run()
         }
         .task {
+            trajectoryVM.updateLayerSettings(viewobject.allLayerSettings)
             await trajectoryVM.run()
         }
-        .onChange(of: realtimeVM.vehicles) { _, newVehicles in
-            // MapLibreSwiftDSL caches sources by identifier and won't push
-            // new features into an existing MLNShapeSource. We update the
-            // underlying source's `shape` directly so dots actually move.
-            guard let style = mapViewRef?.style,
-                  let source = style.source(withIdentifier: "realtime-vehicles") as? MLNShapeSource
-            else { return }
-            let features: [MLNShape & MLNFeature] = newVehicles.map { v in
-                let f = MLNPointFeature()
-                f.coordinate = v.coordinate
-                f.attributes = [
-                    "selection_kind": "vehicle",
-                    "chateau": v.chateauID,
-                    "route_type": Int(v.routeType),
-                    "bearing": v.bearing ?? 0,
-                    "vehicle_id": v.vehicleID ?? v.id,
-                    "vehicle_label": v.vehicleLabel ?? "",
-                    "gtfs_id": v.chateauID,
-                    "trip_id": v.tripID ?? "",
-                    "route_id": v.routeId ?? "",
-                    "headsign": v.headsign ?? "",
-                    "trip_short_name": v.tripShortName ?? "",
-                    "start_time": v.startTime ?? "",
-                    "start_date": v.startDate ?? ""
-                ]
-                return f
-            }
-            source.shape = MLNShapeCollectionFeature(shapes: features)
-        }
-        .onChange(of: trajectoryVM.vehicles) { _, newVehicles in
-            guard let style = mapViewRef?.style,
-                  let source = style.source(withIdentifier: "trajectory-vehicles") as? MLNShapeSource
-            else { return }
-            let features: [MLNShape & MLNFeature] = newVehicles.map { vehicle in
-                let feature = MLNPointFeature()
-                feature.coordinate = vehicle.coordinate
-                feature.attributes = [
-                    "selection_kind": "vehicle",
-                    "route_type": vehicle.routeType,
-                    "bearing": vehicle.bearing,
-                    "chateau": vehicle.chateauID,
-                    "gtfs_id": vehicle.chateauID,
-                    "trip_id": vehicle.tripID ?? "",
-                    "route_id": vehicle.routeID ?? "",
-                    "display_name": vehicle.displayName ?? "",
-                    "headsign": vehicle.headsign,
-                    "trip_short_name": vehicle.tripShortName ?? "",
-                    "route_short_name": vehicle.routeShortName ?? "",
-                    "route_long_name": vehicle.routeLongName ?? "",
-                    "color": vehicle.color ?? "777777",
-                    "text_color": vehicle.textColor ?? "FFFFFF",
-                    "start_date": vehicle.startDate ?? "",
-                    "start_time": vehicle.startTime ?? ""
-                ]
-                return feature
-            }
-            source.shape = MLNShapeCollectionFeature(shapes: features)
+        .onChange(of: viewobject.allLayerSettings) { _, settings in
+            realtimeVM.updateLayerSettings(settings)
+            trajectoryVM.updateLayerSettings(settings)
         }
         .onChange(of: viewobject.selectedStopContext) { _, context in
-            updateSelectedStopSource(context)
+            featureTapCoordinator.updateSelectedStop(context)
         }
         .onDisappear {
             realtimeVM.stop()

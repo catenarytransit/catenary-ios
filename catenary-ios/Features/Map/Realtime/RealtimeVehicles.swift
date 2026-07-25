@@ -120,7 +120,8 @@ struct RealtimeVehicle: Identifiable, Hashable {
 
 @MainActor
 final class RealtimeVehicles: ObservableObject {
-    @Published private(set) var vehicles: [RealtimeVehicle] = []
+    private(set) var vehicles: [RealtimeVehicle] = []
+    var onVehiclesChanged: (([RealtimeVehicle]) -> Void)?
 
     private var bounds: MLNCoordinateBounds?
     private var currentZoom: Double = 5
@@ -152,13 +153,9 @@ final class RealtimeVehicles: ObservableObject {
     private var rebuildIsDirty = false
     private let rebuildThrottle: Duration = .milliseconds(250)
 
-    func updateBounds(_ bounds: MLNCoordinateBounds) {
+    func updateViewport(bounds: MLNCoordinateBounds, zoom: Double) {
         self.bounds = bounds
-        scheduleSend()
-    }
-
-    func updateZoom(_ zoom: Double) {
-        self.currentZoom = zoom
+        currentZoom = zoom
         scheduleSend()
     }
 
@@ -272,7 +269,10 @@ final class RealtimeVehicles: ObservableObject {
                 out.append(contentsOf: catMap.values)
             }
         }
-        self.vehicles = out
+        out.sort { $0.id < $1.id }
+        guard out != vehicles else { return }
+        vehicles = out
+        onVehiclesChanged?(out)
     }
 
     /// Coalesce rapid setter calls into a single WebSocket message.
@@ -344,7 +344,9 @@ final class RealtimeVehicles: ObservableObject {
     private func clearVehicles() {
         byChateau.removeAll(keepingCapacity: true)
         rebuildIsDirty = false
-        if !vehicles.isEmpty { vehicles = [] }
+        guard !vehicles.isEmpty else { return }
+        vehicles = []
+        onVehiclesChanged?([])
     }
 
     /// Convert a lat/lon bounding box into a tile-coordinate rectangle for a given zoom.
