@@ -628,13 +628,16 @@ private struct SingleTripTimelineMarker: View {
                         .offset(x: centerX - 1.5, y: centerY)
 
                     if let movingProgress {
+                        let progress = CGFloat(movingProgress)
+                        let availableHeight = max(geometry.size.height - centerY - 11, 0)
+
                         Circle()
                             .fill(.primary)
                             .overlay(Circle().stroke(.background, lineWidth: 2))
                             .frame(width: 11, height: 11)
                             .offset(
                                 x: centerX - 5.5,
-                                y: centerY + (geometry.size.height - centerY - 11) * movingProgress
+                                y: centerY + availableHeight * progress
                             )
                     }
                 }
@@ -662,40 +665,72 @@ private struct SingleTripAlertsView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
-                ForEach(alerts, id: \.0) { _, alert in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(alert.headerText?.preferredTranslation()?.text.map(plainText) ?? "Service alert")
-                            .font(.headline)
-
-                        if let description = alert.descriptionText?.preferredTranslation()?.text,
-                           !plainText(description).isEmpty {
-                            Text(plainText(description))
-                                .font(.body)
-                                .textSelection(.enabled)
-                        }
-
-                        if let activePeriod = activePeriodText(alert) {
-                            Label(activePeriod, systemImage: "clock")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        if let urlText = alert.url?.preferredTranslation()?.text,
-                           let url = URL(string: plainText(urlText)) {
-                            Link("More information", destination: url)
-                                .font(.subheadline.weight(.semibold))
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(.orange.opacity(0.1), in: .rect(cornerRadius: 14))
+                ForEach(alerts, id: \.0) { alertItem in
+                    SingleTripAlertCard(
+                        alert: alertItem.1,
+                        timezone: timezone
+                    )
                 }
             }
             .padding()
         }
     }
+}
 
-    private func activePeriodText(_ alert: SingleTripAlert) -> String? {
+private struct SingleTripAlertCard: View {
+    let alert: SingleTripAlert
+    let timezone: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(alertTitle)
+                .font(.headline)
+
+            if let alertDescription {
+                Text(alertDescription)
+                    .font(.body)
+                    .textSelection(.enabled)
+            }
+
+            if let activePeriodText {
+                Label(activePeriodText, systemImage: "clock")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let moreInformationURL {
+                Link("More information", destination: moreInformationURL)
+                    .font(.subheadline.weight(.semibold))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(.orange.opacity(0.1), in: .rect(cornerRadius: 14))
+    }
+
+    private var alertTitle: String {
+        guard let text = alert.headerText?.preferredTranslation()?.text else {
+            return "Service alert"
+        }
+        return plainText(text)
+    }
+
+    private var alertDescription: String? {
+        guard let text = alert.descriptionText?.preferredTranslation()?.text else {
+            return nil
+        }
+        let description = plainText(text)
+        return description.isEmpty ? nil : description
+    }
+
+    private var moreInformationURL: URL? {
+        guard let text = alert.url?.preferredTranslation()?.text else {
+            return nil
+        }
+        return URL(string: plainText(text))
+    }
+
+    private var activePeriodText: String? {
         guard let period = alert.activePeriod.first,
               period.start != nil || period.end != nil else { return nil }
 
