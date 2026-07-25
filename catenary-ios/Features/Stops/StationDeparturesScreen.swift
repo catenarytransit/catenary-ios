@@ -155,13 +155,6 @@ struct StationDeparturesScreen: View {
             }
 
             Spacer(minLength: 8)
-
-            if !model.events.isEmpty {
-                Text("\(filteredEvents.count) departures")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .contentTransition(.numericText())
-            }
         }
     }
 
@@ -608,6 +601,7 @@ private struct StationTimeSelector: View {
                         selection: $draftDate,
                         displayedComponents: [.date, .hourAndMinute]
                     )
+                    .environment(\.locale, Locale(identifier: "en_GB"))
                     .environment(
                         \.timeZone,
                         timezoneID.flatMap(TimeZone.init(identifier:)) ?? .autoupdatingCurrent
@@ -642,11 +636,20 @@ private struct StationTimeSelector: View {
 
     private var label: String {
         if isNow { return "Now" }
-        let formatter = DateFormatter()
-        formatter.locale = .autoupdatingCurrent
-        formatter.timeZone = timezoneID.flatMap(TimeZone.init(identifier:)) ?? .autoupdatingCurrent
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: selectedDate)
+        let timeZone = timezoneID.flatMap(TimeZone.init(identifier:)) ?? .autoupdatingCurrent
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.locale = .autoupdatingCurrent
+        dateFormatter.timeZone = timeZone
+        dateFormatter.dateStyle = .medium
+        dateFormatter.timeStyle = .none
+
+        let timeFormatter = DateFormatter()
+        timeFormatter.calendar = Calendar(identifier: .gregorian)
+        timeFormatter.locale = Locale(identifier: "en_GB_POSIX")
+        timeFormatter.timeZone = timeZone
+        timeFormatter.dateFormat = "HH:mm"
+
+        return "\(dateFormatter.string(from: selectedDate)), \(timeFormatter.string(from: selectedDate))"
     }
 }

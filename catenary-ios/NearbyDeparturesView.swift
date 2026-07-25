@@ -576,7 +576,12 @@ private struct NearbyStationDepartureRow: View {
     @EnvironmentObject private var viewObject: viewObject
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
+            NearbyStationDepartureTimeView(
+                departure: departure,
+                timezoneID: timezoneID
+            )
+
             Button {
                 viewObject.push(.route(chateauID: departure.chateauId, routeID: departure.routeId))
             } label: {
@@ -586,50 +591,56 @@ private struct NearbyStationDepartureRow: View {
                     colorHex: routeInfo?.color,
                     textColorHex: routeInfo?.textColor
                 )
+                .frame(width: 42)
             }
             .buttonStyle(.plain)
 
             Button {
                 openTrip()
             } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(departure.finalStationName ?? departure.headsign)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(departure.cancelled == true ? .red : .primary)
-                        .strikethrough(departure.cancelled == true)
-                        .lineLimit(1)
-                    HStack(spacing: 5) {
-                        if let platform = departure.platform, !platform.isEmpty {
-                            Text("Platform \(platform)")
-                        }
+                HStack(alignment: .center, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(departure.finalStationName ?? departure.headsign)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(departure.cancelled == true ? .red : .primary)
+                            .strikethrough(departure.cancelled == true)
+                            .lineLimit(1)
+
                         if let tripShortName = departure.tripShortName, !tripShortName.isEmpty {
                             Text(tripShortName)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if let platformText {
+                        Text(platformText)
+                            .font(.subheadline.weight(.bold))
+                            .monospacedDigit()
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(
+                                Color.secondary.opacity(0.12),
+                                in: RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            )
+                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
-
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(TransitFormatting.date(departure.effectiveDeparture, timezoneID: timezoneID))
-                    .font(.subheadline.weight(.semibold))
-                    .monospacedDigit()
-                if let relative = TransitFormatting.relative(departure.effectiveDeparture) {
-                    Text(relative)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                if let delay = TransitFormatting.delay(scheduled: departure.scheduledDeparture, realtime: departure.realtimeDeparture) {
-                    Text(delay)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.orange)
-                }
-            }
         }
         .contentShape(Rectangle())
+    }
+
+    private var platformText: String? {
+        guard let raw = departure.platform?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else { return nil }
+        let value = raw
+            .replacingOccurrences(of: "Track", with: "", options: .caseInsensitive)
+            .replacingOccurrences(of: "Platform", with: "", options: .caseInsensitive)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? raw : value
     }
 
     private func openTrip() {
@@ -642,6 +653,59 @@ private struct NearbyStationDepartureRow: View {
             vehicleID: nil,
             routeType: routeInfo?.routeType
         ))
+    }
+}
+
+private struct NearbyStationDepartureTimeView: View {
+    let departure: NearbyStationDeparture
+    let timezoneID: String?
+
+    private var scheduledTime: Int64? {
+        departure.scheduledDeparture ?? departure.scheduledArrival
+    }
+
+    private var realtimeTime: Int64? {
+        departure.realtimeDeparture ?? departure.realtimeArrival
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            if let scheduledTime {
+                Text(TransitFormatting.date(scheduledTime, timezoneID: timezoneID))
+                    .font((realtimeTime != nil && realtimeTime != scheduledTime)
+                        ? .caption.monospacedDigit()
+                        : .subheadline.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(
+                        realtimeTime != nil && realtimeTime != scheduledTime
+                            ? Color.secondary
+                            : Color.primary
+                    )
+            }
+
+            if let realtimeTime, realtimeTime != scheduledTime {
+                Text(TransitFormatting.date(realtimeTime, timezoneID: timezoneID))
+                    .font(.subheadline.monospacedDigit().weight(.semibold))
+            }
+
+            if scheduledTime == nil, realtimeTime == nil {
+                Text("—")
+                    .font(.subheadline.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            if let delay = TransitFormatting.delay(scheduled: scheduledTime, realtime: realtimeTime) {
+                Text(delay)
+                    .font(.caption2.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.orange)
+            }
+
+            if let relative = TransitFormatting.relative(realtimeTime ?? scheduledTime) {
+                Text(relative)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 68, alignment: .leading)
     }
 }
 

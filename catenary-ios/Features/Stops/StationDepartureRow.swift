@@ -14,7 +14,13 @@ struct StationDepartureRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: 10) {
+            StopDepartureTimeView(
+                event: event,
+                timezoneID: timezoneID,
+                now: now
+            )
+
             Button {
                 viewObject.push(.route(chateauID: event.chateau, routeID: event.routeId))
             } label: {
@@ -30,7 +36,7 @@ struct StationDepartureRow: View {
             .accessibilityLabel("Open route")
 
             Button(action: openTrip) {
-                HStack(alignment: .center, spacing: 10) {
+                HStack(alignment: .center, spacing: 8) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(event.finalStationName ?? event.headsign ?? "Departure")
                             .font(mode == .rail ? .headline : .subheadline.weight(.semibold))
@@ -42,11 +48,11 @@ struct StationDepartureRow: View {
                         metadataLine
                     }
 
-                    StopDepartureTimeView(
-                        event: event,
-                        timezoneID: timezoneID,
-                        now: now
-                    )
+                    Spacer(minLength: 4)
+
+                    if let platformText {
+                        StopPlatformBadge(text: platformText)
+                    }
                 }
                 .contentShape(Rectangle())
             }
@@ -61,7 +67,6 @@ struct StationDepartureRow: View {
     private var metadataLine: some View {
         let values = [
             event.tripShortName,
-            event.platformStringRealtime.map { "Platform \($0)" },
             event.vehicleNumber,
             mode == .rail ? agency?.agencyName : nil
         ]
@@ -76,6 +81,16 @@ struct StationDepartureRow: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
+    }
+
+    private var platformText: String? {
+        guard let raw = event.platformStringRealtime?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else { return nil }
+        let value = raw
+            .replacingOccurrences(of: "Track", with: "", options: .caseInsensitive)
+            .replacingOccurrences(of: "Platform", with: "", options: .caseInsensitive)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? raw : value
     }
 
     private func openTrip() {
@@ -96,27 +111,32 @@ private struct StopDepartureTimeView: View {
     let timezoneID: String?
     let now: Date
 
+    private var scheduledTime: Int64? { event.scheduledTime }
+    private var realtimeTime: Int64? { event.realtimeTime }
+
     var body: some View {
-        VStack(alignment: .trailing, spacing: 2) {
-            if let scheduled = event.scheduledTime,
-               let realtime = event.realtimeTime,
-               scheduled != realtime {
-                Text(StopDateFormatting.time(epochSeconds: scheduled, timezoneID: timezoneID))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .strikethrough()
+        VStack(alignment: .leading, spacing: 1) {
+            if let scheduledTime {
+                Text(StopDateFormatting.time(epochSeconds: scheduledTime, timezoneID: timezoneID))
+                    .font((realtimeTime != nil && realtimeTime != scheduledTime)
+                        ? .caption.monospacedDigit()
+                        : .headline.monospacedDigit())
+                    .foregroundStyle(
+                        event.isCancelled
+                            ? Color.red
+                            : (realtimeTime != nil && realtimeTime != scheduledTime ? Color.secondary : Color.primary)
+                    )
             }
 
-            Text(StopDateFormatting.time(epochSeconds: event.effectiveTime, timezoneID: timezoneID))
-                .font(.headline.monospacedDigit())
-                .foregroundStyle(event.isCancelled ? .red : .primary)
+            if let realtimeTime, realtimeTime != scheduledTime {
+                Text(StopDateFormatting.time(epochSeconds: realtimeTime, timezoneID: timezoneID))
+                    .font(.headline.monospacedDigit())
+                    .foregroundStyle(event.isCancelled ? .red : .primary)
+            }
 
-            if let countdown = StopDateFormatting.countdown(
-                epochSeconds: event.effectiveTime,
-                relativeTo: now
-            ) {
-                Text(countdown)
-                    .font(.caption2.monospacedDigit())
+            if scheduledTime == nil, realtimeTime == nil {
+                Text("—")
+                    .font(.headline.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
 
@@ -125,8 +145,33 @@ private struct StopDepartureTimeView: View {
                     .font(.caption2.weight(.semibold).monospacedDigit())
                     .foregroundStyle(StopDateFormatting.delayColor(event: event))
             }
+
+            if let countdown = StopDateFormatting.countdown(
+                epochSeconds: realtimeTime ?? scheduledTime,
+                relativeTo: now
+            ) {
+                Text(countdown)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
         }
-        .frame(minWidth: 70, alignment: .trailing)
+        .frame(width: 76, alignment: .leading)
+    }
+}
+
+private struct StopPlatformBadge: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.subheadline.weight(.bold))
+            .monospacedDigit()
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(
+                Color.secondary.opacity(0.12),
+                in: RoundedRectangle(cornerRadius: 5, style: .continuous)
+            )
     }
 }
 
@@ -172,9 +217,10 @@ enum StopDateFormatting {
     static func time(epochSeconds: Int64?, timezoneID: String?) -> String {
         guard let epochSeconds else { return "—" }
         let formatter = DateFormatter()
-        formatter.locale = .autoupdatingCurrent
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_GB_POSIX")
         formatter.timeZone = timezoneID.flatMap(TimeZone.init(identifier:)) ?? .autoupdatingCurrent
-        formatter.setLocalizedDateFormatFromTemplate("j:mm")
+        formatter.dateFormat = "HH:mm"
         return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(epochSeconds)))
     }
 
@@ -194,9 +240,10 @@ enum StopDateFormatting {
 
     static func clock(date: Date, timezoneID: String?) -> String {
         let formatter = DateFormatter()
-        formatter.locale = .autoupdatingCurrent
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_GB_POSIX")
         formatter.timeZone = timezoneID.flatMap(TimeZone.init(identifier:)) ?? .autoupdatingCurrent
-        formatter.timeStyle = .medium
+        formatter.dateFormat = "HH:mm:ss"
         return formatter.string(from: date)
     }
 
