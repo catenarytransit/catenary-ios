@@ -12,199 +12,327 @@ struct MapOverlappingSelectionScreen: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 8) {
-                Text("Choose an item")
-                    .font(.title2.weight(.semibold))
+            LazyVStack(alignment: .leading, spacing: 2) {
+                Text(selectionCountTitle)
+                    .font(.title2)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8)
 
-                Text("Multiple objects overlap at this point on the map.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.bottom, 4)
+                if !vehicles.isEmpty {
+                    sectionHeader("Vehicles")
 
-                ForEach(options) { option in
-                    Button {
-                        viewObject.replaceTop(with: option.destination)
-                    } label: {
-                        MapSelectionRow(selector: option.data)
+                    ForEach(vehicles) { option in
+                        selectionButton(for: option) {
+                            VehicleSelectionRow(selector: option.data)
+                        }
                     }
-                    .buttonStyle(.plain)
+                }
+
+                if !stations.isEmpty {
+                    sectionHeader("Stations")
+
+                    ForEach(stations) { option in
+                        selectionButton(for: option) {
+                            StationSelectionRow(selector: option.data)
+                        }
+                    }
+                }
+
+                if !stops.isEmpty {
+                    sectionHeader("Stops")
+
+                    ForEach(stops) { option in
+                        selectionButton(for: option) {
+                            StopSelectionRow(selector: option.data)
+                        }
+                    }
+                }
+
+                if !routes.isEmpty {
+                    Text("Lines")
+                        .font(.title2)
+                        .padding(.top, 6)
+
+                    ForEach(SelectionRouteCategory.displayOrder, id: \.self) { category in
+                        let categoryRoutes = routes.filter { $0.data.routeCategory == category }
+
+                        if !categoryRoutes.isEmpty {
+                            Text(category.title)
+                                .font(.headline)
+                                .foregroundStyle(category.colour)
+                                .padding(.top, 2)
+
+                            ForEach(categoryRoutes) { option in
+                                selectionButton(for: option) {
+                                    RouteSelectionRow(selector: option.data)
+                                }
+                            }
+                        }
+                    }
                 }
             }
-            .padding()
+            .padding(.horizontal, 16)
+            .padding(.bottom, 64)
         }
+    }
+
+    private var selectionCountTitle: String {
+        "\(options.count) \(options.count == 1 ? "item" : "items") selected"
+    }
+
+    private var vehicles: [MapSelectionOption] {
+        unique(options.filter { $0.data.selectionKind == .vehicle })
+    }
+
+    private var stations: [MapSelectionOption] {
+        unique(options.filter { $0.data.selectionKind == .station })
+    }
+
+    private var stops: [MapSelectionOption] {
+        unique(options.filter { $0.data.selectionKind == .stop })
+    }
+
+    private var routes: [MapSelectionOption] {
+        unique(options.filter { $0.data.selectionKind == .route })
+    }
+
+    private func unique(_ candidates: [MapSelectionOption]) -> [MapSelectionOption] {
+        var seen = Set<String>()
+        return candidates.filter { seen.insert($0.id).inserted }
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.headline)
+            .padding(.top, 8)
+    }
+
+    private func selectionButton<Label: View>(
+        for option: MapSelectionOption,
+        @ViewBuilder label: () -> Label
+    ) -> some View {
+        Button {
+            viewObject.replaceTop(with: option.destination)
+        } label: {
+            label()
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
-private struct MapSelectionRow: View {
+private struct VehicleSelectionRow: View {
     let selector: MapSelectionSelector
 
     var body: some View {
-        HStack(spacing: 12) {
-            leadingView
-                .frame(minWidth: 44, maxWidth: 44, minHeight: 36)
+        if case let .vehicle(
+            _, _, _, headsign, tripLabel, colour, routeShortName, routeLongName,
+            routeType, tripShortName, textColour, _, _, _, _
+        ) = selector {
+            VStack(alignment: .leading, spacing: 2) {
+                routeName(
+                    shortName: routeShortName,
+                    longName: routeLongName,
+                    colour: Color(catenaryHex: colour) ?? modeColour(routeType)
+                )
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
+                HStack(spacing: 4) {
+                    if let runNumber = nonEmpty(tripShortName) ?? nonEmpty(tripLabel) {
+                        Text(runNumber)
+                            .font(.subheadline)
+                            .foregroundStyle(Color(catenaryHex: textColour) ?? .white)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(
+                                Color(catenaryHex: colour) ?? modeColour(routeType),
+                                in: .rect(cornerRadius: 4)
+                            )
+                    }
+
+                    if let headsign = nonEmpty(headsign) {
+                        Text("›")
+                            .foregroundStyle(.secondary)
+
+                        Text(headsign)
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                            .lineLimit(2)
+                    }
+                }
+            }
+            .selectionSurface()
+        }
+    }
+
+    private func routeName(
+        shortName: String?,
+        longName: String?,
+        colour: Color
+    ) -> some View {
+        let shortName = nonEmpty(shortName)
+        let longName = nonEmpty(longName)
+
+        return Group {
+            if let shortName, let longName, !longName.localizedCaseInsensitiveContains(shortName) {
+                (Text(shortName).bold() + Text(" \(longName)"))
+            } else {
+                Text(longName ?? shortName ?? "Unknown line")
+                    .bold()
+            }
+        }
+        .font(.body)
+        .foregroundStyle(colour)
+        .lineLimit(2)
+    }
+}
+
+private struct StationSelectionRow: View {
+    let selector: MapSelectionSelector
+
+    var body: some View {
+        if case let .osmStation(_, name, modeType, _, _) = selector {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name)
                     .font(.body.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(2)
 
-                if !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-
-                if let detail, !detail.isEmpty {
-                    Text(detail)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
+                Text(stationModeName(modeType))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-
-            Spacer(minLength: 8)
-
-            Image(systemName: "chevron.forward")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
-        }
-        .padding(12)
-        .contentShape(Rectangle())
-        .background(Color(uiColor: .secondarySystemBackground), in: .rect(cornerRadius: 12))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(.quaternary)
+            .selectionSurface()
         }
     }
 
-    @ViewBuilder
-    private var leadingView: some View {
-        switch selector {
-        case .stop:
-            Image(systemName: "mappin.circle.fill")
-                .font(.title2)
-                .foregroundStyle(.secondary)
-
-        case let .route(_, _, colour, name, routeType):
-            routeBadge(
-                label: name,
-                colour: colour,
-                textColour: "FFFFFF",
-                fallback: modeColour(routeType)
-            )
-
-        case let .vehicle(
-            _, _, _, _, tripLabel, colour, routeShortName, routeLongName,
-            routeType, tripShortName, textColour, _, _, _, _
-        ):
-            routeBadge(
-                label: routeShortName ?? tripShortName ?? tripLabel ?? routeLongName,
-                colour: colour,
-                textColour: textColour,
-                fallback: modeColour(routeType)
-            )
-
-        case let .osmStation(_, _, modeType, _, _):
-            Image(systemName: modeImage(modeType))
-                .font(.title2)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var title: String {
-        switch selector {
-        case let .stop(_, _, stopName):
-            return stopName
-        case let .route(_, routeID, _, name, _):
-            return nonEmpty(name) ?? routeID
-        case let .vehicle(
-            _, _, _, headsign, tripLabel, _, routeShortName, routeLongName,
-            _, tripShortName, _, _, _, _, _
-        ):
-            return nonEmpty(routeShortName)
-                ?? nonEmpty(tripShortName)
-                ?? nonEmpty(tripLabel)
-                ?? nonEmpty(routeLongName)
-                ?? nonEmpty(headsign)
-                ?? "Vehicle"
-        case let .osmStation(_, name, _, _, _):
-            return name
-        }
-    }
-
-    private var subtitle: String {
-        switch selector {
-        case let .stop(_, stopID, _):
-            return stopID
-        case let .route(_, routeID, _, _, routeType):
-            return [modeName(routeType), nonEmpty(routeID)].compactMap { $0 }.joined(separator: " • ")
-        case let .vehicle(_, vehicleID, routeID, headsign, _, _, _, _, routeType, _, _, _, _, _, _):
-            return [modeName(routeType), nonEmpty(headsign), nonEmpty(vehicleID), nonEmpty(routeID)]
-                .compactMap { $0 }
-                .joined(separator: " • ")
-        case let .osmStation(_, _, modeType, _, _):
-            return modeType.replacingOccurrences(of: "_", with: " ").capitalized
-        }
-    }
-
-    private var detail: String? {
-        guard case let .vehicle(
-            _, _, _, _, _, _, _, _, _, tripShortName, _, _, tripID, startTime, startDate
-        ) = selector else { return nil }
-
-        return [nonEmpty(tripShortName), nonEmpty(tripID), nonEmpty(startDate), nonEmpty(startTime)]
-            .compactMap { $0 }
-            .joined(separator: " • ")
-    }
-
-    private func routeBadge(
-        label: String?,
-        colour: String,
-        textColour: String,
-        fallback: Color
-    ) -> some View {
-        Text(nonEmpty(label).map { String($0.prefix(6)) } ?? "—")
-            .font(.caption.weight(.bold))
-            .lineLimit(1)
-            .minimumScaleFactor(0.55)
-            .foregroundStyle(Color(catenaryHex: textColour) ?? .white)
-            .padding(.horizontal, 6)
-            .frame(maxWidth: .infinity, minHeight: 30)
-            .background(Color(catenaryHex: colour) ?? fallback, in: .rect(cornerRadius: 7))
-    }
-
-    private func modeImage(_ modeType: String) -> String {
+    private func stationModeName(_ modeType: String) -> String {
         switch modeType.lowercased() {
-        case "rail", "train": return "tram.fill.tunnel"
-        case "subway", "metro", "tram", "light_rail": return "lightrail.fill"
-        case "bus", "trolleybus": return "bus.fill"
-        case "ferry": return "ferry.fill"
-        default: return "building.2.fill"
+        case "subway", "metro": return "Metro"
+        case "rail", "train": return "Rail"
+        case "tram", "light_rail": return "Tram"
+        default: return modeType.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
+}
+
+private struct StopSelectionRow: View {
+    let selector: MapSelectionSelector
+
+    var body: some View {
+        if case let .stop(_, _, stopName) = selector {
+            Text(stopName)
+                .font(.body.weight(.medium))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .selectionSurface()
+        }
+    }
+}
+
+private struct RouteSelectionRow: View {
+    let selector: MapSelectionSelector
+
+    var body: some View {
+        if case let .route(_, _, colour, name, routeType) = selector {
+            Text(nonEmpty(name) ?? "Unnamed line")
+                .font(.body.weight(.bold))
+                .foregroundStyle(Color(catenaryHex: colour) ?? modeColour(routeType))
+                .lineLimit(2)
+                .selectionSurface()
+        }
+    }
+}
+
+private enum MapSelectionKind: Equatable {
+    case vehicle
+    case station
+    case stop
+    case route
+}
+
+private enum SelectionRouteCategory: Hashable {
+    case rail
+    case metro
+    case tram
+    case other
+    case bus
+
+    static let displayOrder: [SelectionRouteCategory] = [.rail, .metro, .tram, .other, .bus]
+
+    var title: String {
+        switch self {
+        case .rail: return "Train"
+        case .metro: return "Metro"
+        case .tram: return "Tram"
+        case .other: return "Other"
+        case .bus: return "Bus"
         }
     }
 
-    private func modeName(_ routeType: Int?) -> String? {
-        guard let routeType else { return nil }
-        return StopTransitMode.from(routeType: routeType).title
-    }
-
-    private func modeColour(_ routeType: Int?) -> Color {
-        switch StopTransitMode.from(routeType: routeType) {
+    var colour: Color {
+        switch self {
         case .rail: return .railCategory
         case .metro: return .metroCategory
-        case .bus: return .busCategory
+        case .tram: return .tramCategory
         case .other: return .otherCategory
+        case .bus: return .busCategory
+        }
+    }
+}
+
+private extension MapSelectionSelector {
+    var selectionKind: MapSelectionKind {
+        switch self {
+        case .vehicle: return .vehicle
+        case .osmStation: return .station
+        case .stop: return .stop
+        case .route: return .route
         }
     }
 
-    private func nonEmpty(_ value: String?) -> String? {
-        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
-            return nil
+    var routeCategory: SelectionRouteCategory? {
+        guard case let .route(_, _, _, _, routeType) = self else { return nil }
+
+        switch routeType {
+        case 2, 100, 101, 102, 103, 106, 107:
+            return .rail
+        case 1, 5, 7, 12, 900:
+            return .metro
+        case 0:
+            return .tram
+        case 3, 11, 700:
+            return .bus
+        default:
+            return .other
         }
-        return value
+    }
+}
+
+private extension View {
+    func selectionSurface() -> some View {
+        frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(
+                Color(uiColor: .secondarySystemBackground).opacity(0.8),
+                in: .rect(cornerRadius: 6)
+            )
+    }
+}
+
+private func nonEmpty(_ value: String?) -> String? {
+    guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+        return nil
+    }
+    return value
+}
+
+private func modeColour(_ routeType: Int?) -> Color {
+    switch StopTransitMode.from(routeType: routeType) {
+    case .rail: return .railCategory
+    case .metro: return .metroCategory
+    case .bus: return .busCategory
+    case .other: return .otherCategory
     }
 }
 
