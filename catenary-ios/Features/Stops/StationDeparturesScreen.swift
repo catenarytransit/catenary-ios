@@ -573,18 +573,19 @@ private struct StationTimeSelector: View {
             draftDate = isNow ? Date() : selectedDate
             isPresented = true
         } label: {
-            HStack(spacing: 8) {
-                Image(systemName: isNow ? "clock.badge.checkmark" : "calendar.badge.clock")
-                Text(label)
-                    .font(.subheadline.weight(.medium))
-                Spacer()
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.semibold))
+            HStack(spacing: 6) {
+                Image(systemName: "clock")
                     .foregroundStyle(.secondary)
+                Text(dateAndTimeLabel)
+                    .font(.subheadline.weight(.medium))
+                if isNow {
+                    Text("Now")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $isPresented) {
@@ -628,15 +629,21 @@ private struct StationTimeSelector: View {
         }
     }
 
-    private var label: String {
-        if isNow { return "Now" }
+    private var dateAndTimeLabel: String {
         let timeZone = timezoneID.flatMap(TimeZone.init(identifier:)) ?? .autoupdatingCurrent
+        let displayDate = isNow ? Date() : selectedDate
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
 
         let dateFormatter = DateFormatter()
         dateFormatter.locale = .autoupdatingCurrent
         dateFormatter.timeZone = timeZone
-        dateFormatter.dateStyle = .medium
-        dateFormatter.timeStyle = .none
+        dateFormatter.setLocalizedDateFormatFromTemplate("EEE d MMM")
+
+        let dateLabel = calendar.isDate(displayDate, inSameDayAs: Date())
+            ? "Today"
+            : dateFormatter.string(from: displayDate)
 
         let timeFormatter = DateFormatter()
         timeFormatter.calendar = Calendar(identifier: .gregorian)
@@ -644,6 +651,6 @@ private struct StationTimeSelector: View {
         timeFormatter.timeZone = timeZone
         timeFormatter.dateFormat = "HH:mm"
 
-        return "\(dateFormatter.string(from: selectedDate)), \(timeFormatter.string(from: selectedDate))"
+        return "\(dateLabel) \(timeFormatter.string(from: displayDate))"
     }
 }

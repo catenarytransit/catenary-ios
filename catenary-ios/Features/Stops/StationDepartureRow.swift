@@ -69,7 +69,10 @@ struct StationDepartureRow: View {
                     Spacer(minLength: 4)
 
                     if let platformText {
-                        StopPlatformBadge(text: platformText)
+                        Text(platformText)
+                            .font(.body.weight(.semibold))
+                            .monospacedDigit()
+                            .frame(minWidth: 24, alignment: .trailing)
                     }
                 }
                 .contentShape(Rectangle())
@@ -229,9 +232,13 @@ private struct StopDepartureTimeView: View {
         VStack(alignment: .leading, spacing: 1) {
             if let scheduledTime {
                 Text(StopDateFormatting.time(epochSeconds: scheduledTime, timezoneID: timezoneID))
-                    .font((realtimeTime != nil && realtimeTime != scheduledTime)
-                        ? .caption.monospacedDigit()
-                        : .headline.monospacedDigit())
+                    .font(
+                        .system(
+                            size: 14,
+                            weight: realtimeTime != nil && realtimeTime == scheduledTime ? .medium : .regular
+                        )
+                        .monospacedDigit()
+                    )
                     .foregroundStyle(
                         event.isCancelled
                             ? Color.red
@@ -241,20 +248,27 @@ private struct StopDepartureTimeView: View {
 
             if let realtimeTime, realtimeTime != scheduledTime {
                 Text(StopDateFormatting.time(epochSeconds: realtimeTime, timezoneID: timezoneID))
-                    .font(.headline.monospacedDigit())
+                    .font(.system(size: 14, weight: .medium).monospacedDigit())
                     .foregroundStyle(event.isCancelled ? .red : .primary)
             }
 
             if scheduledTime == nil, realtimeTime == nil {
                 Text("—")
-                    .font(.headline.monospacedDigit())
+                    .font(.system(size: 14).monospacedDigit())
                     .foregroundStyle(.secondary)
             }
 
-            if let delay = StopDateFormatting.delay(event: event) {
-                Text(delay)
-                    .font(.caption2.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(StopDateFormatting.delayColor(event: event))
+            if let scheduledTime,
+               let realtimeTime,
+               realtimeTime != scheduledTime,
+               !event.isCancelled {
+                DelayDiff(
+                    diff: realtimeTime - scheduledTime,
+                    showSeconds: false,
+                    fontSizeOfPolarity: 12,
+                    useSymbolSign: true,
+                    hideMinUnits: true
+                )
             }
 
             if let countdown = StopDateFormatting.countdown(
@@ -270,22 +284,6 @@ private struct StopDepartureTimeView: View {
     }
 }
 
-private struct StopPlatformBadge: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(.subheadline.weight(.bold))
-            .monospacedDigit()
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(
-                Color.secondary.opacity(0.12),
-                in: RoundedRectangle(cornerRadius: 5, style: .continuous)
-            )
-    }
-}
-
 private struct StopRouteBadge: View {
     let chateauID: String
     let shortName: String?
@@ -298,16 +296,19 @@ private struct StopRouteBadge: View {
 
     var body: some View {
         Text(label)
-            .font(compact ? .caption2.weight(.bold) : .caption.weight(.bold))
+            .font(.system(size: layout == .swiss ? 12 : 10, weight: .bold))
             .lineLimit(1)
             .minimumScaleFactor(0.6)
             .foregroundStyle(StopHexColor.color(textColorHex, fallback: .white))
-            .padding(.horizontal, compact ? 5 : 4)
-            .frame(width: compact ? nil : (layout == .swiss ? 50 : 40), alignment: layout == .swiss ? .leading : .center)
-            .frame(minHeight: compact ? 18 : (mode == .rail ? 30 : 28))
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
             .background(
                 StopHexColor.color(colorHex, fallback: fallbackColor),
                 in: routeShape
+            )
+            .frame(
+                width: compact ? nil : (layout == .swiss ? 50 : 40),
+                alignment: layout == .swiss ? .leading : .center
             )
     }
 
