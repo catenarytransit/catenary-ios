@@ -137,18 +137,25 @@ final class RealtimeTrajectories: ObservableObject {
 
     private var activeSubscription: Subscription?
     private var subscriptionTask: Task<Void, Never>?
+    private var subscriptionRefreshTask: Task<Void, Never>?
     private var interpolationTask: Task<Void, Never>?
+    private var cameraIdleTask: Task<Void, Never>?
     private var bufferCancellable: AnyCancellable?
     private var isRunning = false
+    private var isCameraMoving = false
 
     private var accumulators: [String: ChunkAccumulator] = [:]
     private var trajectoriesByChateau: [String: [PreparedTrajectory]] = [:]
+    private var latestSnapshotTimestampByChateau: [String: UInt64] = [:]
 
     private let subscriptionDebounce: Duration = .milliseconds(175)
+    private let subscriptionRefreshInterval: Duration = .seconds(15)
+    private let cameraIdleDelay: Duration = .milliseconds(250)
     private static let clientReference = "trajectories_layer"
 
     func updateBounds(_ bounds: MLNCoordinateBounds) {
         self.bounds = bounds
+        markCameraMoving()
         scheduleSubscription()
     }
 
@@ -160,6 +167,17 @@ final class RealtimeTrajectories: ObservableObject {
     func updateLayerSettings(_ settings: AllLayerSettings) {
         layerSettings = settings
         scheduleSubscription()
+    }
+
+    private func markCameraMoving() {
+        isCameraMoving = true
+        cameraIdleTask?.cancel()
+        cameraIdleTask = Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: cameraIdleDelay)
+            if Task.isCancelled { return }
+            isCameraMoving = false
+        }
     }
 
     func run() async {
@@ -176,6 +194,9 @@ final class RealtimeTrajectories: ObservableObject {
         interpolationTask = Task { [weak self] in
             await self?.interpolationLoop()
         }
+        subscriptionRefreshTask = Task { [weak self] in
+            await self?.subscriptionRefreshLoop()
+        }
         scheduleSubscription()
 
         while !Task.isCancelled {
@@ -189,8 +210,13 @@ final class RealtimeTrajectories: ObservableObject {
         isRunning = false
         subscriptionTask?.cancel()
         subscriptionTask = nil
+        subscriptionRefreshTask?.cancel()
+        subscriptionRefreshTask = nil
         interpolationTask?.cancel()
         interpolationTask = nil
+        cameraIdleTask?.cancel()
+        cameraIdleTask = nil
+        isCameraMoving = false
         bufferCancellable?.cancel()
         bufferCancellable = nil
         activeSubscription = nil
@@ -209,7 +235,16 @@ final class RealtimeTrajectories: ObservableObject {
         }
     }
 
-    private func sendSubscription() {
+    private func subscriptionRefreshLoop() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: subscriptionRefreshInterval)
+            if Task.isCancelled { return }
+            sendSubscription(forceRefresh: true)
+        }
+    }
+
+    private func sendSubscription(forceRefresh: Bool = false) {
+        guard isRunning else { return }
         guard let bounds else { return }
 
         var modes: [String] = []
@@ -246,13 +281,12 @@ final class RealtimeTrajectories: ObservableObject {
             zoom: max(0, min(255, Int(currentZoom.rounded(.down)))),
             modes: modes
         )
-        guard subscription != activeSubscription else { return }
+        guard forceRefresh || subscription != activeSubscription else { return }
 
         activeSubscription = subscription
-        // A changed viewport can remove chateaus without another non-empty
-        // buffer arriving for them. Clear immediately, then repopulate from
-        // the new chunk set so stale synthetic vehicles cannot linger.
-        clear()
+        // Keep the previous completed snapshot visible until each chateau's new
+        // chunk set is complete. This prevents dots from disappearing while the
+        // user pans or zooms, matching the Compose trajectory manager.
         SpruceWebSocket.shared.subscribeTrajectories(
             bbox: subscription.bbox,
             zoom: subscription.zoom,
@@ -264,16 +298,52 @@ final class RealtimeTrajectories: ObservableObject {
     private func apply(_ message: TrajectoryBuffer) {
         guard message.clientReference == Self.clientReference else { return }
 
+        // A delayed chunk from an older subscription must never replace a newer,
+        // already-published snapshot for the same chateau.
+        if let latestTimestamp = latestSnapshotTimestampByChateau[message.chateau],
+           message.timestamp < latestTimestamp {
+            return
+        }
+
+        // Spruce uses total_chunks == 0 for an unchunked/empty snapshot. Treat
+        // its content as the complete replacement rather than always deleting
+        // the chateau; this mirrors the Compose implementation.
         if message.totalChunks == 0 {
             accumulators.removeValue(forKey: message.chateau)
-            trajectoriesByChateau.removeValue(forKey: message.chateau)
+            let trajectories = message.content.compactMap {
+                Self.prepare($0.content, fallbackChateau: message.chateau)
+            }
+            latestSnapshotTimestampByChateau[message.chateau] = message.timestamp
+            if trajectories.isEmpty {
+                trajectoriesByChateau.removeValue(forKey: message.chateau)
+            } else {
+                trajectoriesByChateau[message.chateau] = trajectories
+            }
             publishCurrentPositions()
             return
         }
 
+        guard message.chunkIndex >= 0,
+              message.chunkIndex < message.totalChunks else {
+            return
+        }
+
         var accumulator: ChunkAccumulator
-        if let existing = accumulators[message.chateau], existing.timestamp == message.timestamp {
-            accumulator = existing
+        if let existing = accumulators[message.chateau] {
+            if existing.timestamp > message.timestamp {
+                return
+            }
+
+            if existing.timestamp == message.timestamp,
+               existing.totalChunks == message.totalChunks {
+                accumulator = existing
+            } else {
+                accumulator = ChunkAccumulator(
+                    timestamp: message.timestamp,
+                    totalChunks: message.totalChunks,
+                    chunks: [:]
+                )
+            }
         } else {
             accumulator = ChunkAccumulator(
                 timestamp: message.timestamp,
@@ -282,15 +352,21 @@ final class RealtimeTrajectories: ObservableObject {
             )
         }
 
-        accumulator.totalChunks = message.totalChunks
         accumulator.chunks[message.chunkIndex] = message.content
         accumulators[message.chateau] = accumulator
 
-        guard accumulator.chunks.count >= accumulator.totalChunks else { return }
+        let expectedChunks = 0..<accumulator.totalChunks
+        guard expectedChunks.allSatisfy({ accumulator.chunks[$0] != nil }) else { return }
 
-        let wrappers = (0..<accumulator.totalChunks).flatMap { accumulator.chunks[$0] ?? [] }
-        trajectoriesByChateau[message.chateau] = wrappers.compactMap {
+        let wrappers = expectedChunks.flatMap { accumulator.chunks[$0] ?? [] }
+        let trajectories = wrappers.compactMap {
             Self.prepare($0.content, fallbackChateau: message.chateau)
+        }
+        latestSnapshotTimestampByChateau[message.chateau] = message.timestamp
+        if trajectories.isEmpty {
+            trajectoriesByChateau.removeValue(forKey: message.chateau)
+        } else {
+            trajectoriesByChateau[message.chateau] = trajectories
         }
         accumulators.removeValue(forKey: message.chateau)
         publishCurrentPositions()
@@ -301,6 +377,8 @@ final class RealtimeTrajectories: ObservableObject {
             let interval: Duration
             if currentZoom < 7 {
                 interval = .seconds(2)
+            } else if isCameraMoving {
+                interval = .seconds(1)
             } else if currentZoom > 12 {
                 interval = .milliseconds(200)
             } else {
@@ -357,6 +435,7 @@ final class RealtimeTrajectories: ObservableObject {
     private func clear() {
         accumulators.removeAll(keepingCapacity: true)
         trajectoriesByChateau.removeAll(keepingCapacity: true)
+        latestSnapshotTimestampByChateau.removeAll(keepingCapacity: true)
         if !vehicles.isEmpty { vehicles = [] }
     }
 

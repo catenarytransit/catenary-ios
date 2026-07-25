@@ -317,7 +317,7 @@ struct mapLibreView: View {
             .textHaloWidth(2)
             .textHaloColor(expression: lineColorExpression)
             .textAllowsOverlap(false)
-            .textFontNames(["Barlow-Regular"])
+            .textFontNames(["Arimo-Regular"])
             .textFontSize(interpolatedBy: .zoomLevel,
                          curveType: .linear,
                          parameters: nil,
@@ -369,7 +369,7 @@ struct mapLibreView: View {
                      sourceLayerIdentifier: "data")
         .symbolPlacement("line")
         .text(expression: NSExpression(format: "route_label"))
-        .textFontNames(["Barlow-Regular"])
+        .textFontNames(["Arimo-Regular"])
         .textFontSize(interpolatedBy: .zoomLevel,
                       curveType: .linear,
                       parameters: nil,
@@ -403,7 +403,7 @@ struct mapLibreView: View {
         .symbolPlacement("line")
         .symbolSpacing(500)
         .text(expression: NSExpression(format: "route_label"))
-        .textFontNames(["Barlow-Bold"])
+        .textFontNames(["Arimo-Bold"])
         .textFontSize(interpolatedBy: .zoomLevel,
                      curveType: .linear,
                      parameters: nil,
@@ -440,7 +440,7 @@ struct mapLibreView: View {
         .symbolPlacement("line")
         .symbolSpacing(200)
         .text(expression: NSExpression(format: "route_label"))
-        .textFontNames(["Barlow-Bold"])
+        .textFontNames(["Arimo-Bold"])
         .textFontSize(interpolatedBy: .zoomLevel,
                      curveType: .linear,
                      parameters: nil,
@@ -478,7 +478,7 @@ struct mapLibreView: View {
                      sourceLayerIdentifier: "data")
         .symbolPlacement("line")
         .text(expression: NSExpression(format: "route_label"))
-        .textFontNames(["Barlow-Medium"])
+        .textFontNames(["Arimo-Medium"])
         .textFontSize(interpolatedBy: .zoomLevel,
                      curveType: .linear,
                      parameters: nil,
@@ -533,7 +533,7 @@ struct mapLibreView: View {
             source: shapeTileSources.busStopsSource(),
             sourceLayerIdentifier: "data")
         .text(expression: NSExpression(format: "displayname"))
-        .textFontNames(["Barlow-Medium"])
+        .textFontNames(["Arimo-Medium"])
         .textFontSize(interpolatedBy: .zoomLevel,
                       curveType: .linear,
                       parameters: nil,
@@ -580,7 +580,7 @@ struct mapLibreView: View {
             source: shapeTileSources.otherStopsSource(),
             sourceLayerIdentifier: "data")
         .text(expression: NSExpression(format: "displayname"))
-        .textFontNames(["Barlow-Bold"])
+        .textFontNames(["Arimo-Bold"])
         .textFontSize(interpolatedBy: .zoomLevel,
                       curveType: .linear,
                       parameters: nil,
@@ -622,9 +622,9 @@ struct mapLibreView: View {
 
         .textFontNames(expression: NSExpression(
             forMLNStepping: .zoomLevelVariable,
-            from: NSExpression(forConstantValue: ["Barlow-Regular"]),
+            from: NSExpression(forConstantValue: ["Arimo-Regular"]),
             stops: NSExpression(forConstantValue: [
-                10: NSExpression(forConstantValue: ["Barlow-Medium"])
+                10: NSExpression(forConstantValue: ["Arimo-Medium"])
             ])
         ))
         .textColor(colorScheme == .dark ? UIColor.white : UIColor(red: 42/255, green: 42/255, blue: 42/255, alpha: 1.0))
@@ -663,9 +663,9 @@ struct mapLibreView: View {
 
         .textFontNames(expression: NSExpression(
             forMLNStepping: .zoomLevelVariable,
-            from: NSExpression(forConstantValue: ["Barlow-Regular"]),
+            from: NSExpression(forConstantValue: ["Arimo-Regular"]),
             stops: NSExpression(forConstantValue: [
-                10: NSExpression(forConstantValue: ["Barlow-Medium"])
+                10: NSExpression(forConstantValue: ["Arimo-Medium"])
             ])
         ))
         .textColor(colorScheme == .dark ? UIColor.white : UIColor(red: 42/255, green: 42/255, blue: 42/255, alpha: 1.0))
@@ -729,9 +729,9 @@ struct mapLibreView: View {
 
         .textFontNames(expression: NSExpression(
             forMLNStepping: .zoomLevelVariable,
-            from: NSExpression(forConstantValue: ["Barlow-Regular"]),
+            from: NSExpression(forConstantValue: ["Arimo-Regular"]),
             stops: NSExpression(forConstantValue: [
-                12: NSExpression(forConstantValue: ["Barlow-Medium"])
+                12: NSExpression(forConstantValue: ["Arimo-Medium"])
             ])
         ))
         .textColor(colorScheme == .dark ? UIColor.white : UIColor(red: 42/255, green: 42/255, blue: 42/255, alpha: 1.0))
@@ -793,9 +793,9 @@ struct mapLibreView: View {
 
         .textFontNames(expression: NSExpression(
             forMLNStepping: .zoomLevelVariable,
-            from: NSExpression(forConstantValue: ["Barlow-Regular"]),
+            from: NSExpression(forConstantValue: ["Arimo-Regular"]),
             stops: NSExpression(forConstantValue: [
-                12: NSExpression(forConstantValue: ["Barlow-Medium"])
+                12: NSExpression(forConstantValue: ["Arimo-Medium"])
             ])
         ))
         .textColor(colorScheme == .dark ? UIColor.white : UIColor(red: 42/255, green: 42/255, blue: 42/255, alpha: 1.0))
@@ -864,9 +864,9 @@ struct mapLibreView: View {
 
         .textFontNames(expression: NSExpression(
             forMLNStepping: .zoomLevelVariable,
-            from: NSExpression(forConstantValue: ["Barlow-Regular"]),
+            from: NSExpression(forConstantValue: ["Arimo-Regular"]),
             stops: NSExpression(forConstantValue: [
-                12: NSExpression(forConstantValue: ["Barlow-Medium"])
+                12: NSExpression(forConstantValue: ["Arimo-Medium"])
             ])
         ))
         .textColor(colorScheme == .dark ? UIColor.white : UIColor(red: 42/255, green: 42/255, blue: 42/255, alpha: 1.0))
@@ -926,9 +926,9 @@ struct mapLibreView: View {
 
         .textFontNames(expression: NSExpression(
             forMLNStepping: .zoomLevelVariable,
-            from: NSExpression(forConstantValue: ["Barlow-Regular"]),
+            from: NSExpression(forConstantValue: ["Arimo-Regular"]),
             stops: NSExpression(forConstantValue: [
-                12: NSExpression(forConstantValue: ["Barlow-Medium"])
+                12: NSExpression(forConstantValue: ["Arimo-Medium"])
             ])
         ))
         .textColor(colorScheme == .dark ? UIColor.white : UIColor(red: 42/255, green: 42/255, blue: 42/255, alpha: 1.0))
@@ -964,7 +964,7 @@ struct mapLibreView: View {
         .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [16: 9, 18: 11]))
         .textOffset(CGVector(dx: 1.2, dy: 0))
         .textAnchor("left")
-        .textFontNames(["Barlow-Bold"])
+        .textFontNames(["Arimo-Bold"])
         .minimumZoomLevel(17)
         
         SymbolStyleLayer(
@@ -979,7 +979,7 @@ struct mapLibreView: View {
             falseExpression: NSExpression(forKeyPath: "ref")
         ))
         .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [14:4, 15:6, 16: 12, 17: 14, 18: 16]))
-        .textFontNames(expression: NSExpression(forMLNStepping: .zoomLevelVariable, from: NSExpression(forConstantValue: ["Barlow-Regular"]), stops: NSExpression(forConstantValue: [10: NSExpression(forConstantValue: ["Barlow-Medium"]), 13: NSExpression(forConstantValue: ["Barlow-Bold"])])))
+        .textFontNames(expression: NSExpression(forMLNStepping: .zoomLevelVariable, from: NSExpression(forConstantValue: ["Arimo-Regular"]), stops: NSExpression(forConstantValue: [10: NSExpression(forConstantValue: ["Arimo-Medium"]), 13: NSExpression(forConstantValue: ["Arimo-Bold"])])))
         .textAllowsOverlap(true)
         .textColor(UIColor(.white))
         .textHaloColor(UIColor(red: 45/255, green: 50/255, blue: 125/255, alpha: 1))
@@ -1173,7 +1173,7 @@ struct mapLibreView: View {
 
         SymbolStyleLayer(identifier: "selected-stop-context-label", source: source)
             .text(expression: NSExpression(format: "name"))
-            .textFontNames(["Barlow-Bold"])
+            .textFontNames(["Arimo-Bold"])
             .textFontSize(12)
             .textOffset(CGVector(dx: 0, dy: 1.4))
             .textAnchor("top")

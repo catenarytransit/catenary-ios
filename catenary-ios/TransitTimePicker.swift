@@ -45,6 +45,7 @@ struct TransitTimePicker: View {
                     )
                     .datePickerStyle(.wheel)
                     .labelsHidden()
+                    .environment(\.locale, Locale(identifier: "en_GB"))
                     .environment(\.timeZone, timezone)
 
                     Button {
@@ -81,12 +82,22 @@ struct TransitTimePicker: View {
 
     private var label: String {
         if isNow { return "Now" }
-        let formatter = DateFormatter()
-        formatter.locale = .autoupdatingCurrent
-        formatter.timeZone = timezone
-        formatter.dateStyle = Calendar.current.isDateInToday(selectedDate) ? .none : .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: selectedDate)
+
+        let timeFormatter = DateFormatter()
+        timeFormatter.calendar = Calendar(identifier: .gregorian)
+        timeFormatter.locale = Locale(identifier: "en_GB_POSIX")
+        timeFormatter.timeZone = timezone
+        timeFormatter.dateFormat = "HH:mm"
+        let time = timeFormatter.string(from: selectedDate)
+
+        guard !Calendar.current.isDateInToday(selectedDate) else { return time }
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.locale = .autoupdatingCurrent
+        dateFormatter.timeZone = timezone
+        dateFormatter.dateStyle = .medium
+        dateFormatter.timeStyle = .none
+        return "\(dateFormatter.string(from: selectedDate)), \(time)"
     }
 
     private var scrubGesture: some Gesture {

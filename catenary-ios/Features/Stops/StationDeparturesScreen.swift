@@ -135,14 +135,9 @@ struct StationDeparturesScreen: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Label {
-                    Text(stationName)
-                        .font(.title2.weight(.semibold))
-                        .lineLimit(2)
-                } icon: {
-                    Image(systemName: stationSystemImage)
-                        .foregroundStyle(.secondary)
-                }
+                Text(stationName)
+                    .font(.title2.weight(.semibold))
+                    .lineLimit(2)
 
                 if let timezoneID {
                     Text(StopDateFormatting.clock(date: now, timezoneID: timezoneID))
@@ -155,13 +150,6 @@ struct StationDeparturesScreen: View {
             }
 
             Spacer(minLength: 8)
-
-            if !model.events.isEmpty {
-                Text("\(filteredEvents.count) departures")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .contentTransition(.numericText())
-            }
         }
     }
 
@@ -208,6 +196,10 @@ struct StationDeparturesScreen: View {
                     Section {
                         ForEach(section.events) { event in
                             let routeInfo = model.routes[event.chateau]?[event.routeId]
+                            let trainDisplayName = StopDeparturePresentation.dbFernverkehrDisplayName(
+                                event: event,
+                                routeInfo: routeInfo
+                            )
                             StationDepartureRow(
                                 event: event,
                                 routeInfo: routeInfo,
@@ -215,7 +207,9 @@ struct StationDeparturesScreen: View {
                                     model.agencies[event.chateau]?[$0]
                                 },
                                 timezoneID: event.timezone ?? timezoneID,
-                                now: now
+                                now: now,
+                                layout: departureLayout,
+                                trainDisplayName: trainDisplayName
                             )
                             .id(event.id)
 
@@ -329,6 +323,10 @@ struct StationDeparturesScreen: View {
         model.timezoneID
     }
 
+    private var departureLayout: StopDepartureLayout {
+        StopDeparturePresentation.layout(for: model.stationCoordinate ?? destinationCoordinate)
+    }
+
     private var availableModes: [StopTransitMode] {
         let modes = Set(model.events.map { event in
             StopTransitMode.from(
@@ -357,9 +355,11 @@ struct StationDeparturesScreen: View {
             }
 
             if mode == .rail, !trainCategories.isEmpty {
-                let category = StopTrainCategoryClassifier.category(
+                let category = StopDeparturePresentation.trainCategory(
                     chateauID: model.primaryChateauID,
-                    shortName: routeInfo?.shortName
+                    routeShortName: routeInfo?.shortName,
+                    event: event,
+                    routeInfo: routeInfo
                 )
                 return enabledTrainCategories.contains(category)
             }
@@ -393,18 +393,6 @@ struct StationDeparturesScreen: View {
             return stationName
         }
         return source.explicitChateauID == nil ? "Station" : "Stop"
-    }
-
-    private var stationSystemImage: String {
-        guard case let .osmStation(_, _, modeType, _, _, _) = destination else {
-            return "mappin.circle.fill"
-        }
-        switch modeType {
-        case "rail", "train": return "tram.fill.tunnel"
-        case "subway", "metro", "tram", "light_rail": return "lightrail.fill"
-        case "bus": return "bus.fill"
-        default: return "building.2.fill"
-        }
     }
 
     private func synchronizeFilters() {
@@ -507,26 +495,25 @@ private struct StopModePicker: View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
                 ForEach(availableModes) { mode in
+                    let isSelected = selection == mode
                     Button {
                         selection = mode
                     } label: {
-                        Label(mode.title, systemImage: mode.systemImage)
-                            .font(.subheadline.weight(selection == mode ? .semibold : .regular))
+                        VStack(spacing: 4) {
+                            Text(mode.title)
+                                .font(.subheadline.weight(isSelected ? .bold : .regular))
+                                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+
+                            Capsule()
+                                .fill(isSelected ? Color.accentColor : Color.clear)
+                                .frame(width: 20, height: 2)
+                        }
                             .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(
-                                selection == mode ? Color.accentColor.opacity(0.16) : Color.clear,
-                                in: Capsule()
-                            )
-                            .overlay {
-                                Capsule()
-                                    .stroke(
-                                        selection == mode ? Color.accentColor : Color.secondary.opacity(0.35),
-                                        lineWidth: 1
-                                    )
-                            }
+                            .padding(.vertical, 8)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }
             .padding(.vertical, 2)
@@ -586,18 +573,19 @@ private struct StationTimeSelector: View {
             draftDate = isNow ? Date() : selectedDate
             isPresented = true
         } label: {
-            HStack(spacing: 8) {
-                Image(systemName: isNow ? "clock.badge.checkmark" : "calendar.badge.clock")
-                Text(label)
-                    .font(.subheadline.weight(.medium))
-                Spacer()
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.semibold))
+            HStack(spacing: 6) {
+                Image(systemName: "clock")
                     .foregroundStyle(.secondary)
+                Text(dateAndTimeLabel)
+                    .font(.subheadline.weight(.medium))
+                if isNow {
+                    Text("Now")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $isPresented) {
@@ -608,6 +596,7 @@ private struct StationTimeSelector: View {
                         selection: $draftDate,
                         displayedComponents: [.date, .hourAndMinute]
                     )
+                    .environment(\.locale, Locale(identifier: "en_GB"))
                     .environment(
                         \.timeZone,
                         timezoneID.flatMap(TimeZone.init(identifier:)) ?? .autoupdatingCurrent
@@ -640,13 +629,28 @@ private struct StationTimeSelector: View {
         }
     }
 
-    private var label: String {
-        if isNow { return "Now" }
-        let formatter = DateFormatter()
-        formatter.locale = .autoupdatingCurrent
-        formatter.timeZone = timezoneID.flatMap(TimeZone.init(identifier:)) ?? .autoupdatingCurrent
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: selectedDate)
+    private var dateAndTimeLabel: String {
+        let timeZone = timezoneID.flatMap(TimeZone.init(identifier:)) ?? .autoupdatingCurrent
+        let displayDate = isNow ? Date() : selectedDate
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.locale = .autoupdatingCurrent
+        dateFormatter.timeZone = timeZone
+        dateFormatter.setLocalizedDateFormatFromTemplate("EEE d MMM")
+
+        let dateLabel = calendar.isDate(displayDate, inSameDayAs: Date())
+            ? "Today"
+            : dateFormatter.string(from: displayDate)
+
+        let timeFormatter = DateFormatter()
+        timeFormatter.calendar = Calendar(identifier: .gregorian)
+        timeFormatter.locale = Locale(identifier: "en_GB_POSIX")
+        timeFormatter.timeZone = timeZone
+        timeFormatter.dateFormat = "HH:mm"
+
+        return "\(dateLabel) \(timeFormatter.string(from: displayDate))"
     }
 }

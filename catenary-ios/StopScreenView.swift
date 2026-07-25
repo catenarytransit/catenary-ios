@@ -339,11 +339,6 @@ struct StopScreenView: View {
                 }
             }
             Spacer()
-            if !model.events.isEmpty {
-                Text("\(model.events.count) departures")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
     }
 
@@ -468,9 +463,10 @@ struct StopScreenView: View {
 
     private func clockText(_ date: Date, timezoneID: String) -> String {
         let formatter = DateFormatter()
-        formatter.locale = .autoupdatingCurrent
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_GB_POSIX")
         formatter.timeZone = TimeZone(identifier: timezoneID) ?? .autoupdatingCurrent
-        formatter.timeStyle = .medium
+        formatter.dateFormat = "HH:mm:ss"
         return formatter.string(from: date)
     }
 

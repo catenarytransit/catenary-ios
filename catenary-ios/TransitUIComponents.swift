@@ -106,12 +106,24 @@ struct TransitRouteBadge: View {
 enum TransitFormatting {
     static func date(_ epochSeconds: Int64?, timezoneID: String?, dateStyle: DateFormatter.Style = .none) -> String {
         guard let epochSeconds else { return "—" }
-        let formatter = DateFormatter()
-        formatter.locale = .autoupdatingCurrent
-        formatter.timeZone = timezoneID.flatMap(TimeZone.init(identifier:)) ?? .autoupdatingCurrent
-        formatter.dateStyle = dateStyle
-        formatter.timeStyle = .short
-        return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(epochSeconds)))
+        let date = Date(timeIntervalSince1970: TimeInterval(epochSeconds))
+        let timeZone = timezoneID.flatMap(TimeZone.init(identifier:)) ?? .autoupdatingCurrent
+
+        let timeFormatter = DateFormatter()
+        timeFormatter.calendar = Calendar(identifier: .gregorian)
+        timeFormatter.locale = Locale(identifier: "en_GB_POSIX")
+        timeFormatter.timeZone = timeZone
+        timeFormatter.dateFormat = "HH:mm"
+        let time = timeFormatter.string(from: date)
+
+        guard dateStyle != .none else { return time }
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.locale = .autoupdatingCurrent
+        dateFormatter.timeZone = timeZone
+        dateFormatter.dateStyle = dateStyle
+        dateFormatter.timeStyle = .none
+        return "\(dateFormatter.string(from: date)) \(time)"
     }
 
     static func day(_ epochSeconds: Int64, timezoneID: String?) -> String {

@@ -408,46 +408,43 @@ private struct SingleTripStopRow: View {
     let showCountdown: Bool
     let onTap: () -> Void
 
+    private let timeColumnWidth: CGFloat = 72
+    private let timelineColumnWidth: CGFloat = 18
+    private let columnSpacing: CGFloat = 8
+
     var body: some View {
         Button(action: onTap) {
-            HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .trailing, spacing: 2) {
-                    if showCountdown, let countdown = countdownText {
-                        Text(countdown)
-                            .font(.caption.monospacedDigit().weight(.semibold))
-                            .foregroundStyle(primaryTimeColor)
-                    } else {
-                        Text(effectiveTimeText)
-                            .font(.subheadline.monospacedDigit().weight(.semibold))
-                            .foregroundStyle(primaryTimeColor)
-                    }
-
+            HStack(alignment: .top, spacing: columnSpacing) {
+                VStack(alignment: .trailing, spacing: 1) {
                     if showOriginalTimetable,
                        let scheduledTimeText,
-                       scheduledTimeText != effectiveTimeText {
+                       let realtimeTimeText,
+                       scheduledTimeText != realtimeTimeText {
                         Text(scheduledTimeText)
                             .font(.caption2.monospacedDigit())
                             .foregroundStyle(.secondary)
-                            .strikethrough(true)
                     }
+
+                    Text(realtimeTimeText ?? scheduledTimeText ?? "—")
+                        .font(.subheadline.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(primaryTimeColor)
 
                     if let delayText {
                         Text(delayText)
                             .font(.caption2.monospacedDigit().weight(.semibold))
                             .foregroundStyle(delayColor)
                     }
-                }
-                .frame(width: 66, alignment: .trailing)
 
-                SingleTripTimelineMarker(
-                    isFirst: index == 0,
-                    isLast: index == totalStops - 1,
-                    isPast: isPast,
-                    isCurrent: isCurrent,
-                    movingProgress: movingDotProgress,
-                    isCancelled: stop.isCancelled
-                )
-                .frame(width: 24, height: 66)
+                    if showCountdown, let countdown = countdownText {
+                        Text(countdown)
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: timeColumnWidth, alignment: .trailing)
+
+                Color.clear
+                    .frame(width: timelineColumnWidth)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(stop.displayName)
@@ -484,15 +481,32 @@ private struct SingleTripStopRow: View {
                     .foregroundStyle(.tertiary)
                     .padding(.top, 4)
             }
+            .frame(minHeight: 58, alignment: .top)
+            .overlay(alignment: .topLeading) {
+                SingleTripTimelineMarker(
+                    isFirst: index == 0,
+                    isLast: index == totalStops - 1,
+                    isPast: isPast,
+                    isCurrent: isCurrent,
+                    movingProgress: movingDotProgress,
+                    isCancelled: stop.isCancelled
+                )
+                .frame(width: timelineColumnWidth)
+                .frame(maxHeight: .infinity)
+                .offset(x: timeColumnWidth + columnSpacing)
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
     }
 
+    private var realtimeEpochSeconds: Int64? {
+        stop.realtimeDepartureTime ?? stop.realtimeArrivalTime
+    }
+
     private var effectiveEpochSeconds: Int64? {
-        stop.realtimeDepartureTime
-            ?? stop.realtimeArrivalTime
+        realtimeEpochSeconds
             ?? stop.raw.scheduledDepartureTimeUnixSeconds
             ?? stop.raw.scheduledArrivalTimeUnixSeconds
             ?? stop.raw.interpolatedStoptimeUnixSeconds
@@ -504,8 +518,8 @@ private struct SingleTripStopRow: View {
             ?? stop.raw.interpolatedStoptimeUnixSeconds
     }
 
-    private var effectiveTimeText: String {
-        timeText(effectiveEpochSeconds) ?? "—"
+    private var realtimeTimeText: String? {
+        timeText(realtimeEpochSeconds)
     }
 
     private var scheduledTimeText: String? {
@@ -515,7 +529,7 @@ private struct SingleTripStopRow: View {
     private var countdownText: String? {
         guard let effectiveEpochSeconds else { return nil }
         let difference = effectiveEpochSeconds - Int64(currentDate.timeIntervalSince1970)
-        if difference <= -60 { return effectiveTimeText }
+        if difference <= -60 { return nil }
         if abs(difference) < 30 { return "Now" }
 
         let minutes = Int(ceil(Double(abs(difference)) / 60))
@@ -549,7 +563,8 @@ private struct SingleTripStopRow: View {
     private func timeText(_ epochSeconds: Int64?) -> String? {
         guard let epochSeconds else { return nil }
         let formatter = DateFormatter()
-        formatter.locale = .autoupdatingCurrent
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_GB_POSIX")
         formatter.dateFormat = "HH:mm"
         formatter.timeZone = TimeZone(identifier: stop.raw.timezone ?? tripTimezone ?? "")
             ?? .autoupdatingCurrent
@@ -568,33 +583,43 @@ private struct SingleTripTimelineMarker: View {
     var body: some View {
         GeometryReader { geometry in
             let centerX = geometry.size.width / 2
-            let centerY: CGFloat = 14
+            let centerY: CGFloat = 12
+            let interRowSpacing: CGFloat = 12
+            let lineWidth: CGFloat = 2
+            let dotDiameter: CGFloat = isCurrent ? 14 : 10
             let lineColor: Color = isPast ? .secondary : .accentColor
 
             ZStack(alignment: .topLeading) {
                 if !isFirst {
                     Rectangle()
-                        .fill(lineColor.opacity(0.55))
-                        .frame(width: 3, height: centerY)
-                        .offset(x: centerX - 1.5)
+                        .fill(lineColor.opacity(0.6))
+                        .frame(width: lineWidth, height: centerY)
+                        .offset(x: centerX - lineWidth / 2)
                 }
 
                 if !isLast {
                     Rectangle()
-                        .fill(lineColor.opacity(0.55))
-                        .frame(width: 3, height: max(geometry.size.height - centerY, 0))
-                        .offset(x: centerX - 1.5, y: centerY)
+                        .fill(lineColor.opacity(0.6))
+                        .frame(
+                            width: lineWidth,
+                            height: max(geometry.size.height - centerY + interRowSpacing, 0)
+                        )
+                        .offset(x: centerX - lineWidth / 2, y: centerY)
 
                     if let movingProgress {
-                        let progress = CGFloat(movingProgress)
-                        let availableHeight = max(geometry.size.height - centerY - 11, 0)
+                        let progress = CGFloat(max(0, min(1, movingProgress)))
+                        let movingDotDiameter: CGFloat = 8
+                        let availableHeight = max(
+                            geometry.size.height - centerY + interRowSpacing - movingDotDiameter,
+                            0
+                        )
 
                         Circle()
                             .fill(.primary)
-                            .overlay(Circle().stroke(.background, lineWidth: 2))
-                            .frame(width: 11, height: 11)
+                            .overlay(Circle().stroke(.background, lineWidth: 1.5))
+                            .frame(width: movingDotDiameter, height: movingDotDiameter)
                             .offset(
-                                x: centerX - 5.5,
+                                x: centerX - movingDotDiameter / 2,
                                 y: centerY + availableHeight * progress
                             )
                     }
@@ -604,12 +629,12 @@ private struct SingleTripTimelineMarker: View {
                     .fill(isCurrent ? Color.green : (isPast ? Color.secondary : Color(.systemBackground)))
                     .overlay {
                         Circle()
-                            .stroke(isCancelled ? Color.red : lineColor, lineWidth: 3)
+                            .stroke(isCancelled ? Color.red : lineColor, lineWidth: 2)
                     }
-                    .frame(width: isCurrent ? 17 : 13, height: isCurrent ? 17 : 13)
+                    .frame(width: dotDiameter, height: dotDiameter)
                     .offset(
-                        x: centerX - (isCurrent ? 8.5 : 6.5),
-                        y: centerY - (isCurrent ? 8.5 : 6.5)
+                        x: centerX - dotDiameter / 2,
+                        y: centerY - dotDiameter / 2
                     )
             }
         }
