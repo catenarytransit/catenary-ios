@@ -576,6 +576,15 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         rebuildTrajectorySource()
     }
 
+    func updateWildfireFeatures(_ features: [MLNPointFeature]) {
+        guard let source = mapView?.style?.source(
+            withIdentifier: WildfireMapIdentifiers.fireNamesSource
+        ) as? MLNShapeSource else { return }
+
+        let shapes: [MLNShape & MLNFeature] = features.map { $0 }
+        source.shape = MLNShapeCollectionFeature(shapes: shapes)
+    }
+
     private func rebuildRealtimeSource() {
         guard let source = mapView?.style?.source(
             withIdentifier: "realtime-vehicles"
@@ -628,6 +637,7 @@ struct mapLibreView: View {
     @ObservedObject var locationManager: LocationManager
     @StateObject private var realtimeVM = RealtimeVehicles()
     @StateObject private var trajectoryVM = RealtimeTrajectories()
+    @StateObject private var wildfireVM = WildfireMapData()
     @StateObject private var featureTapCoordinator = MapFeatureTapCoordinator()
     
     var styleURL: URL {
@@ -1858,6 +1868,10 @@ struct mapLibreView: View {
             shapeLayer
             stationFeaturesLayer
             stopsLayer
+            wildfireMapLayers(
+                fireFeatures: wildfireVM.fireFeatures,
+                darkMode: colorScheme == .dark
+            )
             realtimeLayer
             trajectoryLayer
             selectedStopLayer
@@ -1877,6 +1891,9 @@ struct mapLibreView: View {
             }
             trajectoryVM.onVehiclesChanged = { [weak sourceCoordinator] vehicles in
                 sourceCoordinator?.updateTrajectoryVehicles(vehicles)
+            }
+            wildfireVM.onFeaturesChanged = { [weak sourceCoordinator] features in
+                sourceCoordinator?.updateWildfireFeatures(features)
             }
         }
         .onMapViewProxyUpdate(updateMode: .onFinish, onViewProxyChanged: { proxy in
@@ -1900,6 +1917,9 @@ struct mapLibreView: View {
             trajectoryVM.updateLayerSettings(viewobject.allLayerSettings)
             await trajectoryVM.run()
         }
+        .task {
+            await wildfireVM.run()
+        }
         .onChange(of: viewobject.allLayerSettings) { _, settings in
             featureTapCoordinator.updateLayerSettings(settings)
             realtimeVM.updateLayerSettings(settings)
@@ -1911,6 +1931,7 @@ struct mapLibreView: View {
         .onDisappear {
             realtimeVM.stop()
             trajectoryVM.stop()
+            wildfireVM.stop()
         }
         .mapUserAnnotationStyle(
             MapUserAnnotationStyle(
