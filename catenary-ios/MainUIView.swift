@@ -27,6 +27,7 @@ final class FloatingWindow: UIWindow {
 struct MainUIView: View {
     
     @StateObject var locationManager = LocationManager()
+    @StateObject private var searchViewModel = SearchViewModel()
     @FocusState var focus: Bool
     @State private var isSheetPresented = true
 //    @State private var selectedDetent: PresentationDetent = .height(80)
@@ -59,6 +60,7 @@ struct MainUIView: View {
                     BottomDrawer(
                         selectedDetent: $viewobject.presDetent,
                         locationManager: locationManager,
+                        searchViewModel: searchViewModel,
                         nearbyPinActive: $nearbyPinActive,
                         nearbyPinCoordinate: $nearbyPinCoordinate
                     )
@@ -140,30 +142,32 @@ struct MainUIView: View {
                 }
                 .overlay(alignment: .top) {
                     if viewobject.sheetHeight < 450 {
-                        TextField("Search Here", text: $viewobject.searchText)
-                            .padding(.trailing, 20)
-                            .padding(.vertical, 12)
-                            .safeAreaInset(edge: .leading) { 
-                                Image(.catLogo)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(height: 18)
-                                    .padding(.leading, 10)
-                                    
+                        CatenarySearchBar(
+                            query: $viewobject.searchText,
+                            focus: $focus,
+                            onSettingsClick: {
+                                focus = false
+                                viewobject.searchText = ""
+                                viewobject.push(.settings)
                             }
-                            .background(.regularMaterial, in: Capsule())
-                            .padding()
-                            .ignoresSafeArea(.container, edges: .bottom)
-                            .transition(.asymmetric(insertion: .opacity, removal: .opacity))
-                            .focused($focus)
-
-                            
+                        )
+                        .padding()
+                        .ignoresSafeArea(.container, edges: .bottom)
+                        .transition(.asymmetric(insertion: .opacity, removal: .opacity))
                     }
                 }
-                .onChange(of: focus) { from, to in
-                    guard to else { return }
-                    viewobject.presDetent = .large
-                    viewobject.isSearchFocusing = true
+                .onChange(of: focus) { _, isFocused in
+                    if isFocused {
+                        viewobject.presDetent = .large
+                        viewobject.isSearchFocusing = true
+                    }
+                }
+                .onChange(of: viewobject.searchText) { _, query in
+                    searchViewModel.search(
+                        query: query,
+                        userLocation: locationManager.lastKnownLocation,
+                        mapCenter: viewobject.visibleCoordinateBounds.catenarySearchCenter
+                    )
                 }
 //            if presentation detent switches to large & issearch focusing is true, switch focus state to true
 
