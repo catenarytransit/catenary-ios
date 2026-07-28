@@ -10,6 +10,7 @@ import CoreLocationUI
 import SwiftUI
 import CoreLocation
 import MapLibreSwiftUI
+import UIKit
 
 final class FloatingWindow: UIWindow {
     override init(windowScene: UIWindowScene) {
@@ -28,6 +29,7 @@ struct MainUIView: View {
     
     @StateObject var locationManager = LocationManager()
     @StateObject private var searchViewModel = SearchViewModel()
+    @StateObject private var nearbyPinMapCoordinator = NearbyPinMapCoordinator()
     @FocusState var focus: Bool
     @State private var isSheetPresented = true
 //    @State private var selectedDetent: PresentationDetent = .height(80)
@@ -39,11 +41,18 @@ struct MainUIView: View {
     @State var tempSheetOpacity: CGFloat = 0
     @State private var nearbyPinActive = false
     @State private var nearbyPinCoordinate: CLLocationCoordinate2D?
+    @State private var mapViewportSize: CGSize = .zero
     
     
     var body: some View {
         ZStack {
-            mapLibreView(locationManager: locationManager)
+            mapLibreView(
+                locationManager: locationManager,
+                nearbyPinMapCoordinator: nearbyPinMapCoordinator,
+                nearbyPinActive: nearbyPinActive,
+                nearbyPinCoordinate: nearbyPinCoordinate,
+                contentInset: mapContentInset
+            )
                 .onOpenURL { url in
                     viewobject.openDeepLink(url)
                     isSheetPresented = true
@@ -129,7 +138,7 @@ struct MainUIView: View {
                     if nearbyPinActive, nearbyPinCoordinate != nil {
                         DraggableNearbyPinOverlay(
                             coordinate: $nearbyPinCoordinate,
-                            bounds: viewobject.visibleCoordinateBounds
+                            mapCoordinator: nearbyPinMapCoordinator
                         )
                     }
                 }
@@ -172,14 +181,25 @@ struct MainUIView: View {
 //            if presentation detent switches to large & issearch focusing is true, switch focus state to true
 
         }
-        
-        
-        
-        
-        
-        
+        .onGeometryChange(for: CGSize.self) { proxy in
+            proxy.size
+        } action: { _, newSize in
+            mapViewportSize = newSize
+        }
     }
     @EnvironmentObject var viewobject: viewObject
+
+    private var mapContentInset: UIEdgeInsets {
+        guard isSheetPresented, mapViewportSize.height > 0 else { return .zero }
+        guard viewobject.sheetHeight >= mapViewportSize.height / 2 else { return .zero }
+
+        return UIEdgeInsets(
+            top: 0,
+            left: 0,
+            bottom: mapViewportSize.height / 2,
+            right: 0
+        )
+    }
     
     @ViewBuilder
     func floatingToolBar() -> some View {

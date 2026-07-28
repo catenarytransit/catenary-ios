@@ -8,6 +8,7 @@ import SwiftUI
 import MapLibreSwiftUI
 import MapLibre
 import MapLibreSwiftDSL
+import UIKit
 
 
 private enum VehicleFeatureBuilder {
@@ -635,6 +636,10 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
 struct mapLibreView: View {
     @Environment(\.colorScheme) var colorScheme: ColorScheme
     @ObservedObject var locationManager: LocationManager
+    @ObservedObject var nearbyPinMapCoordinator: NearbyPinMapCoordinator
+    let nearbyPinActive: Bool
+    let nearbyPinCoordinate: CLLocationCoordinate2D?
+    let contentInset: UIEdgeInsets
     @StateObject private var realtimeVM = RealtimeVehicles()
     @StateObject private var trajectoryVM = RealtimeTrajectories()
     @StateObject private var wildfireVM = WildfireMapData()
@@ -1835,6 +1840,28 @@ struct mapLibreView: View {
     }
 
     @MapViewContentBuilder
+    var nearbyPinLayer: some StyleLayerCollection {
+        let source = ShapeSource(identifier: NearbyPinMapCoordinator.sourceIdentifier) {
+            if nearbyPinActive, let nearbyPinCoordinate {
+                let feature = MLNPointFeature()
+                feature.coordinate = nearbyPinCoordinate
+                feature
+            }
+        }
+
+        SymbolStyleLayer(
+            identifier: NearbyPinMapCoordinator.layerIdentifier,
+            source: source
+        )
+        .iconImage(UIImage(named: "map_marker_1")!)
+        .iconAnchor("bottom")
+        .iconAllowsOverlap(true)
+        .iconScale(1)
+        .renderAbove(.all)
+        .visible(nearbyPinActive)
+    }
+
+    @MapViewContentBuilder
     var selectedStopLayer: some StyleLayerCollection {
         let source = ShapeSource(identifier: "selected-stop-context") {
             if let context = viewobject.selectedStopContext {
@@ -1874,6 +1901,7 @@ struct mapLibreView: View {
             )
             realtimeLayer
             trajectoryLayer
+            nearbyPinLayer
             selectedStopLayer
         }
 
@@ -1882,6 +1910,12 @@ struct mapLibreView: View {
             map.mapView.attributionButton.isHidden = true
             map.mapView.compassView.isHidden = true
             map.mapView.showsUserLocation = true
+            nearbyPinMapCoordinator.install(on: map.mapView)
+            nearbyPinMapCoordinator.updateContentInset(contentInset)
+            nearbyPinMapCoordinator.updatePin(
+                active: nearbyPinActive,
+                coordinate: nearbyPinCoordinate
+            )
             featureTapCoordinator.install(on: map.mapView, navigator: viewobject)
             featureTapCoordinator.updateLayerSettings(viewobject.allLayerSettings)
 
@@ -1898,6 +1932,7 @@ struct mapLibreView: View {
         }
         .onMapViewProxyUpdate(updateMode: .onFinish, onViewProxyChanged: { proxy in
             Task { @MainActor in
+                nearbyPinMapCoordinator.refreshScreenPoint()
                 viewobject.currentRotation = proxy.direction
                 viewobject.currZoom = proxy.zoomLevel
                 viewobject.visibleCoordinateBounds = proxy.visibleCoordinateBounds
@@ -1952,8 +1987,14 @@ struct mapLibreView: View {
 }
 
 #Preview {
-    mapLibreView(locationManager: LocationManager())
-        .environmentObject(viewObject())
+    mapLibreView(
+        locationManager: LocationManager(),
+        nearbyPinMapCoordinator: NearbyPinMapCoordinator(),
+        nearbyPinActive: false,
+        nearbyPinCoordinate: nil,
+        contentInset: .zero
+    )
+    .environmentObject(viewObject())
 }
 
 struct TileBox {
