@@ -149,14 +149,16 @@ private enum DelayDiffLocale {
 
     static func minuteMarking(for locale: Locale, showSeconds: Bool) -> String {
         switch languageCode(for: locale) {
-        case "zh", "ko", "ja": return "分"
+        case "zh", "ja": return "分"
+        case "ko": return "분"
         default: return showSeconds ? "m" : "min"
         }
     }
 
     static func secondMarking(for locale: Locale) -> String {
         switch languageCode(for: locale) {
-        case "zh", "ko", "ja": return "秒"
+        case "ko": return "초"
+        case "zh","ja": return "秒"
         default: return "s"
         }
     }

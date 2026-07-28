@@ -61,7 +61,7 @@ struct TrajectorySegment: Decodable {
 
 // MARK: - Map-facing model
 
-struct RealtimeTrajectoryVehicle: Identifiable, Hashable {
+struct RealtimeTrajectoryVehicle: Identifiable, Hashable, @unchecked Sendable {
     let id: String
     let coordinate: CLLocationCoordinate2D
     let routeType: Int
@@ -93,11 +93,157 @@ struct RealtimeTrajectoryVehicle: Identifiable, Hashable {
     }
 }
 
+private struct PreparedTrajectory: @unchecked Sendable {
+    let id: String
+    let departure: Date
+    let arrival: Date
+    let coordinates: [CLLocationCoordinate2D]
+    let cumulativeLengths: [Double]
+    let totalLength: Double
+    let routeType: Int
+    let chateauID: String
+    let tripID: String?
+    let routeID: String?
+    let displayName: String?
+    let headsign: String
+    let tripShortName: String?
+    let routeShortName: String?
+    let routeLongName: String?
+    let color: String?
+    let textColor: String?
+    let startDate: String?
+    let startTime: String?
+}
+
+private struct TrajectoryInterpolationResult: Sendable {
+    let latitude: Double
+    let longitude: Double
+    let bearing: Double
+}
+
+private actor TrajectoryInterpolationWorker {
+    func positions(
+        for trajectories: [PreparedTrajectory],
+        at now: Date
+    ) -> [RealtimeTrajectoryVehicle] {
+        makeCurrentTrajectoryPositions(trajectories: trajectories, now: now)
+    }
+}
+
+private func makeCurrentTrajectoryPositions(
+    trajectories: [PreparedTrajectory],
+    now: Date
+) -> [RealtimeTrajectoryVehicle] {
+    var output: [RealtimeTrajectoryVehicle] = []
+    output.reserveCapacity(trajectories.count)
+
+    for trajectory in trajectories {
+        if Task.isCancelled { return [] }
+
+        let start = trajectory.departure.addingTimeInterval(-30)
+        let end = trajectory.arrival.addingTimeInterval(30)
+        guard now >= start, now <= end else { continue }
+
+        let duration = trajectory.arrival.timeIntervalSince(trajectory.departure)
+        guard duration > 0 else { continue }
+        let progress = max(0, min(1, now.timeIntervalSince(trajectory.departure) / duration))
+        guard let interpolated = interpolateTrajectory(trajectory, progress: progress) else {
+            continue
+        }
+
+        output.append(RealtimeTrajectoryVehicle(
+            id: "trajectory_\(trajectory.id)",
+            coordinate: CLLocationCoordinate2D(
+                latitude: interpolated.latitude,
+                longitude: interpolated.longitude
+            ),
+            routeType: trajectory.routeType,
+            bearing: interpolated.bearing,
+            chateauID: trajectory.chateauID,
+            tripID: trajectory.tripID,
+            routeID: trajectory.routeID,
+            displayName: trajectory.displayName,
+            headsign: trajectory.headsign,
+            tripShortName: trajectory.tripShortName,
+            routeShortName: trajectory.routeShortName,
+            routeLongName: trajectory.routeLongName,
+            color: trajectory.color,
+            textColor: trajectory.textColor,
+            startDate: trajectory.startDate,
+            startTime: trajectory.startTime
+        ))
+    }
+
+    output.sort { $0.id < $1.id }
+    return output
+}
+
+private func interpolateTrajectory(
+    _ trajectory: PreparedTrajectory,
+    progress: Double
+) -> TrajectoryInterpolationResult? {
+    guard let first = trajectory.coordinates.first else { return nil }
+    guard trajectory.coordinates.count > 1 else {
+        return TrajectoryInterpolationResult(
+            latitude: first.latitude,
+            longitude: first.longitude,
+            bearing: 0
+        )
+    }
+    guard trajectory.totalLength > 0 else {
+        return TrajectoryInterpolationResult(
+            latitude: first.latitude,
+            longitude: first.longitude,
+            bearing: 0
+        )
+    }
+
+    let target = progress * trajectory.totalLength
+    var low = 1
+    var high = trajectory.cumulativeLengths.count - 1
+    while low < high {
+        let middle = (low + high) / 2
+        if trajectory.cumulativeLengths[middle] < target {
+            low = middle + 1
+        } else {
+            high = middle
+        }
+    }
+
+    let endIndex = low
+    let startIndex = endIndex - 1
+    let start = trajectory.coordinates[startIndex]
+    let end = trajectory.coordinates[endIndex]
+    let startDistance = trajectory.cumulativeLengths[startIndex]
+    let segmentLength = trajectory.cumulativeLengths[endIndex] - startDistance
+    let localProgress = segmentLength > 0 ? (target - startDistance) / segmentLength : 0
+
+    return TrajectoryInterpolationResult(
+        latitude: start.latitude + localProgress * (end.latitude - start.latitude),
+        longitude: start.longitude + localProgress * (end.longitude - start.longitude),
+        bearing: trajectoryBearing(from: start, to: end)
+    )
+}
+
+private func trajectoryBearing(
+    from start: CLLocationCoordinate2D,
+    to end: CLLocationCoordinate2D
+) -> Double {
+    let startLatitude = start.latitude * .pi / 180
+    let endLatitude = end.latitude * .pi / 180
+    let longitudeDelta = (end.longitude - start.longitude) * .pi / 180
+    let y = sin(longitudeDelta) * cos(endLatitude)
+    let x = cos(startLatitude) * sin(endLatitude)
+        - sin(startLatitude) * cos(endLatitude) * cos(longitudeDelta)
+    return (atan2(y, x) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
+}
+
 // MARK: - Store
 
 @MainActor
 final class RealtimeTrajectories: ObservableObject {
-    @Published private(set) var vehicles: [RealtimeTrajectoryVehicle] = []
+    private(set) var vehicles: [RealtimeTrajectoryVehicle] = []
+    var onVehiclesChanged: (([RealtimeTrajectoryVehicle]) -> Void)?
 
     private struct Subscription: Equatable {
         let bbox: [Double]
@@ -111,26 +257,6 @@ final class RealtimeTrajectories: ObservableObject {
         var chunks: [Int: [TrajectoryWrapper]]
     }
 
-    private struct PreparedTrajectory {
-        let id: String
-        let departure: Date
-        let arrival: Date
-        let coordinates: [CLLocationCoordinate2D]
-        let routeType: Int
-        let chateauID: String
-        let tripID: String?
-        let routeID: String?
-        let displayName: String?
-        let headsign: String
-        let tripShortName: String?
-        let routeShortName: String?
-        let routeLongName: String?
-        let color: String?
-        let textColor: String?
-        let startDate: String?
-        let startTime: String?
-    }
-
     private var bounds: MLNCoordinateBounds?
     private var currentZoom: Double = 5
     private var layerSettings = AllLayerSettings()
@@ -139,27 +265,22 @@ final class RealtimeTrajectories: ObservableObject {
     private var subscriptionTask: Task<Void, Never>?
     private var subscriptionRefreshTask: Task<Void, Never>?
     private var interpolationTask: Task<Void, Never>?
-    private var cameraIdleTask: Task<Void, Never>?
+    private var positionPublishTask: Task<Void, Never>?
     private var bufferCancellable: AnyCancellable?
     private var isRunning = false
-    private var isCameraMoving = false
+    private var renderGeneration: UInt64 = 0
 
     private var accumulators: [String: ChunkAccumulator] = [:]
     private var trajectoriesByChateau: [String: [PreparedTrajectory]] = [:]
     private var latestSnapshotTimestampByChateau: [String: UInt64] = [:]
+    private let interpolationWorker = TrajectoryInterpolationWorker()
 
     private let subscriptionDebounce: Duration = .milliseconds(175)
     private let subscriptionRefreshInterval: Duration = .seconds(15)
-    private let cameraIdleDelay: Duration = .milliseconds(250)
     private static let clientReference = "trajectories_layer"
 
-    func updateBounds(_ bounds: MLNCoordinateBounds) {
+    func updateViewport(bounds: MLNCoordinateBounds, zoom: Double) {
         self.bounds = bounds
-        markCameraMoving()
-        scheduleSubscription()
-    }
-
-    func updateZoom(_ zoom: Double) {
         currentZoom = zoom
         scheduleSubscription()
     }
@@ -167,17 +288,6 @@ final class RealtimeTrajectories: ObservableObject {
     func updateLayerSettings(_ settings: AllLayerSettings) {
         layerSettings = settings
         scheduleSubscription()
-    }
-
-    private func markCameraMoving() {
-        isCameraMoving = true
-        cameraIdleTask?.cancel()
-        cameraIdleTask = Task { [weak self] in
-            guard let self else { return }
-            try? await Task.sleep(for: cameraIdleDelay)
-            if Task.isCancelled { return }
-            isCameraMoving = false
-        }
     }
 
     func run() async {
@@ -214,9 +324,8 @@ final class RealtimeTrajectories: ObservableObject {
         subscriptionRefreshTask = nil
         interpolationTask?.cancel()
         interpolationTask = nil
-        cameraIdleTask?.cancel()
-        cameraIdleTask = nil
-        isCameraMoving = false
+        positionPublishTask?.cancel()
+        positionPublishTask = nil
         bufferCancellable?.cancel()
         bufferCancellable = nil
         activeSubscription = nil
@@ -319,7 +428,7 @@ final class RealtimeTrajectories: ObservableObject {
             } else {
                 trajectoriesByChateau[message.chateau] = trajectories
             }
-            publishCurrentPositions()
+            schedulePositionPublish()
             return
         }
 
@@ -369,7 +478,7 @@ final class RealtimeTrajectories: ObservableObject {
             trajectoriesByChateau[message.chateau] = trajectories
         }
         accumulators.removeValue(forKey: message.chateau)
-        publishCurrentPositions()
+        schedulePositionPublish()
     }
 
     private func interpolationLoop() async {
@@ -377,8 +486,6 @@ final class RealtimeTrajectories: ObservableObject {
             let interval: Duration
             if currentZoom < 7 {
                 interval = .seconds(2)
-            } else if isCameraMoving {
-                interval = .seconds(1)
             } else if currentZoom > 12 {
                 interval = .milliseconds(200)
             } else {
@@ -386,49 +493,27 @@ final class RealtimeTrajectories: ObservableObject {
             }
             try? await Task.sleep(for: interval)
             if Task.isCancelled { return }
-            publishCurrentPositions()
+            schedulePositionPublish()
         }
     }
 
-    private func publishCurrentPositions(now: Date = Date()) {
-        var output: [RealtimeTrajectoryVehicle] = []
+    private func schedulePositionPublish(now: Date = Date()) {
+        let snapshot = trajectoriesByChateau.values.flatMap { $0 }
+        renderGeneration &+= 1
+        let generation = renderGeneration
+        let worker = interpolationWorker
 
-        for trajectories in trajectoriesByChateau.values {
-            for trajectory in trajectories {
-                let start = trajectory.departure.addingTimeInterval(-30)
-                let end = trajectory.arrival.addingTimeInterval(30)
-                guard now >= start, now <= end else { continue }
+        positionPublishTask?.cancel()
+        positionPublishTask = Task { [weak self] in
+            let output = await worker.positions(for: snapshot, at: now)
+            guard let self,
+                  !Task.isCancelled,
+                  generation == self.renderGeneration else { return }
 
-                let duration = trajectory.arrival.timeIntervalSince(trajectory.departure)
-                guard duration > 0 else { continue }
-                let progress = max(0, min(1, now.timeIntervalSince(trajectory.departure) / duration))
-                guard let interpolated = Self.interpolate(trajectory.coordinates, progress: progress) else {
-                    continue
-                }
-
-                output.append(RealtimeTrajectoryVehicle(
-                    id: "trajectory_\(trajectory.id)",
-                    coordinate: interpolated.coordinate,
-                    routeType: trajectory.routeType,
-                    bearing: interpolated.bearing,
-                    chateauID: trajectory.chateauID,
-                    tripID: trajectory.tripID,
-                    routeID: trajectory.routeID,
-                    displayName: trajectory.displayName,
-                    headsign: trajectory.headsign,
-                    tripShortName: trajectory.tripShortName,
-                    routeShortName: trajectory.routeShortName,
-                    routeLongName: trajectory.routeLongName,
-                    color: trajectory.color,
-                    textColor: trajectory.textColor,
-                    startDate: trajectory.startDate,
-                    startTime: trajectory.startTime
-                ))
-            }
-        }
-
-        if output != vehicles {
-            vehicles = output
+            self.positionPublishTask = nil
+            guard output != self.vehicles else { return }
+            self.vehicles = output
+            self.onVehiclesChanged?(output)
         }
     }
 
@@ -436,7 +521,12 @@ final class RealtimeTrajectories: ObservableObject {
         accumulators.removeAll(keepingCapacity: true)
         trajectoriesByChateau.removeAll(keepingCapacity: true)
         latestSnapshotTimestampByChateau.removeAll(keepingCapacity: true)
-        if !vehicles.isEmpty { vehicles = [] }
+        renderGeneration &+= 1
+        positionPublishTask?.cancel()
+        positionPublishTask = nil
+        guard !vehicles.isEmpty else { return }
+        vehicles = []
+        onVehiclesChanged?([])
     }
 
     private static func prepare(_ item: TrajectoryItem, fallbackChateau: String) -> PreparedTrajectory? {
@@ -460,11 +550,28 @@ final class RealtimeTrajectories: ObservableObject {
         }
         guard !coordinates.isEmpty else { return nil }
 
+        var cumulativeLengths = [0.0]
+        cumulativeLengths.reserveCapacity(coordinates.count)
+        var totalLength = 0.0
+        if coordinates.count > 1 {
+            for index in 0..<(coordinates.count - 1) {
+                let start = coordinates[index]
+                let end = coordinates[index + 1]
+                totalLength += hypot(
+                    end.longitude - start.longitude,
+                    end.latitude - start.latitude
+                )
+                cumulativeLengths.append(totalLength)
+            }
+        }
+
         return PreparedTrajectory(
             id: identifier,
             departure: departure,
             arrival: arrival,
             coordinates: coordinates,
+            cumulativeLengths: cumulativeLengths,
+            totalLength: totalLength,
             routeType: item.route_type ?? routeType(for: item.mode),
             chateauID: item.chateau_id ?? fallbackChateau,
             tripID: item.trip_id,
@@ -504,70 +611,4 @@ final class RealtimeTrajectories: ObservableObject {
         return iso8601.date(from: value) ?? iso8601Fractional.date(from: value)
     }
 
-    private struct InterpolationResult {
-        let coordinate: CLLocationCoordinate2D
-        let bearing: Double
-    }
-
-    private static func interpolate(
-        _ coordinates: [CLLocationCoordinate2D],
-        progress: Double
-    ) -> InterpolationResult? {
-        guard let first = coordinates.first else { return nil }
-        guard coordinates.count > 1 else {
-            return InterpolationResult(coordinate: first, bearing: 0)
-        }
-
-        var lengths: [Double] = []
-        lengths.reserveCapacity(coordinates.count - 1)
-        var total = 0.0
-        for index in 0..<(coordinates.count - 1) {
-            let start = coordinates[index]
-            let end = coordinates[index + 1]
-            let dx = end.longitude - start.longitude
-            let dy = end.latitude - start.latitude
-            let length = hypot(dx, dy)
-            lengths.append(length)
-            total += length
-        }
-        guard total > 0 else {
-            return InterpolationResult(coordinate: first, bearing: 0)
-        }
-
-        let target = progress * total
-        var accumulated = 0.0
-        for index in lengths.indices {
-            let length = lengths[index]
-            if accumulated + length >= target {
-                let start = coordinates[index]
-                let end = coordinates[index + 1]
-                let localProgress = length > 0 ? (target - accumulated) / length : 0
-                return InterpolationResult(
-                    coordinate: CLLocationCoordinate2D(
-                        latitude: start.latitude + localProgress * (end.latitude - start.latitude),
-                        longitude: start.longitude + localProgress * (end.longitude - start.longitude)
-                    ),
-                    bearing: bearing(from: start, to: end)
-                )
-            }
-            accumulated += length
-        }
-
-        let end = coordinates[coordinates.count - 1]
-        let previous = coordinates[coordinates.count - 2]
-        return InterpolationResult(coordinate: end, bearing: bearing(from: previous, to: end))
-    }
-
-    private static func bearing(
-        from start: CLLocationCoordinate2D,
-        to end: CLLocationCoordinate2D
-    ) -> Double {
-        let startLatitude = start.latitude * .pi / 180
-        let endLatitude = end.latitude * .pi / 180
-        let longitudeDelta = (end.longitude - start.longitude) * .pi / 180
-        let y = sin(longitudeDelta) * cos(endLatitude)
-        let x = cos(startLatitude) * sin(endLatitude)
-            - sin(startLatitude) * cos(endLatitude) * cos(longitudeDelta)
-        return (atan2(y, x) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
-    }
 }

@@ -15,6 +15,7 @@ import MapLibreSwiftUI
 struct BottomDrawer: View {
     @Binding var selectedDetent: PresentationDetent
     @ObservedObject var locationManager: LocationManager
+    @ObservedObject var searchViewModel: SearchViewModel
     @Binding var nearbyPinActive: Bool
     @Binding var nearbyPinCoordinate: CLLocationCoordinate2D?
     @EnvironmentObject var viewObject: viewObject
@@ -29,6 +30,14 @@ struct BottomDrawer: View {
                     nearbyPinActive: $nearbyPinActive,
                     nearbyPinCoordinate: $nearbyPinCoordinate
                 )
+            } else if isFocused {
+                CatenarySearchResultsView(
+                    viewModel: searchViewModel,
+                    onCypressClick: selectCypress,
+                    onStopClick: selectStop,
+                    onRouteClick: selectRoute,
+                    onOsmStationClick: selectOsmStation
+                )
             } else {
                 NearbyDeparturesView(
                     locationManager: locationManager,
@@ -41,21 +50,14 @@ struct BottomDrawer: View {
             VStack {
                 if viewObject.currentStackItem == nil {
                     if viewObject.confirmedEqual || viewObject.isVisible {
-                        TextField("Search Here", text: $viewObject.searchText)
-                            .padding(.trailing, 20)
-                            .padding(.vertical, 12)
-                            .safeAreaInset(edge: .leading) {
-                                Image(.catLogo)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(height: 18)
-                                    .padding(.leading, 10)
-                            }
-                            .focused($isFocused)
-                            .catenarySearchBarSurface()
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                            .padding(.horizontal, 18)
-                            .frame(height: 80)
+                        CatenarySearchBar(
+                            query: $viewObject.searchText,
+                            focus: $isFocused,
+                            onSettingsClick: openSettings
+                        )
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .padding(.horizontal, 18)
+                        .frame(height: 80)
                     } else if selectedDetent != .height(80) {
                         Spacer()
                             .frame(height: 0.5 * max(160 - (viewObject.largeDetentHeight - viewObject.sheetHeight), 0))
@@ -80,6 +82,55 @@ struct BottomDrawer: View {
                 }
             }
         }
+        .onChange(of: isFocused) { _, focused in
+            if !focused {
+                viewObject.isSearchFocusing = false
+            }
+        }
+    }
+
+    private func selectCypress(_ feature: SearchCypressFeature) {
+        guard let coordinate = feature.coordinate else { return }
+        finishSearch()
+        viewObject.camera = .center(coordinate, zoom: 16)
+        selectedDetent = .height(350)
+    }
+
+    private func selectStop(_ ranking: SearchStopRanking) {
+        guard let chateauID = ranking.chateau, let stopID = ranking.gtfsID else { return }
+        finishSearch()
+        viewObject.push(.stop(chateauID: chateauID, stopID: stopID))
+    }
+
+    private func selectRoute(_ ranking: SearchRouteRanking) {
+        guard let chateauID = ranking.chateau, let routeID = ranking.gtfsID else { return }
+        finishSearch()
+        viewObject.push(.route(chateauID: chateauID, routeID: routeID))
+    }
+
+    private func selectOsmStation(_ station: SearchOsmStationResult) {
+        guard let osmStationID = station.osmID else { return }
+        finishSearch()
+        viewObject.push(
+            .osmStation(
+                osmStationID: osmStationID,
+                stationName: station.name,
+                modeType: station.modeType,
+                latitude: station.point?.y,
+                longitude: station.point?.x
+            )
+        )
+    }
+
+    private func openSettings() {
+        finishSearch()
+        viewObject.push(.settings)
+    }
+
+    private func finishSearch() {
+        isFocused = false
+        viewObject.isSearchFocusing = false
+        viewObject.searchText = ""
     }
 }
 

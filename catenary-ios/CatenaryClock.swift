@@ -53,7 +53,7 @@ struct FormattedTimeText: View {
         var text = Text(verbatim: parts.main).font(font)
 
         if showSeconds {
-            text = text + Text(verbatim: parts.seconds).font(secondsFont ?? font)
+            text = Text("\(text) \(Text(verbatim: parts.seconds).font(secondsFont ?? font))")
         }
 
         switch textDecoration {
