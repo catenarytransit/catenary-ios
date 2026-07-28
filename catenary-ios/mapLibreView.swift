@@ -1897,17 +1897,19 @@ struct mapLibreView: View {
             }
         }
         .onMapViewProxyUpdate(updateMode: .onFinish, onViewProxyChanged: { proxy in
-            viewobject.currentRotation = proxy.direction
-            viewobject.currZoom = proxy.zoomLevel
-            viewobject.visibleCoordinateBounds = proxy.visibleCoordinateBounds
-            realtimeVM.updateViewport(
-                bounds: proxy.visibleCoordinateBounds,
-                zoom: proxy.zoomLevel
-            )
-            trajectoryVM.updateViewport(
-                bounds: proxy.visibleCoordinateBounds,
-                zoom: proxy.zoomLevel
-            )
+            Task { @MainActor in
+                viewobject.currentRotation = proxy.direction
+                viewobject.currZoom = proxy.zoomLevel
+                viewobject.visibleCoordinateBounds = proxy.visibleCoordinateBounds
+                realtimeVM.updateViewport(
+                    bounds: proxy.visibleCoordinateBounds,
+                    zoom: proxy.zoomLevel
+                )
+                trajectoryVM.updateViewport(
+                    bounds: proxy.visibleCoordinateBounds,
+                    zoom: proxy.zoomLevel
+                )
+            }
         })
         .task {
             realtimeVM.updateLayerSettings(viewobject.allLayerSettings)

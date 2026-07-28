@@ -899,7 +899,7 @@ struct SearchAdminArea: Decodable, Sendable {
 extension MLNCoordinateBounds {
     var catenarySearchCenter: CLLocationCoordinate2D {
         let latitude = (sw.latitude + ne.latitude) / 2
-        var west = sw.longitude
+        let west = sw.longitude
         var east = ne.longitude
         if east < west {
             east += 360

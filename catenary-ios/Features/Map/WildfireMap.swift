@@ -256,16 +256,16 @@ func wildfireMapLayers(
     .minimumZoomLevel(6)
 
     SymbolStyleLayer(identifier: "firenameslabelwd", source: fireNamesSource)
-        .iconImage(
-            featurePropertyNamed: "icon_size",
-            mappings: [
-                "small": wildfireFlameImage(pointSize: 12),
-                "medium": wildfireFlameImage(pointSize: 16),
-                "large": wildfireFlameImage(pointSize: 20),
-                "very-large": wildfireFlameImage(pointSize: 24)
-            ],
-            default: wildfireFlameImage(pointSize: 12)
-        )
+//        .iconImage(
+//            featurePropertyNamed: "icon_size",
+//            mappings: [
+//                "small": wildfireFlameImage(pointSize: 12),
+//                "medium": wildfireFlameImage(pointSize: 16),
+//                "large": wildfireFlameImage(pointSize: 20),
+//                "very-large": wildfireFlameImage(pointSize: 24)
+//            ],
+//            default: wildfireFlameImage(pointSize: 12)
+//        )
         .iconAllowsOverlap(true)
         .text(expression: NSExpression(format: "display_name"))
         .textOffset(CGVector(dx: 0, dy: 1.5))

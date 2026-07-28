@@ -124,10 +124,13 @@ struct AlertsBox: View {
     @ViewBuilder
     private var expandedAlertContent: some View {
         if isScrollable {
-            ScrollView {
-                alertItems
+            GeometryReader { proxy in
+                ScrollView {
+                    alertItems
+                }
+                .frame(maxHeight: proxy.size.height * 0.8)
             }
-            .frame(maxHeight: UIScreen.main.bounds.height * 0.8)
+            .frame(maxHeight: .infinity)
         } else {
             alertItems
         }
@@ -300,7 +303,8 @@ private struct AlertActivePeriodsView: View {
     private func alertExceptionText(_ text: String) -> Text {
         guard let separator = text.range(of: ": ") else { return Text(text) }
         let label = String(text[..<separator.lowerBound]) + ":"
-        return Text(label).bold() + Text(" " + String(text[separator.upperBound...]))
+        return Text("\(Text(label).bold()) \(String(text[separator.upperBound...]))")
+
     }
 }
 
@@ -722,3 +726,4 @@ private extension SingleTripAlert {
             || url?.translation(for: language) != nil
     }
 }
+

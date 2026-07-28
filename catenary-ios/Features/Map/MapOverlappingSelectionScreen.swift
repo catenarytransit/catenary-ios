@@ -174,7 +174,7 @@ private struct VehicleSelectionRow: View {
 
         return Group {
             if let shortName, let longName, !longName.localizedCaseInsensitiveContains(shortName) {
-                (Text(shortName).bold() + Text(" \(longName)"))
+                Text("\(Text(shortName).bold()) \(longName)")
             } else {
                 Text(longName ?? shortName ?? "Unknown line")
                     .bold()
@@ -347,3 +347,4 @@ private extension Color {
         )
     }
 }
+
