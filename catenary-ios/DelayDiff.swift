@@ -15,7 +15,7 @@ struct DelayDiff: View {
     var showSeconds: Bool = false
     var fontSizeOfPolarity: CGFloat = 12
     var useSymbolSign: Bool = false
-    var hideMinUnits: Bool = false
+    var hideMinUnits: Bool = true
     var locale: Locale = .current
 
     @Environment(\.colorScheme) private var colorScheme

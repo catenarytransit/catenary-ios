@@ -10,6 +10,7 @@ struct SingleTripScreen: View {
     @AppStorage("singleTripShowOriginalTimetable") private var showOriginalTimetable = false
     @AppStorage("singleTripShowCountdown") private var showCountdown = true
     @State private var hasScrolledToCurrentStop = false
+    @State private var showAlertsScreen = false
 
     init(selection: SingleTripSelection) {
         self.selection = selection
@@ -80,10 +81,28 @@ struct SingleTripScreen: View {
         _ data: SingleTripDataResponse,
         proxy: ScrollViewProxy
     ) -> some View {
-        ZStack(alignment: .bottomTrailing) {
+        let activeAlerts = Dictionary(uniqueKeysWithValues: model.activeAlerts(at: model.currentDate))
+
+        return ZStack(alignment: .bottomTrailing) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
-                    routeHeader(data)
+                    RouteHeading(
+                        color: data.color ?? "#808080",
+                        textColor: data.textColor ?? "#000000",
+                        routeType: data.routeType,
+                        agencyName: nil,
+                        shortName: data.routeShortName,
+                        longName: data.routeLongName,
+                        tripShortName: data.tripShortName,
+                        chateauID: selection.chateauID,
+                        isCompact: false,
+                        routeClickable: (data.routeID ?? selection.routeID) != nil,
+                        headsign: data.tripHeadsign,
+                        onRouteClick: {
+                            guard let routeID = data.routeID ?? selection.routeID else { return }
+                            viewObject.push(.route(chateauID: selection.chateauID, routeID: routeID))
+                        }
+                    )
 
                     if data.isCancelled == true {
                         statusBanner(
@@ -103,14 +122,10 @@ struct SingleTripScreen: View {
 
                     tripMetadata(data)
 
-                    let activeAlerts = model.activeAlerts(at: model.currentDate)
                     if !activeAlerts.isEmpty {
-                        AlertsBox(
-                            alerts: Dictionary(uniqueKeysWithValues: activeAlerts),
-                            defaultTimezone: data.timezone,
-                            chateauID: selection.chateauID,
-                            initiallyExpanded: true
-                        )
+                        SingleTripAlertsLink(alerts: activeAlerts) {
+                            showAlertsScreen = true
+                        }
                     }
 
                     displayOptions
@@ -173,6 +188,13 @@ struct SingleTripScreen: View {
                 .padding()
                 .accessibilityLabel("Scroll to current stop")
             }
+        }
+        .fullScreenCover(isPresented: $showAlertsScreen) {
+            SingleTripAlertsScreen(
+                alerts: activeAlerts,
+                defaultTimezone: data.timezone,
+                chateauID: selection.chateauID
+            )
         }
     }
 
@@ -395,6 +417,125 @@ struct SingleTripScreen: View {
     }
 }
 
+private let singleTripAlertColor = Color(red: 249 / 255, green: 156 / 255, blue: 36 / 255)
+
+private struct SingleTripAlertsLink: View {
+    let alerts: [String: SingleTripAlert]
+    let action: () -> Void
+
+    @Environment(\.locale) private var locale
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                HStack(spacing: 2) {
+                    Text("!")
+                    Text(String(alerts.count))
+                }
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(singleTripAlertColor, in: Capsule())
+
+                Text(localizedHeader)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: "chevron.forward")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                Color(uiColor: .secondarySystemBackground),
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open service alerts")
+    }
+
+    private var localizedHeader: String {
+        guard let alert = alerts.sorted(by: { $0.key < $1.key }).first?.value,
+              let translations = alert.headerText?.translation,
+              !translations.isEmpty else {
+            return "Service Alerts"
+        }
+
+        let localeTag = normalizedLanguage(locale.identifier)
+        let localeLanguage = locale.language.languageCode?.identifier.lowercased()
+            ?? localeTag.split(separator: "-").first.map(String.init)
+            ?? ""
+        let translation = translations.first {
+            normalizedLanguage($0.language) == localeTag
+        } ?? translations.first {
+            (normalizedLanguage($0.language).split(separator: "-").first.map(String.init) ?? "") == localeLanguage
+        } ?? translations.first {
+            normalizedLanguage($0.language).isEmpty
+        } ?? translations[0]
+
+        let plainText = translation.text
+            .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return plainText.isEmpty ? "Service Alerts" : plainText
+    }
+
+    private func normalizedLanguage(_ value: String?) -> String {
+        var normalized = (value ?? "").replacingOccurrences(of: "_", with: "-")
+        if normalized.lowercased().hasSuffix("-html") {
+            normalized.removeLast("-html".count)
+        }
+        return normalized.lowercased()
+    }
+}
+
+private struct SingleTripAlertsScreen: View {
+    let alerts: [String: SingleTripAlert]
+    let defaultTimezone: String?
+    let chateauID: String
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                AlertsBox(
+                    alerts: alerts,
+                    defaultTimezone: defaultTimezone,
+                    chateauID: chateauID,
+                    initiallyExpanded: true
+                )
+                .padding(.horizontal)
+                .padding(.top, 8)
+                .padding(.bottom, 32)
+            }
+            .navigationTitle("Service Alerts")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .frame(width: 32, height: 32)
+                    }
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.circle)
+                    .accessibilityLabel("Close service alerts")
+                }
+            }
+        }
+    }
+}
+
 private struct SingleTripStopRow: View {
     let stop: SingleTripStopState
     let index: Int
@@ -429,10 +570,14 @@ private struct SingleTripStopRow: View {
                         .font(.subheadline.monospacedDigit().weight(.semibold))
                         .foregroundStyle(primaryTimeColor)
 
-                    if let delayText {
-                        Text(delayText)
-                            .font(.caption2.monospacedDigit().weight(.semibold))
-                            .foregroundStyle(delayColor)
+                    if let delaySeconds, abs(delaySeconds) >= 30 {
+                        DelayDiff(
+                            diff: delaySeconds,
+                            showSeconds: false,
+                            fontSizeOfPolarity: 10,
+                            useSymbolSign: true,
+                            hideMinUnits: true
+                        )
                     }
 
                     if showCountdown, let countdown = countdownText {
@@ -580,26 +725,29 @@ private struct SingleTripTimelineMarker: View {
     let movingProgress: Double?
     let isCancelled: Bool
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         GeometryReader { geometry in
             let centerX = geometry.size.width / 2
             let centerY: CGFloat = 12
             let interRowSpacing: CGFloat = 12
-            let lineWidth: CGFloat = 2
+            let lineWidth: CGFloat = isPast ? 1 : 2
             let dotDiameter: CGFloat = isCurrent ? 14 : 10
-            let lineColor: Color = isPast ? .secondary : .accentColor
+            let neutralColor: Color = colorScheme == .dark ? .white : .black
+            let lineColor = neutralColor.opacity(isPast ? 0.5 : 1)
 
             ZStack(alignment: .topLeading) {
                 if !isFirst {
                     Rectangle()
-                        .fill(lineColor.opacity(0.6))
+                        .fill(lineColor)
                         .frame(width: lineWidth, height: centerY)
                         .offset(x: centerX - lineWidth / 2)
                 }
 
                 if !isLast {
                     Rectangle()
-                        .fill(lineColor.opacity(0.6))
+                        .fill(lineColor)
                         .frame(
                             width: lineWidth,
                             height: max(geometry.size.height - centerY + interRowSpacing, 0)
@@ -615,8 +763,8 @@ private struct SingleTripTimelineMarker: View {
                         )
 
                         Circle()
-                            .fill(.primary)
-                            .overlay(Circle().stroke(.background, lineWidth: 1.5))
+                            .fill(neutralColor)
+                            .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 1.5))
                             .frame(width: movingDotDiameter, height: movingDotDiameter)
                             .offset(
                                 x: centerX - movingDotDiameter / 2,
@@ -626,7 +774,7 @@ private struct SingleTripTimelineMarker: View {
                 }
 
                 Circle()
-                    .fill(isCurrent ? Color.green : (isPast ? Color.secondary : Color(.systemBackground)))
+                    .fill(isCurrent ? Color.green : Color(uiColor: .systemBackground))
                     .overlay {
                         Circle()
                             .stroke(isCancelled ? Color.red : lineColor, lineWidth: 2)

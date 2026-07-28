@@ -146,6 +146,7 @@ private struct StackNavigationControls: View {
                     .frame(width: 40, height: 40)
             }
             .buttonStyle(.bordered)
+            .buttonBorderShape(.circle)
             .disabled(!canGoBack)
 
             Button(action: onHome) {
@@ -153,6 +154,7 @@ private struct StackNavigationControls: View {
                     .frame(width: 40, height: 40)
             }
             .buttonStyle(.bordered)
+            .buttonBorderShape(.circle)
 
             Spacer()
         }

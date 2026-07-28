@@ -24,7 +24,11 @@ class viewObject: ObservableObject {
         selectedStopContext = nil
     }
 
-    @Published var allLayerSettings: AllLayerSettings = AllLayerSettings()
+    @Published var allLayerSettings: AllLayerSettings = LayerSettingsPersistence.load() {
+        didSet {
+            LayerSettingsPersistence.save(allLayerSettings)
+        }
+    }
     @Published var currZoom: Double = 5.0
     @Published var visibleCoordinateBounds: MLNCoordinateBounds = MLNCoordinateBounds(sw: CLLocationCoordinate2D(latitude: 0, longitude: 0), ne: CLLocationCoordinate2D(latitude: 0, longitude: 0))
 
