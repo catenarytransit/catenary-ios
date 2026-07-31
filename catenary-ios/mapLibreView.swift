@@ -888,7 +888,7 @@ struct mapLibreView: View {
         .circleStrokeOpacity(1)
         .circleOpacity(1)
         .predicate(circlePredicate)
-        .minimumZoomLevel(minimumCircleZoom)
+        .minimumZoomLevel(Float(minimumCircleZoom))
         .visible(viewobject.allLayerSettings.intercityrail.stops)
 
         SymbolStyleLayer(
@@ -909,7 +909,7 @@ struct mapLibreView: View {
         .textHaloColor(colorScheme == .dark ? UIColor(red: 15/255.0, green: 23/255.0, blue: 42/255.0, alpha: 1.0) : UIColor.white)
         .textHaloWidth(1)
         .predicate(labelPredicate)
-        .minimumZoomLevel(minimumLabelZoom)
+        .minimumZoomLevel(Float(minimumLabelZoom))
         .textAnchor("left")
         .visible(viewobject.allLayerSettings.intercityrail.labelstops)
     }
