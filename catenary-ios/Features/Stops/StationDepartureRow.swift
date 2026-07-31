@@ -225,62 +225,118 @@ private struct StopDepartureTimeView: View {
     let timezoneID: String?
     let now: Date
 
+    @AppStorage("showSeconds") private var showSeconds = false
+
     private var scheduledTime: Int64? { event.scheduledTime }
     private var realtimeTime: Int64? { event.realtimeTime }
 
+    private var resolvedTimezoneID: String {
+        guard let timezoneID, TimeZone(identifier: timezoneID) != nil else {
+            return TimeZone.autoupdatingCurrent.identifier
+        }
+        return timezoneID
+    }
+
+    private var isPast: Bool {
+        (realtimeTime ?? scheduledTime ?? 0) < Int64(now.timeIntervalSince1970) - 60
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            if let scheduledTime {
-                Text(StopDateFormatting.time(epochSeconds: scheduledTime, timezoneID: timezoneID))
-                    .font(
-                        .system(
-                            size: 14,
-                            weight: realtimeTime != nil && realtimeTime == scheduledTime ? .medium : .regular
-                        )
-                        .monospacedDigit()
+        VStack(alignment: .leading, spacing: 0) {
+            if event.tripCancelled == true {
+                Text("Cancelled")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.red)
+                if let scheduledTime {
+                    clock(
+                        scheduledTime,
+                        size: 13,
+                        weight: .regular,
+                        color: Color.secondary.opacity(0.7)
                     )
-                    .foregroundStyle(
-                        event.isCancelled
-                            ? Color.red
-                            : (realtimeTime != nil && realtimeTime != scheduledTime ? Color.secondary : Color.primary)
+                }
+            } else if event.tripDeleted == true {
+                Text("Deleted")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.red)
+            } else if event.stopCancelled == true {
+                Text("Stop cancelled")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.red)
+            } else {
+                if let realtimeTime,
+                   let scheduledTime,
+                   realtimeTime != scheduledTime {
+                    clock(
+                        scheduledTime,
+                        size: 14,
+                        weight: .regular,
+                        color: Color.secondary.opacity(0.7)
                     )
-            }
+                    clock(
+                        realtimeTime,
+                        size: 14,
+                        weight: .medium,
+                        color: Color.accentColor.opacity(isPast ? 0.7 : 1)
+                    )
+                    DelayDiff(
+                        diff: realtimeTime - scheduledTime,
+                        showSeconds: showSeconds,
+                        fontSizeOfPolarity: 12,
+                        useSymbolSign: false,
+                        hideMinUnits: !showSeconds
+                    )
+                } else if let realtimeTime {
+                    clock(
+                        realtimeTime,
+                        size: 14,
+                        weight: .medium,
+                        color: Color.accentColor.opacity(isPast ? 0.7 : 1)
+                    )
+                } else if let scheduledTime {
+                    clock(
+                        scheduledTime,
+                        size: 14,
+                        weight: .medium,
+                        color: Color.primary.opacity(isPast ? 0.7 : 1)
+                    )
+                } else {
+                    Text("—")
+                        .font(.system(size: 14).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
 
-            if let realtimeTime, realtimeTime != scheduledTime {
-                Text(StopDateFormatting.time(epochSeconds: realtimeTime, timezoneID: timezoneID))
-                    .font(.system(size: 14, weight: .medium).monospacedDigit())
-                    .foregroundStyle(event.isCancelled ? .red : .primary)
-            }
-
-            if scheduledTime == nil, realtimeTime == nil {
-                Text("—")
-                    .font(.system(size: 14).monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
-
-            if let scheduledTime,
-               let realtimeTime,
-               realtimeTime != scheduledTime,
-               !event.isCancelled {
-                DelayDiff(
-                    diff: realtimeTime - scheduledTime,
-                    showSeconds: false,
-                    fontSizeOfPolarity: 12,
-                    useSymbolSign: true,
-                    hideMinUnits: true
-                )
-            }
-
-            if let countdown = StopDateFormatting.countdown(
-                epochSeconds: realtimeTime ?? scheduledTime,
-                relativeTo: now
-            ) {
-                Text(countdown)
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                if let target = realtimeTime ?? scheduledTime,
+                   target - Int64(now.timeIntervalSince1970) < 3_600 {
+                    SelfUpdatingDiffTimer(
+                        targetTimeSeconds: target,
+                        showBrackets: false,
+                        showSeconds: showSeconds,
+                        showDays: false,
+                        showPlus: false,
+                        numSize: 13
+                    )
+                }
             }
         }
         .frame(width: 70, alignment: .leading)
+    }
+
+    private func clock(
+        _ time: Int64,
+        size: CGFloat,
+        weight: Font.Weight,
+        color: Color
+    ) -> some View {
+        let font = Font.system(size: size, weight: weight).monospacedDigit()
+        return FormattedTimeText(
+            timezone: resolvedTimezoneID,
+            timeSeconds: time,
+            showSeconds: showSeconds,
+            color: color,
+            font: font,
+            secondsFont: font
+        )
     }
 }
 
@@ -376,31 +432,6 @@ enum StopDateFormatting {
         return formatter.string(from: date)
     }
 
-    static func countdown(epochSeconds: Int64?, relativeTo now: Date) -> String? {
-        guard let epochSeconds else { return nil }
-        let seconds = epochSeconds - Int64(now.timeIntervalSince1970)
-        guard seconds >= -60, seconds < 3600 else { return nil }
-        if seconds < 30 { return "Due" }
-        return "in \(max(1, Int(ceil(Double(seconds) / 60.0)))) min"
-    }
-
-    static func delay(event: StopEvent) -> String? {
-        let seconds = delaySeconds(event: event)
-        guard let seconds, abs(seconds) >= 30 else { return nil }
-        let minutes = Int((Double(seconds) / 60.0).rounded())
-        return minutes > 0 ? "+\(minutes) min" : "\(minutes) min"
-    }
-
-    static func delayColor(event: StopEvent) -> Color {
-        let seconds = delaySeconds(event: event) ?? 0
-        return seconds < 0 ? .green : .orange
-    }
-
-    private static func delaySeconds(event: StopEvent) -> Int64? {
-        if let delay = event.delaySeconds { return delay }
-        guard let scheduled = event.scheduledTime, let realtime = event.realtimeTime else { return nil }
-        return realtime - scheduled
-    }
 }
 
 private enum StopHexColor {

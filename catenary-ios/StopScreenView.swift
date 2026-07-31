@@ -55,15 +55,21 @@ private struct StopAPIEvent: Decodable, Identifiable {
     }
 
     var effectiveTime: Int64? {
-        realtimeDeparture ?? realtimeArrival ?? scheduledDeparture ?? scheduledArrival
+        realtimeTime ?? scheduledTime
     }
 
     var scheduledTime: Int64? {
-        scheduledDeparture ?? scheduledArrival
+        if lastStop == true {
+            return scheduledArrival
+        }
+        return scheduledDeparture
     }
 
     var realtimeTime: Int64? {
-        realtimeDeparture ?? realtimeArrival
+        if lastStop == true {
+            return realtimeArrival
+        }
+        return realtimeDeparture
     }
 
     var isCancelled: Bool {
@@ -578,26 +584,140 @@ private struct StopDepartureRow: View {
 
                     Spacer(minLength: 4)
 
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(TransitFormatting.date(event.effectiveTime, timezoneID: timezoneID))
-                            .font(.subheadline.weight(.semibold))
-                            .monospacedDigit()
-                        if let relative = TransitFormatting.relative(event.effectiveTime) {
-                            Text(relative)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                        if let delay = TransitFormatting.delay(scheduled: event.scheduledTime, realtime: event.realtimeTime) {
-                            Text(delay)
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.orange)
-                        }
-                    }
+                    StopDepartureTimeColumn(
+                        event: event,
+                        timezoneID: timezoneID
+                    )
                 }
             }
             .buttonStyle(.plain)
         }
         .padding(.vertical, 9)
         .contentShape(Rectangle())
+    }
+}
+
+/// Mirrors the Android StopScreenRowV2 time column. Scheduled and realtime
+/// clocks use the same 14-point size, while delay and countdown rendering are
+/// delegated to the shared Android-port views instead of ad-hoc strings.
+private struct StopDepartureTimeColumn: View {
+    let event: StopAPIEvent
+    let timezoneID: String?
+
+    @AppStorage("showSeconds") private var showSeconds = false
+
+    private var scheduledTime: Int64? { event.scheduledTime }
+    private var realtimeTime: Int64? { event.realtimeTime }
+
+    private var resolvedTimezoneID: String {
+        guard let timezoneID, TimeZone(identifier: timezoneID) != nil else {
+            return TimeZone.autoupdatingCurrent.identifier
+        }
+        return timezoneID
+    }
+
+    private var isPast: Bool {
+        (realtimeTime ?? scheduledTime ?? 0) < Int64(Date().timeIntervalSince1970) - 60
+    }
+
+    private var statusText: String? {
+        if event.tripCancelled == true { return "Cancelled" }
+        if event.tripDeleted == true { return "Deleted" }
+        if event.stopCancelled == true { return "Stop cancelled" }
+        return nil
+    }
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 0) {
+            if let statusText {
+                Text(statusText)
+                    .font(.system(
+                        size: event.tripCancelled == true ? 13 : 10,
+                        weight: event.tripCancelled == true ? .bold : .regular
+                    ))
+                    .foregroundStyle(.red)
+
+                if let scheduledTime {
+                    clock(
+                        scheduledTime,
+                        size: 13,
+                        weight: .regular,
+                        color: Color.secondary.opacity(0.7)
+                    )
+                }
+            } else {
+                if let realtimeTime,
+                   let scheduledTime,
+                   realtimeTime != scheduledTime {
+                    clock(
+                        scheduledTime,
+                        size: 14,
+                        weight: .regular,
+                        color: Color.secondary.opacity(0.7)
+                    )
+                    clock(
+                        realtimeTime,
+                        size: 14,
+                        weight: .medium,
+                        color: Color.accentColor.opacity(isPast ? 0.7 : 1)
+                    )
+                    DelayDiff(
+                        diff: realtimeTime - scheduledTime,
+                        showSeconds: showSeconds,
+                        fontSizeOfPolarity: 12,
+                        useSymbolSign: false,
+                        hideMinUnits: !showSeconds
+                    )
+                } else if let realtimeTime {
+                    clock(
+                        realtimeTime,
+                        size: 14,
+                        weight: .medium,
+                        color: Color.accentColor.opacity(isPast ? 0.7 : 1)
+                    )
+                } else if let scheduledTime {
+                    clock(
+                        scheduledTime,
+                        size: 14,
+                        weight: .medium,
+                        color: Color.primary.opacity(isPast ? 0.7 : 1)
+                    )
+                } else {
+                    Text("—")
+                        .font(.system(size: 14).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+
+                if let target = realtimeTime ?? scheduledTime,
+                   target - Int64(Date().timeIntervalSince1970) < 3_600 {
+                    SelfUpdatingDiffTimer(
+                        targetTimeSeconds: target,
+                        showBrackets: false,
+                        showSeconds: showSeconds,
+                        showDays: false,
+                        showPlus: false,
+                        numSize: 13
+                    )
+                }
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func clock(
+        _ time: Int64,
+        size: CGFloat,
+        weight: Font.Weight,
+        color: Color
+    ) -> some View {
+        let font = Font.system(size: size, weight: weight).monospacedDigit()
+        return FormattedTimeText(
+            timezone: resolvedTimezoneID,
+            timeSeconds: time,
+            showSeconds: showSeconds,
+            color: color,
+            font: font,
+            secondsFont: font
+        )
     }
 }

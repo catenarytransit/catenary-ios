@@ -693,10 +693,16 @@ private struct NearbyStationDepartureTimeView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if let delay = TransitFormatting.delay(scheduled: scheduledTime, realtime: realtimeTime) {
-                Text(delay)
-                    .font(.caption2.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(.orange)
+            if let scheduledTime,
+               let realtimeTime,
+               realtimeTime != scheduledTime {
+                DelayDiff(
+                    diff: realtimeTime - scheduledTime,
+                    showSeconds: false,
+                    fontSizeOfPolarity: 10,
+                    useSymbolSign: true,
+                    hideMinUnits: true
+                )
             }
 
             if let relative = TransitFormatting.relative(realtimeTime ?? scheduledTime) {
@@ -750,20 +756,57 @@ private struct NearbyRouteCard: View {
 
             ForEach(group.headsigns.keys.sorted(), id: \.self) { headsign in
                 if let departures = group.headsigns[headsign] {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(headsign)
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(1)
-                        ForEach(Array(departures.filter { $0.lastStop != true }.sorted(by: localSort).prefix(3))) { departure in
-                            NearbyLocalDepartureRow(
-                                departure: departure,
-                                group: group,
-                                stop: stops[departure.stopId],
-                                timezoneID: stops[departure.stopId]?.timezone ?? timezoneID
-                            )
+                    let visibleDepartures = departures
+                        .filter { $0.lastStop != true }
+                        .sorted(by: localSort)
+
+                    if !visibleDepartures.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.forward")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+
+                                Text(cleanedHeadsign(headsign))
+                                    .font(.subheadline.weight(.semibold))
+                                    .lineLimit(1)
+
+                                if let firstDeparture = visibleDepartures.first {
+                                    Button {
+                                        viewObject.push(.stop(
+                                            chateauID: group.chateauId,
+                                            stopID: firstDeparture.stopId
+                                        ))
+                                    } label: {
+                                        Label(stopName(for: firstDeparture), systemImage: "mappin")
+                                            .font(.caption)
+                                            .lineLimit(1)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 3)
+                                            .background(
+                                                Color(uiColor: .tertiarySystemBackground),
+                                                in: RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+
+                            ScrollView(.horizontal) {
+                                LazyHStack(spacing: 4) {
+                                    ForEach(visibleDepartures) { departure in
+                                        NearbyLocalDeparturePill(
+                                            departure: departure,
+                                            group: group,
+                                            timezoneID: stops[departure.stopId]?.timezone ?? timezoneID
+                                        )
+                                    }
+                                }
+                            }
+                            .scrollIndicators(.hidden)
                         }
+                        .padding(.vertical, 2)
                     }
-                    .padding(.vertical, 2)
                 }
             }
         }
@@ -775,63 +818,99 @@ private struct NearbyRouteCard: View {
     private func localSort(_ lhs: NearbyLocalDeparture, _ rhs: NearbyLocalDeparture) -> Bool {
         (lhs.effectiveDeparture ?? .max) < (rhs.effectiveDeparture ?? .max)
     }
+
+    private func cleanedHeadsign(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: " Underground Station", with: "")
+            .replacingOccurrences(of: " Station", with: "")
+    }
+
+    private func stopName(for departure: NearbyLocalDeparture) -> String {
+        stops[departure.stopId]?.name ?? departure.stopName ?? departure.stopId
+    }
 }
 
-private struct NearbyLocalDepartureRow: View {
+private struct NearbyLocalDeparturePill: View {
     let departure: NearbyLocalDeparture
     let group: NearbyRouteGroup
-    let stop: NearbyStopInfo?
     let timezoneID: String?
 
     @EnvironmentObject private var viewObject: viewObject
 
-    var body: some View {
-        HStack(spacing: 8) {
-            Button {
-                viewObject.push(.stop(chateauID: group.chateauId, stopID: departure.stopId))
-            } label: {
-                Image(systemName: "mappin.circle.fill")
-                    .foregroundStyle(.secondary)
-                    .frame(width: 26, height: 28)
-            }
-            .buttonStyle(.plain)
+    private var scheduledTime: Int64? {
+        departure.departureSchedule ?? departure.arrivalSchedule
+    }
 
-            Button {
-                viewObject.push(.singleTrip(
-                    chateauID: group.chateauId,
-                    tripID: departure.tripId,
-                    routeID: group.routeId,
-                    startTime: nil,
-                    startDate: departure.serviceDate,
-                    vehicleID: nil,
-                    routeType: group.routeType
-                ))
-            } label: {
-                HStack {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(stop?.name ?? departure.stopName ?? departure.stopId)
-                            .font(.subheadline)
-                            .foregroundStyle(departure.cancelled == true ? .red : .primary)
-                            .strikethrough(departure.cancelled == true)
-                            .lineLimit(1)
-                        if let platform = departure.platform, !platform.isEmpty {
-                            Text("Platform \(platform)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 1) {
-                        Text(TransitFormatting.date(departure.effectiveDeparture, timezoneID: timezoneID))
-                            .font(.subheadline.weight(.semibold))
-                            .monospacedDigit()
-                        if let relative = TransitFormatting.relative(departure.effectiveDeparture) {
-                            Text(relative).font(.caption2).foregroundStyle(.secondary)
-                        }
-                    }
+    private var realtimeTime: Int64? {
+        departure.departureRealtime ?? departure.arrivalRealtime
+    }
+
+    var body: some View {
+        Button {
+            viewObject.push(.singleTrip(
+                chateauID: group.chateauId,
+                tripID: departure.tripId,
+                routeID: group.routeId,
+                startTime: nil,
+                startDate: departure.serviceDate,
+                vehicleID: nil,
+                routeType: group.routeType
+            ))
+        } label: {
+            VStack(spacing: 1) {
+                if let relative = TransitFormatting.relative(departure.effectiveDeparture) {
+                    Text(relative)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+                }
+
+                Text(TransitFormatting.date(departure.effectiveDeparture, timezoneID: timezoneID))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.primary)
+
+                if departure.cancelled == true {
+                    Text("Cancelled")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.red)
+                }
+
+                if let scheduledTime,
+                   let realtimeTime,
+                   realtimeTime != scheduledTime {
+                    DelayDiff(
+                        diff: realtimeTime - scheduledTime,
+                        showSeconds: false,
+                        fontSizeOfPolarity: 10,
+                        useSymbolSign: true,
+                        hideMinUnits: true
+                    )
+                }
+
+                if let platform = platformText {
+                    Text("Platform \(platform)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
-            .buttonStyle(.plain)
+            .frame(minWidth: 76)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                Color(uiColor: .tertiarySystemBackground),
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
+        .buttonStyle(.plain)
+    }
+
+    private var platformText: String? {
+        guard let raw = departure.platform?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else { return nil }
+        let value = raw
+            .replacingOccurrences(of: "Track", with: "", options: .caseInsensitive)
+            .replacingOccurrences(of: "Platform", with: "", options: .caseInsensitive)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? raw : value
     }
 }

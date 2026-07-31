@@ -146,6 +146,7 @@ private struct StackNavigationControls: View {
                     .frame(width: 40, height: 40)
             }
             .buttonStyle(.bordered)
+            .buttonBorderShape(.circle)
             .disabled(!canGoBack)
 
             Button(action: onHome) {
@@ -153,6 +154,7 @@ private struct StackNavigationControls: View {
                     .frame(width: 40, height: 40)
             }
             .buttonStyle(.bordered)
+            .buttonBorderShape(.circle)
 
             Spacer()
         }
@@ -165,6 +167,7 @@ private struct CatenaryStackDestinationView: View {
     @Binding var nearbyPinActive: Bool
     @Binding var nearbyPinCoordinate: CLLocationCoordinate2D?
     @EnvironmentObject private var viewObject: viewObject
+    @AppStorage("showSeconds") private var showSeconds = false
 
     @ViewBuilder
     var body: some View {
@@ -208,6 +211,16 @@ private struct CatenaryStackDestinationView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Settings")
                         .font(.largeTitle.bold())
+
+                    Toggle(isOn: $showSeconds) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Show seconds")
+                            Text("Show seconds in departure times, countdowns, and delay differences.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
                     Button("Open map layer settings") {
                         viewObject.showLayerSelector = true
                     }

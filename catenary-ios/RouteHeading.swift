@@ -264,24 +264,25 @@ struct RouteHeading<Controls: View>: View {
            (nonBlank(shortName) != nil || isDBFernverkehr),
            (!isNationalRail || isLondonOverground || isElizabethLine) {
             let value = isDBFernverkehr ? (dbDisplayName ?? "") : cleanedShortName
-            result = Text("\(result) \(Text(value).bold())")
-            
-            result = Text("\(result) ")
+            result = result + Text(value).bold()
             hasText = true
         }
 
         if let longName = nonBlank(longName),
            chateauID != "metrolinktrains",
            shouldShowLongName(longName) {
-            result = Text("\(result) + \(longName)")
+            if hasText {
+                result = result + Text(" ")
+            }
+            result = result + Text(longName)
             hasText = true
         }
 
-        if let tripShortName, !isDBFernverkehr {
+        if let tripShortName = nonBlank(tripShortName), !isDBFernverkehr {
             if hasText {
-                result = Text("\(result) ")
+                result = result + Text(" ")
             }
-            result = Text("\(result) \(Text(tripShortName).bold())")
+            result = result + Text(tripShortName).bold()
         }
 
         return result

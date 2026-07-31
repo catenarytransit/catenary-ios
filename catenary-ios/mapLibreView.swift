@@ -8,6 +8,7 @@ import SwiftUI
 import MapLibreSwiftUI
 import MapLibre
 import MapLibreSwiftDSL
+import UIKit
 
 
 private enum VehicleFeatureBuilder {
@@ -393,6 +394,8 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
     private var layerSettings = AllLayerSettings()
     private var realtimeVehicles: [RealtimeVehicle] = []
     private var trajectoryVehicles: [RealtimeTrajectoryVehicle] = []
+    private var realtimeFeatureCache: [String: MLNPointFeature] = [:]
+    private var trajectoryFeatureCache: [String: MLNPointFeature] = [:]
 
     private let selectableLayerIDs: Set<String> = [
         LayersPerCategory.IntercityRail.Livedots,
@@ -431,6 +434,18 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         LayersPerCategory.Bus.LabelStops + "_osm",
         LayersPerCategory.IntercityRail.Stops + "_osm",
         LayersPerCategory.IntercityRail.LabelStops + "_osm",
+        "intercityrail-ranked-1",
+        "intercityrail-ranked-label-1",
+        "intercityrail-ranked-2",
+        "intercityrail-ranked-label-2",
+        "intercityrail-ranked-3",
+        "intercityrail-ranked-label-3",
+        "intercityrail-ranked-4",
+        "intercityrail-ranked-label-4",
+        "intercityrail-ranked-5",
+        "intercityrail-ranked-label-5",
+        "intercityrail-ranked-6",
+        "intercityrail-ranked-label-6",
         LayersPerCategory.Metro.Stops + "_osm",
         LayersPerCategory.Metro.LabelStops + "_osm",
         LayersPerCategory.Tram.Stops + "_osm",
@@ -562,18 +577,56 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
 
     func updateLayerSettings(_ settings: AllLayerSettings) {
         layerSettings = settings
+        realtimeFeatureCache.removeAll(keepingCapacity: true)
+        trajectoryFeatureCache.removeAll(keepingCapacity: true)
         rebuildRealtimeSource()
         rebuildTrajectorySource()
     }
 
     func updateRealtimeVehicles(_ vehicles: [RealtimeVehicle]) {
+        let previousByID = Dictionary(
+            realtimeVehicles.map { ($0.id, $0) },
+            uniquingKeysWith: { _, newest in newest }
+        )
         realtimeVehicles = vehicles
-        rebuildRealtimeSource()
+        let liveIDs = Set(vehicles.map(\.id))
+        realtimeFeatureCache = realtimeFeatureCache.filter { liveIDs.contains($0.key) }
+
+        for vehicle in vehicles
+        where previousByID[vehicle.id] != vehicle || realtimeFeatureCache[vehicle.id] == nil {
+            realtimeFeatureCache[vehicle.id] = VehicleFeatureBuilder.realtime(
+                vehicle,
+                settings: layerSettings
+            )
+        }
+        publishRealtimeSource()
     }
 
     func updateTrajectoryVehicles(_ vehicles: [RealtimeTrajectoryVehicle]) {
+        let previousByID = Dictionary(
+            trajectoryVehicles.map { ($0.id, $0) },
+            uniquingKeysWith: { _, newest in newest }
+        )
         trajectoryVehicles = vehicles
-        rebuildTrajectorySource()
+        let liveIDs = Set(vehicles.map(\.id))
+        trajectoryFeatureCache = trajectoryFeatureCache.filter { liveIDs.contains($0.key) }
+
+        for vehicle in vehicles {
+            if let feature = trajectoryFeatureCache[vehicle.id],
+               let previous = previousByID[vehicle.id],
+               sameTrajectoryMetadata(previous, vehicle) {
+                feature.coordinate = vehicle.coordinate
+                var attributes = feature.attributes
+                attributes["bearing"] = vehicle.bearing
+                feature.attributes = attributes
+            } else {
+                trajectoryFeatureCache[vehicle.id] = VehicleFeatureBuilder.trajectory(
+                    vehicle,
+                    settings: layerSettings
+                )
+            }
+        }
+        publishTrajectorySource()
     }
 
     func updateWildfireFeatures(_ features: [MLNPointFeature]) {
@@ -586,25 +639,66 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
     }
 
     private func rebuildRealtimeSource() {
+        realtimeFeatureCache.removeAll(keepingCapacity: true)
+        for vehicle in realtimeVehicles {
+            realtimeFeatureCache[vehicle.id] = VehicleFeatureBuilder.realtime(
+                vehicle,
+                settings: layerSettings
+            )
+        }
+        publishRealtimeSource()
+    }
+
+    private func publishRealtimeSource() {
         guard let source = mapView?.style?.source(
             withIdentifier: "realtime-vehicles"
         ) as? MLNShapeSource else { return }
-        let features: [MLNShape & MLNFeature] = realtimeVehicles.map {
-            VehicleFeatureBuilder.realtime($0, settings: layerSettings)
+        let features: [MLNShape & MLNFeature] = realtimeVehicles.compactMap {
+            realtimeFeatureCache[$0.id]
         }
         source.shape = MLNShapeCollectionFeature(shapes: features)
     }
 
     private func rebuildTrajectorySource() {
+        trajectoryFeatureCache.removeAll(keepingCapacity: true)
+        for vehicle in trajectoryVehicles {
+            trajectoryFeatureCache[vehicle.id] = VehicleFeatureBuilder.trajectory(
+                vehicle,
+                settings: layerSettings
+            )
+        }
+        publishTrajectorySource()
+    }
+
+    private func publishTrajectorySource() {
         guard let source = mapView?.style?.source(
             withIdentifier: "trajectory-vehicles"
         ) as? MLNShapeSource else { return }
-        let features: [MLNShape & MLNFeature] = trajectoryVehicles.map {
-            VehicleFeatureBuilder.trajectory($0, settings: layerSettings)
+        let features: [MLNShape & MLNFeature] = trajectoryVehicles.compactMap {
+            trajectoryFeatureCache[$0.id]
         }
         source.shape = MLNShapeCollectionFeature(shapes: features)
     }
 
+    private func sameTrajectoryMetadata(
+        _ lhs: RealtimeTrajectoryVehicle,
+        _ rhs: RealtimeTrajectoryVehicle
+    ) -> Bool {
+        lhs.id == rhs.id
+            && lhs.routeType == rhs.routeType
+            && lhs.chateauID == rhs.chateauID
+            && lhs.tripID == rhs.tripID
+            && lhs.routeID == rhs.routeID
+            && lhs.displayName == rhs.displayName
+            && lhs.headsign == rhs.headsign
+            && lhs.tripShortName == rhs.tripShortName
+            && lhs.routeShortName == rhs.routeShortName
+            && lhs.routeLongName == rhs.routeLongName
+            && lhs.color == rhs.color
+            && lhs.textColor == rhs.textColor
+            && lhs.startDate == rhs.startDate
+            && lhs.startTime == rhs.startTime
+    }
     func updateSelectedStop(_ context: SelectedStopMapContext?) {
         guard let source = mapView?.style?.source(
             withIdentifier: "selected-stop-context"
@@ -635,6 +729,10 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
 struct mapLibreView: View {
     @Environment(\.colorScheme) var colorScheme: ColorScheme
     @ObservedObject var locationManager: LocationManager
+    @ObservedObject var nearbyPinMapCoordinator: NearbyPinMapCoordinator
+    let nearbyPinActive: Bool
+    let nearbyPinCoordinate: CLLocationCoordinate2D?
+    let contentInset: UIEdgeInsets
     @StateObject private var realtimeVM = RealtimeVehicles()
     @StateObject private var trajectoryVM = RealtimeTrajectories()
     @StateObject private var wildfireVM = WildfireMapData()
@@ -701,6 +799,120 @@ struct mapLibreView: View {
               return UIColor(red: 0x1C/255.0, green: 0x26/255.0, blue: 0x36/255.0, alpha: 1.0)
           }
       }
+
+    private var ranked12Inside: UIColor {
+        circleInside
+    }
+
+    private var ranked12Outside: UIColor {
+        colorScheme == .dark
+            ? UIColor(red: 0xDD/255.0, green: 0xDD/255.0, blue: 0xDD/255.0, alpha: 1.0)
+            : UIColor(red: 0x66/255.0, green: 0x67/255.0, blue: 0x67/255.0, alpha: 1.0)
+    }
+
+    private var ranked3456Inside: UIColor {
+        colorScheme == .dark
+            ? UIColor(red: 0xDD/255.0, green: 0xDD/255.0, blue: 0xDD/255.0, alpha: 1.0)
+            : UIColor(red: 0x66/255.0, green: 0x67/255.0, blue: 0x67/255.0, alpha: 1.0)
+    }
+
+    private var ranked3456Outside: UIColor {
+        circleOutside
+    }
+
+    private func osmStationLabelTextColor(startZoom: Double) -> NSExpression {
+        let startColor: UIColor
+        let endColor: UIColor
+
+        if colorScheme == .dark {
+            startColor = UIColor(red: 0xAA/255.0, green: 0xAA/255.0, blue: 0xAA/255.0, alpha: 1.0)
+            endColor = .white
+        } else {
+            startColor = UIColor(red: 0x55/255.0, green: 0x55/255.0, blue: 0x55/255.0, alpha: 1.0)
+            endColor = .black
+        }
+
+        return NSExpression(
+            forMLNInterpolating: .zoomLevelVariable,
+            curveType: .linear,
+            parameters: nil,
+            stops: NSExpression(forConstantValue: [
+                startZoom: startColor,
+                startZoom + 2: endColor
+            ])
+        )
+    }
+
+    @MapViewContentBuilder
+    private func rankedIntercityStationLayers(
+        rank: Int,
+        minimumCircleZoom: Double,
+        minimumLabelZoom: Double
+    ) -> some StyleLayerCollection {
+        let isRank12 = rank <= 2
+        let circleRadiusStops: [Int: Double] = isRank12
+            ? [3: 1.5, 6: 2, 8: 3, 12: 5.5, 15: 8]
+            : rank == 3
+                ? [5: 1.2, 8: 2.2, 12: 4.2, 15: 7]
+                : [5: 1, 8: 1.8, 12: 3.5, 15: 6]
+        let labelSizeStops: [Int: Double] = isRank12
+            ? [6: 8, 13: 13]
+            : [8: 7, 13: 11]
+        let circlePredicate = NSPredicate(
+            format: "importance_level_station == %d AND rail == YES AND mode_type != 'light_rail' AND number_of_associated_stops != 0",
+            rank
+        )
+        let labelPredicate = NSPredicate(
+            format: "importance_level_station == %d AND rail == YES",
+            rank
+        )
+
+        CircleStyleLayer(
+            identifier: "intercityrail-ranked-\(rank)",
+            source: shapeTileSources.osmStationsRankedSource(),
+            sourceLayerIdentifier: "data"
+        )
+        .color(isRank12 ? ranked12Inside : ranked3456Inside)
+        .radius(
+            interpolatedBy: .zoomLevel,
+            curveType: .linear,
+            parameters: nil,
+            stops: NSExpression(forConstantValue: circleRadiusStops)
+        )
+        .strokeColor(isRank12 ? ranked12Outside : ranked3456Outside)
+        .strokeWidth(expression: NSExpression(
+            forMLNStepping: .zoomLevelVariable,
+            from: NSExpression(forConstantValue: 1.8),
+            stops: NSExpression(forConstantValue: [12: 2.0])
+        ))
+        .circleStrokeOpacity(1)
+        .circleOpacity(1)
+        .predicate(circlePredicate)
+        .minimumZoomLevel(Float(minimumCircleZoom))
+        .visible(viewobject.allLayerSettings.intercityrail.stops)
+
+        SymbolStyleLayer(
+            identifier: "intercityrail-ranked-label-\(rank)",
+            source: shapeTileSources.osmStationsRankedSource(),
+            sourceLayerIdentifier: "data"
+        )
+        .text(expression: NSExpression(format: "name"))
+        .textFontNames(["Arimo-Bold"])
+        .textFontSize(
+            interpolatedBy: .zoomLevel,
+            curveType: .linear,
+            parameters: nil,
+            stops: NSExpression(forConstantValue: labelSizeStops)
+        )
+        .textOffset(CGVector(dx: 0.5, dy: 0))
+        .textColor(colorScheme == .dark ? UIColor.white : UIColor(red: 42/255.0, green: 42/255.0, blue: 42/255.0, alpha: 1.0))
+        .textHaloColor(colorScheme == .dark ? UIColor(red: 15/255.0, green: 23/255.0, blue: 42/255.0, alpha: 1.0) : UIColor.white)
+        .textHaloWidth(1)
+        .predicate(labelPredicate)
+        .minimumZoomLevel(Float(minimumLabelZoom))
+        .textAnchor("left")
+        .visible(viewobject.allLayerSettings.intercityrail.labelstops)
+    }
     
     
 
@@ -1045,7 +1257,7 @@ struct mapLibreView: View {
         .circleStrokeOpacity(expression: NSExpression(forMLNStepping: .zoomLevelVariable, from: NSExpression(forConstantValue: 0.5), stops: NSExpression(forConstantValue: [13: 0.8])))
         .minimumZoomLevel(7.5)
         .predicate(NSPredicate(format: "ANY route_types == 2 AND osm_station_id == nil"))
-        .visible(viewobject.allLayerSettings.intercityrail.labelstops)
+        .visible(viewobject.allLayerSettings.intercityrail.stops)
         
         
         SymbolStyleLayer(
@@ -1071,53 +1283,13 @@ struct mapLibreView: View {
         .textAnchor("left")
         .visible(viewobject.allLayerSettings.intercityrail.labelstops)
         
-        //INTERCITY OSMOSM START
-        
-        let isOSMInterRail = NSPredicate(format: "(local_ref == nil AND station_type == 'station' AND mode_type == 'rail')") 
-        
-        CircleStyleLayer(
-            identifier: LayersPerCategory.IntercityRail.Stops + "_osm",
-            source: shapeTileSources.osmStationsSource(),
-            sourceLayerIdentifier: "data")
-        .color(circleInside)
-        .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [7: 1, 8: 2, 9: 3, 12: 5, 15: 8]))
-        .strokeColor(circleOutside)
-        .strokeWidth(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [9: 1, 13.2: 1.5]))
-        .circleStrokeOpacity(expression: NSExpression(forMLNStepping: .zoomLevelVariable, from: NSExpression(forConstantValue: 0.5), stops: NSExpression(forConstantValue: [13: 0.8])))
-        .minimumZoomLevel(7.5)
-        .predicate(isOSMInterRail)
-        .visible(viewobject.allLayerSettings.intercityrail.labelstops)
-        
-        
-        SymbolStyleLayer(
-            identifier: LayersPerCategory.IntercityRail.LabelStops + "_osm",
-            source: shapeTileSources.osmStationsSource(),
-            sourceLayerIdentifier: "data")
-        .text(expression: NSExpression(format: "name"))
-        .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [6: 6, 13: 12]))
-        .textOffset(CGVector(dx: 1, dy: 0.2))
-
-        .textFontNames(expression: NSExpression(
-            forMLNStepping: .zoomLevelVariable,
-            from: NSExpression(forConstantValue: ["Arimo-Regular"]),
-            stops: NSExpression(forConstantValue: [
-                10: NSExpression(forConstantValue: ["Arimo-Medium"])
-            ])
-        ))
-        .textColor(colorScheme == .dark ? UIColor.white : UIColor(red: 42/255, green: 42/255, blue: 42/255, alpha: 1.0))
-        .textHaloColor(colorScheme == .dark ? UIColor(red: 15/255, green: 23/255, blue: 42/255, alpha: 1.0) : UIColor.white)
-        .textHaloWidth(1)
-        .minimumZoomLevel(8)
-        .predicate(isOSMInterRail)
-        .textAnchor("left")
-        .visible(viewobject.allLayerSettings.intercityrail.labelstops)
-        
-        
-        //INTERCITY OSM END
-        
-        
-        
-        //local rail
+        rankedIntercityStationLayers(rank: 6, minimumCircleZoom: 8, minimumLabelZoom: 10)
+        rankedIntercityStationLayers(rank: 5, minimumCircleZoom: 7.5, minimumLabelZoom: 9.5)
+        rankedIntercityStationLayers(rank: 4, minimumCircleZoom: 6.5, minimumLabelZoom: 8.5)
+        rankedIntercityStationLayers(rank: 3, minimumCircleZoom: 5, minimumLabelZoom: 7)
+        rankedIntercityStationLayers(rank: 2, minimumCircleZoom: 5, minimumLabelZoom: 6.5)
+        rankedIntercityStationLayers(rank: 1, minimumCircleZoom: 4, minimumLabelZoom: 4)
+//local rail
         
         CircleStyleLayer(
             identifier: LayersPerCategory.Metro.Stops,
@@ -1179,81 +1351,65 @@ struct mapLibreView: View {
         .visible(viewobject.allLayerSettings.localrail.labelstops)
        
         
-        //OSM OSM
-        let isOSMMetro = NSPredicate(format: "(local_ref == nil AND station_type == 'station' AND mode_type == 'subway')")
-        
+        // Ranked OSM subway stations.
+        let isOSMMetro = NSPredicate(format: "local_ref == nil AND station_type == 'station' AND mode_type == 'subway' AND number_of_associated_stops != 0")
+        let isOSMMetroLabel = NSPredicate(format: "station_type == 'station' AND mode_type == 'subway' AND number_of_associated_stops != 0")
+
         CircleStyleLayer(
             identifier: LayersPerCategory.Metro.Stops + "_osm",
-            source: shapeTileSources.osmStationsSource(),
+            source: shapeTileSources.osmStationsRankedSource(),
             sourceLayerIdentifier: "data")
-        .color(circleInside)
-        .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [8: 1, 12: 3, 16: 5]))
-        .strokeColor(circleOutside)
-        .strokeWidth(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [1: 0.8, 10.5: 1, 11: 1.5, 13.2: 2]))
-        .circleStrokeOpacity(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [1: 0.5, 14.5: 0.5, 15: 0.6]))
-        .circleOpacity(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [10: 0.7, 16: 0.8]))
+        .color(ranked3456Inside)
+        .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [5: 0.8, 8: 1.2, 12: 2.8, 15: 4.8]))
+        .strokeColor(ranked3456Outside)
+        .strokeWidth(expression: NSExpression(forMLNStepping: .zoomLevelVariable, from: NSExpression(forConstantValue: 1), stops: NSExpression(forConstantValue: [11: 1.8, 12: 3.0])))
+        .circleStrokeOpacity(1)
+        .circleOpacity(1)
         .predicate(isOSMMetro)
-        .minimumZoomLevel(9)
+        .minimumZoomLevel(10.5)
         .visible(viewobject.allLayerSettings.localrail.stops)
-        
 
-        
-        
-        
         SymbolStyleLayer(
             identifier: LayersPerCategory.Metro.LabelStops + "_osm",
-            source: shapeTileSources.osmStationsSource(),
+            source: shapeTileSources.osmStationsRankedSource(),
             sourceLayerIdentifier: "data")
         .text(expression: NSExpression(format: "name"))
-        .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [11: 8, 12: 10, 14: 12, 17: 14]))
+        .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [11: 8, 12: 10, 14: 12, 16: 14]))
         .textOffset(
             interpolatedBy: .zoomLevel,
             curveType: .linear,
             parameters: nil,
             stops: NSExpression(forConstantValue: [
-                
                 7: NSExpression(forAggregate: [
-                    NSExpression(forConstantValue: 1.0),
+                    NSExpression(forConstantValue: 0.0),
                     NSExpression(forConstantValue: 0.10)
                 ]),
                 10: NSExpression(forAggregate: [
-                    NSExpression(forConstantValue: 0.9),
+                    NSExpression(forConstantValue: 0.0),
                     NSExpression(forConstantValue: 0.30)
                 ]),
                 12: NSExpression(forAggregate: [
-                    NSExpression(forConstantValue: 0.85),
+                    NSExpression(forConstantValue: 0.0),
                     NSExpression(forConstantValue: 0.60)
                 ])
             ])
         )
-
         .textFontNames(expression: NSExpression(
             forMLNStepping: .zoomLevelVariable,
             from: NSExpression(forConstantValue: ["Arimo-Regular"]),
             stops: NSExpression(forConstantValue: [
-                12: NSExpression(forConstantValue: ["Arimo-Medium"])
+                12: NSExpression(forConstantValue: ["Arimo-Medium"]),
+                15: NSExpression(forConstantValue: ["Arimo-SemiBold"])
             ])
         ))
-        .textColor(colorScheme == .dark ? UIColor.white : UIColor(red: 42/255, green: 42/255, blue: 42/255, alpha: 1.0))
+        .textColor(expression: osmStationLabelTextColor(startZoom: 13))
         .textHaloColor(colorScheme == .dark ? UIColor(red: 15/255, green: 23/255, blue: 42/255, alpha: 1.0) : UIColor.white)
         .textHaloWidth(1)
-        .minimumZoomLevel(10.5)
-        .predicate(isOSMMetro)
+        .minimumZoomLevel(13)
+        .predicate(isOSMMetroLabel)
         .textAnchor("left")
         .visible(viewobject.allLayerSettings.localrail.labelstops)
-        
-        
-        //ENDOSM END OSM
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        //tram rail layer
+//tram rail layer
         CircleStyleLayer(
             identifier: LayersPerCategory.Tram.Stops,
             source: shapeTileSources.railStopsSource(),
@@ -1313,68 +1469,63 @@ struct mapLibreView: View {
         .textAnchor("left")
         .visible(viewobject.allLayerSettings.localrail.labelstops)
         
-        //OSMOSM TRAM START
-        let isOSMTram = NSPredicate(format: "(local_ref == nil AND (station_type == 'station' OR station_type == 'tram_stop') AND (mode_type == 'tram' OR mode_type == 'light_rail'))")
+        // Ranked OSM tram/light-rail stations.
+        let isOSMTram = NSPredicate(format: "local_ref == nil AND parent_osm_id == nil AND (station_type == 'station' OR station_type == 'tram_stop' OR station_type == 'halt') AND number_of_associated_stops != 0 AND (mode_type == 'tram' OR mode_type == 'light_rail')")
 
-        
         CircleStyleLayer(
             identifier: LayersPerCategory.Tram.Stops + "_osm",
-            source: shapeTileSources.osmStationsSource(),
+            source: shapeTileSources.osmStationsRankedSource(),
             sourceLayerIdentifier: "data")
-        .color(circleInside)
-        .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [8: 1, 12: 3, 16: 5]))
-        .strokeColor(circleOutside)
-        .strokeWidth(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [1: 0.8, 10.5: 1, 11: 1.5, 13.2: 2]))
-        .circleStrokeOpacity(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [1: 0.5, 14.5: 0.5, 15: 0.6]))
-        .circleOpacity(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [10: 0.7, 16: 0.8]))
+        .color(ranked3456Inside)
+        .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [5: 0.6, 8: 1, 12: 2, 15: 4]))
+        .strokeColor(ranked3456Outside)
+        .strokeWidth(expression: NSExpression(forMLNStepping: .zoomLevelVariable, from: NSExpression(forConstantValue: 1.8), stops: NSExpression(forConstantValue: [12: 3.0])))
+        .circleStrokeOpacity(1)
+        .circleOpacity(1)
         .predicate(isOSMTram)
-        .minimumZoomLevel(9)
+        .minimumZoomLevel(12)
         .visible(viewobject.allLayerSettings.localrail.stops)
-        
-        
-        
+
         SymbolStyleLayer(
             identifier: LayersPerCategory.Tram.LabelStops + "_osm",
-            source: shapeTileSources.osmStationsSource(),
+            source: shapeTileSources.osmStationsRankedSource(),
             sourceLayerIdentifier: "data")
         .text(expression: NSExpression(format: "name"))
-        .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [9: 7, 11: 7, 12: 9, 14: 10]))
+        .textFontSize(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [9: 7, 11: 7, 12: 9, 14: 10, 16: 12, 18: 14]))
         .textOffset(
             interpolatedBy: .zoomLevel,
             curveType: .linear,
             parameters: nil,
             stops: NSExpression(forConstantValue: [
-                
                 7: NSExpression(forAggregate: [
-                    NSExpression(forConstantValue: 1.0),
+                    NSExpression(forConstantValue: 0.0),
                     NSExpression(forConstantValue: 0.20)
                 ]),
                 10: NSExpression(forAggregate: [
-                    NSExpression(forConstantValue: 0.9),
+                    NSExpression(forConstantValue: 0.0),
                     NSExpression(forConstantValue: 0.30)
                 ]),
                 12: NSExpression(forAggregate: [
-                    NSExpression(forConstantValue: 0.85),
+                    NSExpression(forConstantValue: 0.0),
                     NSExpression(forConstantValue: 0.50)
                 ])
             ])
         )
-
         .textFontNames(expression: NSExpression(
             forMLNStepping: .zoomLevelVariable,
             from: NSExpression(forConstantValue: ["Arimo-Regular"]),
             stops: NSExpression(forConstantValue: [
-                12: NSExpression(forConstantValue: ["Arimo-Medium"])
+                13: NSExpression(forConstantValue: ["Arimo-Medium"]),
+                16: NSExpression(forConstantValue: ["Arimo-SemiBold"])
             ])
         ))
-        .textColor(colorScheme == .dark ? UIColor.white : UIColor(red: 42/255, green: 42/255, blue: 42/255, alpha: 1.0))
+        .textColor(expression: osmStationLabelTextColor(startZoom: 14))
         .textHaloColor(colorScheme == .dark ? UIColor(red: 15/255, green: 23/255, blue: 42/255, alpha: 1.0) : UIColor.white)
         .textHaloWidth(1)
-        .minimumZoomLevel(11)
+        .minimumZoomLevel(14)
         .predicate(isOSMTram)
         .textAnchor("left")
         .visible(viewobject.allLayerSettings.localrail.labelstops)
-        
     }
     
     @MapViewContentBuilder
@@ -1835,6 +1986,28 @@ struct mapLibreView: View {
     }
 
     @MapViewContentBuilder
+    var nearbyPinLayer: some StyleLayerCollection {
+        let source = ShapeSource(identifier: NearbyPinMapCoordinator.sourceIdentifier) {
+            if nearbyPinActive, let nearbyPinCoordinate {
+                let feature = MLNPointFeature()
+                feature.coordinate = nearbyPinCoordinate
+                feature
+            }
+        }
+
+        SymbolStyleLayer(
+            identifier: NearbyPinMapCoordinator.layerIdentifier,
+            source: source
+        )
+        .iconImage(UIImage(named: "map_marker_1")!)
+        .iconAnchor("bottom")
+        .iconAllowsOverlap(true)
+        .iconScale(1)
+        .renderAbove(.all)
+        .visible(nearbyPinActive)
+    }
+
+    @MapViewContentBuilder
     var selectedStopLayer: some StyleLayerCollection {
         let source = ShapeSource(identifier: "selected-stop-context") {
             if let context = viewobject.selectedStopContext {
@@ -1874,6 +2047,7 @@ struct mapLibreView: View {
             )
             realtimeLayer
             trajectoryLayer
+            nearbyPinLayer
             selectedStopLayer
         }
 
@@ -1882,6 +2056,12 @@ struct mapLibreView: View {
             map.mapView.attributionButton.isHidden = true
             map.mapView.compassView.isHidden = true
             map.mapView.showsUserLocation = true
+            nearbyPinMapCoordinator.install(on: map.mapView)
+            nearbyPinMapCoordinator.updateContentInset(contentInset)
+            nearbyPinMapCoordinator.updatePin(
+                active: nearbyPinActive,
+                coordinate: nearbyPinCoordinate
+            )
             featureTapCoordinator.install(on: map.mapView, navigator: viewobject)
             featureTapCoordinator.updateLayerSettings(viewobject.allLayerSettings)
 
@@ -1898,6 +2078,7 @@ struct mapLibreView: View {
         }
         .onMapViewProxyUpdate(updateMode: .onFinish, onViewProxyChanged: { proxy in
             Task { @MainActor in
+                nearbyPinMapCoordinator.refreshScreenPoint()
                 viewobject.currentRotation = proxy.direction
                 viewobject.currZoom = proxy.zoomLevel
                 viewobject.visibleCoordinateBounds = proxy.visibleCoordinateBounds
@@ -1952,8 +2133,14 @@ struct mapLibreView: View {
 }
 
 #Preview {
-    mapLibreView(locationManager: LocationManager())
-        .environmentObject(viewObject())
+    mapLibreView(
+        locationManager: LocationManager(),
+        nearbyPinMapCoordinator: NearbyPinMapCoordinator(),
+        nearbyPinActive: false,
+        nearbyPinCoordinate: nil,
+        contentInset: .zero
+    )
+    .environmentObject(viewObject())
 }
 
 struct TileBox {

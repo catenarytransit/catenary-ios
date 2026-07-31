@@ -3,7 +3,9 @@
 //  catenary-ios
 //
 
-struct AllLayerSettings: Equatable {
+import Foundation
+
+struct AllLayerSettings: Codable, Equatable {
     var bus: LayerCategorySettings = LayerCategorySettings()
     var localrail: LayerCategorySettings = LayerCategorySettings()
     var intercityrail: LayerCategorySettings = LayerCategorySettings(labelrealtimedots: LabelSettings(trip: true))
@@ -11,28 +13,27 @@ struct AllLayerSettings: Equatable {
     var more: MoreSettings = MoreSettings()
 
     subscript(index: Int) -> LayerCategorySettings? {
-            switch index {
-            case 1: return intercityrail
-            case 2: return localrail
-            case 3: return bus
-            case 4: return other
-            default: return nil
-            }
+        switch index {
+        case 1: return intercityrail
+        case 2: return localrail
+        case 3: return bus
+        case 4: return other
+        default: return nil
         }
+    }
 
     subscript(name: String) -> LayerCategorySettings? {
-            switch name {
-            case "Rail": return intercityrail
-            case "Metro/Tram": return localrail
-            case "Bus": return bus
-            case "Other": return other
-            default: return nil
-            }
+        switch name {
+        case "Rail": return intercityrail
+        case "Metro/Tram": return localrail
+        case "Bus": return bus
+        case "Other": return other
+        default: return nil
         }
-
+    }
 }
 
-struct LayerCategorySettings: Equatable {
+struct LayerCategorySettings: Codable, Equatable {
     var visiblerealtimedots: Bool = true
     var labeltrajectories: Bool = false
     var labelshapes: Bool = true
@@ -42,7 +43,7 @@ struct LayerCategorySettings: Equatable {
     var labelrealtimedots: LabelSettings = LabelSettings()
 }
 
-struct LabelSettings: Equatable {
+struct LabelSettings: Codable, Equatable {
     var route: Bool = true
     var trip: Bool = false
     var vehicle: Bool = false
@@ -53,7 +54,7 @@ struct LabelSettings: Equatable {
     var delay: Bool = true
 }
 
-struct MoreSettings: Equatable {
+struct MoreSettings: Codable, Equatable {
     var foamermode: FoamermodeSettings = FoamermodeSettings()
     var showstationentrances: Bool = true
     var showstationart: Bool = false
@@ -61,11 +62,28 @@ struct MoreSettings: Equatable {
     var showcoords: Bool = false
 }
 
-struct FoamermodeSettings: Equatable {
+struct FoamermodeSettings: Codable, Equatable {
     var infra: Bool = false
     var maxspeed: Bool = false
     var signalling: Bool = false
     var electrification: Bool = false
     var gauge: Bool = false
     var dummy: Bool = true
+}
+
+enum LayerSettingsPersistence {
+    private static let defaultsKey = "allLayerSettings.v1"
+
+    static func load(from defaults: UserDefaults = .standard) -> AllLayerSettings {
+        guard let data = defaults.data(forKey: defaultsKey),
+              let settings = try? JSONDecoder().decode(AllLayerSettings.self, from: data) else {
+            return AllLayerSettings()
+        }
+        return settings
+    }
+
+    static func save(_ settings: AllLayerSettings, to defaults: UserDefaults = .standard) {
+        guard let data = try? JSONEncoder().encode(settings) else { return }
+        defaults.set(data, forKey: defaultsKey)
+    }
 }
