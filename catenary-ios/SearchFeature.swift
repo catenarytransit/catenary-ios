@@ -486,6 +486,8 @@ private struct StopSearchResultRow: View {
     let agencyNames: [String]
     let distanceMetres: Double?
 
+    @AppStorage("usUnits") private var usUnits = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -494,7 +496,7 @@ private struct StopSearchResultRow: View {
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 if let distanceMetres {
-                    Text(TransitFormatting.distance(distanceMetres))
+                    Text(TransitFormatting.distance(distanceMetres, useImperial: usUnits))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

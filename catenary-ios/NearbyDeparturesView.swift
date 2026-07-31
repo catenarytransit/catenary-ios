@@ -502,6 +502,7 @@ private struct NearbyStationCard: View {
     let routeMap: [String: [String: NearbyRouteInfo]]
 
     @EnvironmentObject private var viewObject: viewObject
+    @AppStorage("usUnits") private var usUnits = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -513,7 +514,7 @@ private struct NearbyStationCard: View {
                         Text(group.stationName)
                             .font(.headline)
                             .foregroundStyle(.primary)
-                        Text(TransitFormatting.distance(group.distanceM))
+                        Text(TransitFormatting.distance(group.distanceM, useImperial: usUnits))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -660,6 +661,9 @@ private struct NearbyStationDepartureTimeView: View {
     let departure: NearbyStationDeparture
     let timezoneID: String?
 
+    @AppStorage("showSeconds") private var showSeconds = false
+    @AppStorage("showCountdownsUnder1h") private var showCountdownsUnder1h = false
+
     private var scheduledTime: Int64? {
         departure.scheduledDeparture ?? departure.scheduledArrival
     }
@@ -668,10 +672,18 @@ private struct NearbyStationDepartureTimeView: View {
         departure.realtimeDeparture ?? departure.realtimeArrival
     }
 
+    private var targetTime: Int64? {
+        realtimeTime ?? scheduledTime
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             if let scheduledTime {
-                Text(TransitFormatting.date(scheduledTime, timezoneID: timezoneID))
+                Text(TransitFormatting.date(
+                    scheduledTime,
+                    timezoneID: timezoneID,
+                    showSeconds: showSeconds
+                ))
                     .font((realtimeTime != nil && realtimeTime != scheduledTime)
                         ? .caption.monospacedDigit()
                         : .subheadline.monospacedDigit().weight(.semibold))
@@ -683,7 +695,11 @@ private struct NearbyStationDepartureTimeView: View {
             }
 
             if let realtimeTime, realtimeTime != scheduledTime {
-                Text(TransitFormatting.date(realtimeTime, timezoneID: timezoneID))
+                Text(TransitFormatting.date(
+                    realtimeTime,
+                    timezoneID: timezoneID,
+                    showSeconds: showSeconds
+                ))
                     .font(.subheadline.monospacedDigit().weight(.semibold))
             }
 
@@ -698,20 +714,30 @@ private struct NearbyStationDepartureTimeView: View {
                realtimeTime != scheduledTime {
                 DelayDiff(
                     diff: realtimeTime - scheduledTime,
-                    showSeconds: false,
+                    showSeconds: showSeconds,
                     fontSizeOfPolarity: 10,
                     useSymbolSign: true,
-                    hideMinUnits: true
+                    hideMinUnits: !showSeconds
                 )
             }
 
-            if let relative = TransitFormatting.relative(realtimeTime ?? scheduledTime) {
-                Text(relative)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+            if showCountdownsUnder1h,
+               let targetTime,
+               targetTime - Int64(Date().timeIntervalSince1970) > -60,
+               targetTime - Int64(Date().timeIntervalSince1970) < 3_600 {
+                SelfUpdatingDiffTimer(
+                    targetTimeSeconds: targetTime,
+                    showBrackets: false,
+                    showSeconds: showSeconds,
+                    showDays: false,
+                    showPlus: false,
+                    numSize: 11,
+                    unitSize: 9,
+                    color: .secondary
+                )
             }
         }
-        .frame(width: 68, alignment: .leading)
+        .frame(width: showSeconds ? 82 : 68, alignment: .leading)
     }
 }
 
@@ -721,6 +747,7 @@ private struct NearbyRouteCard: View {
     let timezoneID: String?
 
     @EnvironmentObject private var viewObject: viewObject
+    @AppStorage("usUnits") private var usUnits = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -747,7 +774,7 @@ private struct NearbyRouteCard: View {
                 }
                 .buttonStyle(.plain)
                 Spacer()
-                Text(TransitFormatting.distance(group.closestDistance))
+                Text(TransitFormatting.distance(group.closestDistance, useImperial: usUnits))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -836,6 +863,8 @@ private struct NearbyLocalDeparturePill: View {
     let timezoneID: String?
 
     @EnvironmentObject private var viewObject: viewObject
+    @AppStorage("showSeconds") private var showSeconds = false
+    @AppStorage("showLocalTransitCountdowns") private var showLocalTransitCountdowns = false
 
     private var scheduledTime: Int64? {
         departure.departureSchedule ?? departure.arrivalSchedule
@@ -843,6 +872,10 @@ private struct NearbyLocalDeparturePill: View {
 
     private var realtimeTime: Int64? {
         departure.departureRealtime ?? departure.arrivalRealtime
+    }
+
+    private var targetTime: Int64? {
+        departure.effectiveDeparture
     }
 
     var body: some View {
@@ -858,13 +891,26 @@ private struct NearbyLocalDeparturePill: View {
             ))
         } label: {
             VStack(spacing: 1) {
-                if let relative = TransitFormatting.relative(departure.effectiveDeparture) {
-                    Text(relative)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.primary)
+                if showLocalTransitCountdowns,
+                   let targetTime,
+                   targetTime - Int64(Date().timeIntervalSince1970) > -60,
+                   targetTime - Int64(Date().timeIntervalSince1970) < 3_600 {
+                    SelfUpdatingDiffTimer(
+                        targetTimeSeconds: targetTime,
+                        showBrackets: false,
+                        showSeconds: showSeconds,
+                        showDays: false,
+                        showPlus: false,
+                        numSize: 13,
+                        unitSize: 10
+                    )
                 }
 
-                Text(TransitFormatting.date(departure.effectiveDeparture, timezoneID: timezoneID))
+                Text(TransitFormatting.date(
+                    departure.effectiveDeparture,
+                    timezoneID: timezoneID,
+                    showSeconds: showSeconds
+                ))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.primary)
 
@@ -879,10 +925,10 @@ private struct NearbyLocalDeparturePill: View {
                    realtimeTime != scheduledTime {
                     DelayDiff(
                         diff: realtimeTime - scheduledTime,
-                        showSeconds: false,
+                        showSeconds: showSeconds,
                         fontSizeOfPolarity: 10,
                         useSymbolSign: true,
-                        hideMinUnits: true
+                        hideMinUnits: !showSeconds
                     )
                 }
 
@@ -892,7 +938,7 @@ private struct NearbyLocalDeparturePill: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .frame(minWidth: 76)
+            .frame(minWidth: showSeconds ? 92 : 76)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(
