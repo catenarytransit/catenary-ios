@@ -104,7 +104,12 @@ struct TransitRouteBadge: View {
 }
 
 enum TransitFormatting {
-    static func date(_ epochSeconds: Int64?, timezoneID: String?, dateStyle: DateFormatter.Style = .none) -> String {
+    static func date(
+        _ epochSeconds: Int64?,
+        timezoneID: String?,
+        dateStyle: DateFormatter.Style = .none,
+        showSeconds: Bool = false
+    ) -> String {
         guard let epochSeconds else { return "—" }
         let date = Date(timeIntervalSince1970: TimeInterval(epochSeconds))
         let timeZone = timezoneID.flatMap(TimeZone.init(identifier:)) ?? .autoupdatingCurrent
@@ -113,7 +118,7 @@ enum TransitFormatting {
         timeFormatter.calendar = Calendar(identifier: .gregorian)
         timeFormatter.locale = Locale(identifier: "en_GB_POSIX")
         timeFormatter.timeZone = timeZone
-        timeFormatter.dateFormat = "HH:mm"
+        timeFormatter.dateFormat = showSeconds ? "HH:mm:ss" : "HH:mm"
         let time = timeFormatter.string(from: date)
 
         guard dateStyle != .none else { return time }
@@ -145,7 +150,15 @@ enum TransitFormatting {
         return nil
     }
 
-    static func distance(_ meters: Double) -> String {
+    static func distance(_ meters: Double, useImperial: Bool = false) -> String {
+        if useImperial {
+            let feet = meters * 3.28084
+            if feet < 5_280 {
+                return "\(Int(feet.rounded())) ft"
+            }
+            return String(format: "%.1f mi", feet / 5_280)
+        }
+
         if meters < 1_000 {
             return "\(Int(meters.rounded())) m"
         }

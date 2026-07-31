@@ -167,7 +167,6 @@ private struct CatenaryStackDestinationView: View {
     @Binding var nearbyPinActive: Bool
     @Binding var nearbyPinCoordinate: CLLocationCoordinate2D?
     @EnvironmentObject private var viewObject: viewObject
-    @AppStorage("showSeconds") private var showSeconds = false
 
     @ViewBuilder
     var body: some View {
@@ -207,28 +206,7 @@ private struct CatenaryStackDestinationView: View {
             MapOverlappingSelectionScreen(options: options)
 
         case .settings:
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Settings")
-                        .font(.largeTitle.bold())
-
-                    Toggle(isOn: $showSeconds) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Show seconds")
-                            Text("Show seconds in departure times, countdowns, and delay differences.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Button("Open map layer settings") {
-                        viewObject.showLayerSelector = true
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
-            }
+            SettingsScreen()
 
         default:
             // Vehicle, block, and OSM item screens remain placeholders.

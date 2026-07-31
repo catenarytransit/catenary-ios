@@ -10,6 +10,8 @@ struct StationDepartureRow: View {
     let trainDisplayName: String?
 
     @EnvironmentObject private var viewObject: viewObject
+    @AppStorage("showCountdownsUnder1h") private var showCountdownsUnder1h = false
+    @AppStorage("showLocalTransitCountdowns") private var showLocalTransitCountdowns = false
 
     init(
         event: StopEvent,
@@ -46,7 +48,8 @@ struct StationDepartureRow: View {
             StopDepartureTimeView(
                 event: event,
                 timezoneID: timezoneID,
-                now: now
+                now: now,
+                showCountdown: mode == .rail ? showCountdownsUnder1h : showLocalTransitCountdowns
             )
 
             if showsLeadingRoute, layout != .swiss {
@@ -224,6 +227,7 @@ private struct StopDepartureTimeView: View {
     let event: StopEvent
     let timezoneID: String?
     let now: Date
+    let showCountdown: Bool
 
     @AppStorage("showSeconds") private var showSeconds = false
 
@@ -306,7 +310,8 @@ private struct StopDepartureTimeView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if let target = realtimeTime ?? scheduledTime,
+                if showCountdown,
+                   let target = realtimeTime ?? scheduledTime,
                    target - Int64(now.timeIntervalSince1970) < 3_600 {
                     SelfUpdatingDiffTimer(
                         targetTimeSeconds: target,
