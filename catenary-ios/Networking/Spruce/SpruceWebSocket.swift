@@ -319,16 +319,22 @@ final class SpruceWebSocket: NSObject, ObservableObject {
                 }
             case "buffer":
                 guard let timestamp = msg.timestamp,
-                      let clientReference = msg.client_reference,
-                      let chateau = msg.chateau,
                       let content = msg.content,
-                      let chunkIndex = msg.chunk_index,
                       let totalChunks = msg.total_chunks
                 else { return }
+
+                let chunkIndex: Int
+                if totalChunks == 0 {
+                    chunkIndex = msg.chunk_index ?? 0
+                } else {
+                    guard let value = msg.chunk_index else { return }
+                    chunkIndex = value
+                }
+
                 let buffer = TrajectoryBuffer(
                     timestamp: timestamp,
-                    clientReference: clientReference,
-                    chateau: chateau,
+                    clientReference: msg.client_reference ?? "trajectories_layer",
+                    chateau: msg.chateau ?? "unknown",
                     content: content,
                     chunkIndex: chunkIndex,
                     totalChunks: totalChunks

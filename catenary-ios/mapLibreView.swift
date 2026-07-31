@@ -607,11 +607,16 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
             trajectoryVehicles.map { ($0.id, $0) },
             uniquingKeysWith: { _, newest in newest }
         )
-        trajectoryVehicles = vehicles
-        let liveIDs = Set(vehicles.map(\.id))
+        let uniqueVehicles = Dictionary(
+            vehicles.map { ($0.id, $0) },
+            uniquingKeysWith: { _, newest in newest }
+        ).values.sorted { $0.id < $1.id }
+
+        trajectoryVehicles = uniqueVehicles
+        let liveIDs = Set(uniqueVehicles.map(\.id))
         trajectoryFeatureCache = trajectoryFeatureCache.filter { liveIDs.contains($0.key) }
 
-        for vehicle in vehicles {
+        for vehicle in uniqueVehicles {
             if let feature = trajectoryFeatureCache[vehicle.id],
                let previous = previousByID[vehicle.id],
                sameTrajectoryMetadata(previous, vehicle) {

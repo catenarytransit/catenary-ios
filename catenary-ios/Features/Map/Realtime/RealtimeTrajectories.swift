@@ -27,7 +27,7 @@ struct TrajectoryWrapper: Decodable {
     let source: String?
     let timestamp: UInt64?
     let client_reference: String?
-    let content: TrajectoryItem
+    let content: TrajectoryItem?
 }
 
 struct TrajectoryItem: Decodable {
@@ -355,6 +355,7 @@ final class RealtimeTrajectories: ObservableObject {
     private func sendSubscription(forceRefresh: Bool = false) {
         guard isRunning else { return }
         guard let bounds else { return }
+        guard currentZoom.isFinite else { return }
 
         var modes: [String] = []
         if layerSettings.bus.visiblerealtimedots && currentZoom >= 9 {
@@ -385,9 +386,11 @@ final class RealtimeTrajectories: ObservableObject {
             bounds.ne.longitude,
             bounds.ne.latitude
         ]
+        guard bbox.allSatisfy({ $0.isFinite }) else { return }
+        let requestedZoom = Int(currentZoom.rounded(.down))
         let subscription = Subscription(
             bbox: bbox,
-            zoom: max(0, min(255, Int(currentZoom.rounded(.down)))),
+            zoom: max(0, min(255, requestedZoom)),
             modes: modes
         )
         guard forceRefresh || subscription != activeSubscription else { return }
@@ -419,9 +422,10 @@ final class RealtimeTrajectories: ObservableObject {
         // the chateau; this mirrors the Compose implementation.
         if message.totalChunks == 0 {
             accumulators.removeValue(forKey: message.chateau)
-            let trajectories = message.content.compactMap {
-                Self.prepare($0.content, fallbackChateau: message.chateau)
-            }
+            let trajectories = Self.prepareTrajectories(
+                message.content,
+                fallbackChateau: message.chateau
+            )
             latestSnapshotTimestampByChateau[message.chateau] = message.timestamp
             if trajectories.isEmpty {
                 trajectoriesByChateau.removeValue(forKey: message.chateau)
@@ -468,9 +472,10 @@ final class RealtimeTrajectories: ObservableObject {
         guard expectedChunks.allSatisfy({ accumulator.chunks[$0] != nil }) else { return }
 
         let wrappers = expectedChunks.flatMap { accumulator.chunks[$0] ?? [] }
-        let trajectories = wrappers.compactMap {
-            Self.prepare($0.content, fallbackChateau: message.chateau)
-        }
+        let trajectories = Self.prepareTrajectories(
+            wrappers,
+            fallbackChateau: message.chateau
+        )
         latestSnapshotTimestampByChateau[message.chateau] = message.timestamp
         if trajectories.isEmpty {
             trajectoriesByChateau.removeValue(forKey: message.chateau)
@@ -529,6 +534,16 @@ final class RealtimeTrajectories: ObservableObject {
         onVehiclesChanged?([])
     }
 
+    private static func prepareTrajectories(
+        _ wrappers: [TrajectoryWrapper],
+        fallbackChateau: String
+    ) -> [PreparedTrajectory] {
+        wrappers.compactMap { wrapper in
+            guard let content = wrapper.content else { return nil }
+            return prepare(content, fallbackChateau: fallbackChateau)
+        }
+    }
+
     private static func prepare(_ item: TrajectoryItem, fallbackChateau: String) -> PreparedTrajectory? {
         let identifier = item.unique_trip_id ?? item.trip_id
         guard let identifier, !identifier.isEmpty,
@@ -538,10 +553,22 @@ final class RealtimeTrajectories: ObservableObject {
               arrival > departure
         else { return nil }
 
+        let chateauID = item.chateau_id.flatMap { $0.isEmpty ? nil : $0 } ?? fallbackChateau
         var coordinates: [CLLocationCoordinate2D] = []
         for segment in item.segments ?? [] {
             for pair in segment.coordinates ?? [] where pair.count >= 2 {
-                let coordinate = CLLocationCoordinate2D(latitude: pair[1], longitude: pair[0])
+                let longitude = pair[0]
+                let latitude = pair[1]
+                guard longitude.isFinite,
+                      latitude.isFinite,
+                      (-180.0...180.0).contains(longitude),
+                      (-90.0...90.0).contains(latitude)
+                else { continue }
+
+                let coordinate = CLLocationCoordinate2D(
+                    latitude: latitude,
+                    longitude: longitude
+                )
                 if coordinates.last?.latitude != coordinate.latitude
                     || coordinates.last?.longitude != coordinate.longitude {
                     coordinates.append(coordinate)
@@ -566,14 +593,14 @@ final class RealtimeTrajectories: ObservableObject {
         }
 
         return PreparedTrajectory(
-            id: identifier,
+            id: "\(chateauID)|\(identifier)",
             departure: departure,
             arrival: arrival,
             coordinates: coordinates,
             cumulativeLengths: cumulativeLengths,
             totalLength: totalLength,
             routeType: item.route_type ?? routeType(for: item.mode),
-            chateauID: item.chateau_id ?? fallbackChateau,
+            chateauID: chateauID,
             tripID: item.trip_id,
             routeID: item.route_id,
             displayName: item.display_name,
