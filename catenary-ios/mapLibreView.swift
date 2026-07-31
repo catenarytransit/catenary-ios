@@ -799,6 +799,120 @@ struct mapLibreView: View {
               return UIColor(red: 0x1C/255.0, green: 0x26/255.0, blue: 0x36/255.0, alpha: 1.0)
           }
       }
+
+    private var ranked12Inside: UIColor {
+        circleInside
+    }
+
+    private var ranked12Outside: UIColor {
+        colorScheme == .dark
+            ? UIColor(red: 0xDD/255.0, green: 0xDD/255.0, blue: 0xDD/255.0, alpha: 1.0)
+            : UIColor(red: 0x66/255.0, green: 0x67/255.0, blue: 0x67/255.0, alpha: 1.0)
+    }
+
+    private var ranked3456Inside: UIColor {
+        colorScheme == .dark
+            ? UIColor(red: 0xDD/255.0, green: 0xDD/255.0, blue: 0xDD/255.0, alpha: 1.0)
+            : UIColor(red: 0x66/255.0, green: 0x67/255.0, blue: 0x67/255.0, alpha: 1.0)
+    }
+
+    private var ranked3456Outside: UIColor {
+        circleOutside
+    }
+
+    private func osmStationLabelTextColor(startZoom: Double) -> NSExpression {
+        let startColor: UIColor
+        let endColor: UIColor
+
+        if colorScheme == .dark {
+            startColor = UIColor(red: 0xAA/255.0, green: 0xAA/255.0, blue: 0xAA/255.0, alpha: 1.0)
+            endColor = .white
+        } else {
+            startColor = UIColor(red: 0x55/255.0, green: 0x55/255.0, blue: 0x55/255.0, alpha: 1.0)
+            endColor = .black
+        }
+
+        return NSExpression(
+            forMLNInterpolating: .zoomLevelVariable,
+            curveType: .linear,
+            parameters: nil,
+            stops: NSExpression(forConstantValue: [
+                startZoom: startColor,
+                startZoom + 2: endColor
+            ])
+        )
+    }
+
+    @MapViewContentBuilder
+    private func rankedIntercityStationLayers(
+        rank: Int,
+        minimumCircleZoom: Double,
+        minimumLabelZoom: Double
+    ) -> some StyleLayerCollection {
+        let isRank12 = rank <= 2
+        let circleRadiusStops: [Int: Double] = isRank12
+            ? [3: 1.5, 6: 2, 8: 3, 12: 5.5, 15: 8]
+            : rank == 3
+                ? [5: 1.2, 8: 2.2, 12: 4.2, 15: 7]
+                : [5: 1, 8: 1.8, 12: 3.5, 15: 6]
+        let labelSizeStops: [Int: Double] = isRank12
+            ? [6: 8, 13: 13]
+            : [8: 7, 13: 11]
+        let circlePredicate = NSPredicate(
+            format: "importance_level_station == %d AND rail == YES AND mode_type != 'light_rail' AND number_of_associated_stops != 0",
+            rank
+        )
+        let labelPredicate = NSPredicate(
+            format: "importance_level_station == %d AND rail == YES",
+            rank
+        )
+
+        CircleStyleLayer(
+            identifier: "intercityrail-ranked-\(rank)",
+            source: shapeTileSources.osmStationsRankedSource(),
+            sourceLayerIdentifier: "data"
+        )
+        .color(isRank12 ? ranked12Inside : ranked3456Inside)
+        .radius(
+            interpolatedBy: .zoomLevel,
+            curveType: .linear,
+            parameters: nil,
+            stops: NSExpression(forConstantValue: circleRadiusStops)
+        )
+        .strokeColor(isRank12 ? ranked12Outside : ranked3456Outside)
+        .strokeWidth(expression: NSExpression(
+            forMLNStepping: .zoomLevelVariable,
+            from: NSExpression(forConstantValue: 1.8),
+            stops: NSExpression(forConstantValue: [12: 2.0])
+        ))
+        .circleStrokeOpacity(1)
+        .circleOpacity(1)
+        .predicate(circlePredicate)
+        .minimumZoomLevel(minimumCircleZoom)
+        .visible(viewobject.allLayerSettings.intercityrail.stops)
+
+        SymbolStyleLayer(
+            identifier: "intercityrail-ranked-label-\(rank)",
+            source: shapeTileSources.osmStationsRankedSource(),
+            sourceLayerIdentifier: "data"
+        )
+        .text(expression: NSExpression(format: "name"))
+        .textFontNames(["Arimo-Bold"])
+        .textFontSize(
+            interpolatedBy: .zoomLevel,
+            curveType: .linear,
+            parameters: nil,
+            stops: NSExpression(forConstantValue: labelSizeStops)
+        )
+        .textOffset(CGVector(dx: 0.5, dy: 0))
+        .textColor(colorScheme == .dark ? UIColor.white : UIColor(red: 42/255.0, green: 42/255.0, blue: 42/255.0, alpha: 1.0))
+        .textHaloColor(colorScheme == .dark ? UIColor(red: 15/255.0, green: 23/255.0, blue: 42/255.0, alpha: 1.0) : UIColor.white)
+        .textHaloWidth(1)
+        .predicate(labelPredicate)
+        .minimumZoomLevel(minimumLabelZoom)
+        .textAnchor("left")
+        .visible(viewobject.allLayerSettings.intercityrail.labelstops)
+    }
     
     
 
