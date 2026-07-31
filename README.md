@@ -2,7 +2,8 @@
 
 ## Contributors
 
-- Chris Rios - University of California, Irvine
-- Kyler Chin - University of California, Irvine
-- snagglegrolop - United States
+- Chris Rios - University of California, Irvine - United States of America
+- Kyler Chin - University of California, Irvine - United States of America
+- snagglegrolop - United States of America
 - Nathan Sheng - University of Toronto
+- Charlie - Secondary Industrial School of Electrical Engineering, Bratislava, Slovakia
