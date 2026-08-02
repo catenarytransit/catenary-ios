@@ -192,16 +192,18 @@ final class RealtimeVehicles: ObservableObject {
     /// changed tiles). We accumulate here and rebuild `vehicles` after every
     /// message so the map shows the full union, not just the last delta.
     private var byChateau: [String: [String: [String: RealtimeVehicle]]] = [:]
+    private var lastUpdatedByChateau: [String: [String: UInt64]] = [:]
 
     private struct MapSubscription: Equatable {
         let categories: [String]
         let boundsInput: BoundsInput
     }
 
-    /// Coalesces back-to-back context changes (a pan gesture fires
-    /// `onMapViewProxyUpdate` ~60×/s) into a single WebSocket message.
+    /// Coalesce rapid camera changes. Trajectory subscriptions use a shorter
+    /// debounce so Spruce sees their new request before the map subscription
+    /// changes the server-side chateau set.
     private var sendDebounceTask: Task<Void, Never>?
-    private let sendDebounce: Duration = .milliseconds(50)
+    private let sendDebounce: Duration = .milliseconds(250)
 
     /// Throttle for republishing `vehicles` to SwiftUI. The server can push
     /// ~30 per-chateau map_update messages in a burst on first subscribe;
@@ -268,16 +270,51 @@ final class RealtimeVehicles: ObservableObject {
 
     /// Apply one category's payload. Returns the number of vehicles ingested.
     private func applyCategory(_ chateauID: String, _ category: String, _ payload: EachCategoryPayloadV2?) -> Int {
-        guard let payload else { return 0 }
-        if payload.replaces_all {
-            // Clear this (chateau, category) slot before merging new tiles.
+        guard let payload,
+              let activeSubscription,
+              activeSubscription.categories.contains(category),
+              payload.z_level == Self.zoomLevel(for: category) else { return 0 }
+
+        if let previousTimestamp = lastUpdatedByChateau[chateauID]?[category],
+           payload.last_updated_time_ms < previousTimestamp {
+            return 0
+        }
+        lastUpdatedByChateau[chateauID, default: [:]][category] = payload.last_updated_time_ms
+
+        // A response built for an older fast-pan viewport can still arrive after
+        // the latest subscribe_map_v2. Never let its out-of-bounds tile set wipe
+        // the currently displayed snapshot.
+        let replacementMatchesActiveBounds = payload.vehicle_positions?.allSatisfy { xKey, yMap in
+            guard let x = UInt32(xKey) else { return false }
+            return yMap.keys.allSatisfy { yKey in
+                guard let y = UInt32(yKey) else { return false }
+                return Self.containsTile(
+                    x: x,
+                    y: y,
+                    category: category,
+                    boundsInput: activeSubscription.boundsInput
+                )
+            }
+        } ?? true
+
+        if payload.replaces_all && replacementMatchesActiveBounds {
             byChateau[chateauID, default: [:]][category] = [:]
         }
+
         guard let xs = payload.vehicle_positions else { return 0 }
         var added = 0
         var hasMissingRoutes = false
-        for ys in xs.values {
-            for vehicleMap in ys.values {
+        for (xKey, ys) in xs {
+            guard let x = UInt32(xKey) else { continue }
+            for (yKey, vehicleMap) in ys {
+                guard let y = UInt32(yKey),
+                      Self.containsTile(
+                        x: x,
+                        y: y,
+                        category: category,
+                        boundsInput: activeSubscription.boundsInput
+                      ) else { continue }
+
                 for (id, v) in vehicleMap {
                     guard let pos = v.position else { continue }
                     if let routeID = v.trip?.route_id,
@@ -405,13 +442,22 @@ final class RealtimeVehicles: ObservableObject {
         guard rebuildIsDirty else { return }
         rebuildIsDirty = false
         var out: [RealtimeVehicle] = []
-        for chateauMap in byChateau.values {
-            for catMap in chateauMap.values {
-                for vehicle in catMap.values {
-                    let route = vehicle.routeId.flatMap {
-                        routesByChateau[vehicle.chateauID]?[$0]
+        if let activeSubscription {
+            let requestedCategories = Set(activeSubscription.categories)
+            for chateauMap in byChateau.values {
+                for (category, catMap) in chateauMap
+                where requestedCategories.contains(category) {
+                    for vehicle in catMap.values
+                    where Self.isInsideActiveBounds(
+                        vehicle.coordinate,
+                        category: category,
+                        boundsInput: activeSubscription.boundsInput
+                    ) {
+                        let route = vehicle.routeId.flatMap {
+                            routesByChateau[vehicle.chateauID]?[$0]
+                        }
+                        out.append(vehicle.applying(route: route))
                     }
-                    out.append(vehicle.applying(route: route))
                 }
             }
         }
@@ -425,7 +471,7 @@ final class RealtimeVehicles: ObservableObject {
     private func scheduleSend() {
         sendDebounceTask?.cancel()
         sendDebounceTask = Task { [weak self] in
-            try? await Task.sleep(for: self?.sendDebounce ?? .milliseconds(150))
+            try? await Task.sleep(for: self?.sendDebounce ?? .milliseconds(250))
             if Task.isCancelled { return }
             await self?.sendUpdateMap()
         }
@@ -476,10 +522,11 @@ final class RealtimeVehicles: ObservableObject {
         guard subscription != activeSubscription else { return }
         activeSubscription = subscription
 
-        // subscribe_map_v2 can remove server-side chateau subscriptions without
-        // sending another vehicle payload for those removed chateaus. Clear the
-        // previous viewport immediately so stale dots cannot remain on screen.
-        clearVehicles()
+        // Spruce sends only newly entered tiles for ordinary viewport changes.
+        // Keep the completed overlap visible until the replacement arrives;
+        // publishVehicles() filters the cache against these latest bounds.
+        discardInactiveCategories(keeping: Set(categories))
+        rebuildVehicles()
 
         SpruceWebSocket.shared.updateMap(
             categories: categories,
@@ -487,12 +534,111 @@ final class RealtimeVehicles: ObservableObject {
         )
     }
 
+    private func discardInactiveCategories(keeping categories: Set<String>) {
+        for chateauID in Array(byChateau.keys) {
+            guard var categoryMap = byChateau[chateauID] else { continue }
+            categoryMap = categoryMap.filter { categories.contains($0.key) }
+            if categoryMap.isEmpty {
+                byChateau.removeValue(forKey: chateauID)
+            } else {
+                byChateau[chateauID] = categoryMap
+            }
+        }
+
+        for chateauID in Array(lastUpdatedByChateau.keys) {
+            guard var categoryMap = lastUpdatedByChateau[chateauID] else { continue }
+            categoryMap = categoryMap.filter { categories.contains($0.key) }
+            if categoryMap.isEmpty {
+                lastUpdatedByChateau.removeValue(forKey: chateauID)
+            } else {
+                lastUpdatedByChateau[chateauID] = categoryMap
+            }
+        }
+    }
+
     private func clearVehicles() {
         byChateau.removeAll(keepingCapacity: true)
+        lastUpdatedByChateau.removeAll(keepingCapacity: true)
         rebuildIsDirty = false
         guard !vehicles.isEmpty else { return }
         vehicles = []
         onVehiclesChanged?([])
+    }
+
+    private static func zoomLevel(for category: String) -> UInt8 {
+        switch category {
+        case "bus": return 12
+        case "metro": return 8
+        case "rail": return 7
+        case "other": return 5
+        default: return 0
+        }
+    }
+
+    private static func bounds(
+        for category: String,
+        in boundsInput: BoundsInput
+    ) -> BoundsInputPerLevel? {
+        switch category {
+        case "bus": return boundsInput.level12
+        case "metro": return boundsInput.level8
+        case "rail": return boundsInput.level7
+        case "other": return boundsInput.level5
+        default: return nil
+        }
+    }
+
+    private static func containsTile(
+        x: UInt32,
+        y: UInt32,
+        category: String,
+        boundsInput: BoundsInput
+    ) -> Bool {
+        guard let bounds = bounds(for: category, in: boundsInput) else { return false }
+        return x >= bounds.min_x
+            && x <= bounds.max_x
+            && y >= bounds.min_y
+            && y <= bounds.max_y
+    }
+
+    private static func isInsideActiveBounds(
+        _ coordinate: CLLocationCoordinate2D,
+        category: String,
+        boundsInput: BoundsInput
+    ) -> Bool {
+        let zoom = Int(zoomLevel(for: category))
+        guard zoom > 0,
+              let tile = tileCoordinate(for: coordinate, zoom: zoom) else { return false }
+        return containsTile(
+            x: tile.x,
+            y: tile.y,
+            category: category,
+            boundsInput: boundsInput
+        )
+    }
+
+    private static func tileCoordinate(
+        for coordinate: CLLocationCoordinate2D,
+        zoom: Int
+    ) -> (x: UInt32, y: UInt32)? {
+        guard coordinate.latitude.isFinite,
+              coordinate.longitude.isFinite else { return nil }
+
+        let n = pow(2.0, Double(zoom))
+        let maxIndex = Int(n) - 1
+        let longitude = max(-180.0, min(179.999999999, coordinate.longitude))
+        let latitude = max(-85.05112878, min(85.05112878, coordinate.latitude))
+        let latitudeRadians = latitude * .pi / 180.0
+        let x = Int(floor((longitude + 180.0) / 360.0 * n))
+        let y = Int(floor(
+            (1.0 - log(tan(latitudeRadians) + 1.0 / cos(latitudeRadians)) / .pi)
+                / 2.0 * n
+        ))
+
+        return (
+            x: UInt32(max(0, min(maxIndex, x))),
+            y: UInt32(max(0, min(maxIndex, y)))
+        )
     }
 
     /// Convert a lat/lon bounding box into a tile-coordinate rectangle for a given zoom.
