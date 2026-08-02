@@ -2,19 +2,25 @@ import Foundation
 import SwiftUI
 
 /// Centralized access for strings that are assembled outside SwiftUI's
-/// localized-string-key initializers. Static SwiftUI literals continue to be
-/// extracted into `Localizable.xcstrings` automatically.
+/// localized-string-key initializers. Prefer localized SwiftUI literals in
+/// views and `String(localized:)`/`LocalizedStringResource` outside views.
 enum L10n {
     static func string(
         _ key: String,
         defaultValue: String? = nil,
         locale: Locale = .autoupdatingCurrent
     ) -> String {
-        localizedBundle(for: locale).localizedString(
-            forKey: key,
-            value: defaultValue ?? key,
-            table: "Localizable"
+        let resource = LocalizedStringResource(
+            String.LocalizationValue(key),
+            table: "Localizable",
+            locale: locale,
+            bundle: .main
         )
+        let localized = String(localized: resource)
+
+        // A dynamic key uses the key itself as LocalizedStringResource's
+        // fallback. Preserve explicit English fallbacks for semantic keys.
+        return localized == key ? (defaultValue ?? key) : localized
     }
 
     static func format(
@@ -32,37 +38,5 @@ enum L10n {
 
     static func key(_ key: String) -> LocalizedStringKey {
         LocalizedStringKey(key)
-    }
-
-    private static func localizedBundle(for locale: Locale) -> Bundle {
-        let identifier = locale.identifier.replacingOccurrences(of: "_", with: "-")
-        var candidates = [identifier]
-
-        if identifier.lowercased().hasPrefix("zh-") {
-            if identifier.localizedCaseInsensitiveContains("HK") {
-                candidates.append("zh-HK")
-            }
-            if identifier.localizedCaseInsensitiveContains("Hant")
-                || identifier.localizedCaseInsensitiveContains("TW") {
-                candidates.append("zh-Hant")
-            } else {
-                candidates.append("zh-Hans")
-            }
-        }
-
-        if let languageCode = locale.language.languageCode?.identifier {
-            if languageCode == "no" || languageCode == "nb" {
-                candidates.append("nb")
-            }
-            candidates.append(languageCode)
-        }
-
-        for candidate in candidates {
-            if let path = Bundle.main.path(forResource: candidate, ofType: "lproj"),
-               let bundle = Bundle(path: path) {
-                return bundle
-            }
-        }
-        return .main
     }
 }
