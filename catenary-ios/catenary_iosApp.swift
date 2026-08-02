@@ -172,7 +172,7 @@ struct OverlayRoot: View {
 struct layerSettingButton: View {
     @Binding var specificLayerSetting: Bool
     var imageName: String
-    var label: String
+    var label: LocalizedStringKey
     var sfsymbol: Bool = false
     var accentColor: Color = .catenaryBlue
     

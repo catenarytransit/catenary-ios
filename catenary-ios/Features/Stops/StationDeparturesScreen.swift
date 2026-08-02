@@ -257,7 +257,11 @@ struct StationDeparturesScreen: View {
             HStack(spacing: 10) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
-                Text(totalAlertCount == 1 ? "1 service alert" : "\(totalAlertCount) service alerts")
+                Text(verbatim: L10n.format(
+                    "alerts.count",
+                    defaultValue: "Service alerts: %d",
+                    totalAlertCount
+                ))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.red)
                 Spacer()
@@ -392,7 +396,9 @@ struct StationDeparturesScreen: View {
            !stationName.isEmpty {
             return stationName
         }
-        return source.explicitChateauID == nil ? "Station" : "Stop"
+        return source.explicitChateauID == nil
+            ? L10n.string("Station")
+            : L10n.string("Stop")
     }
 
     private func synchronizeFilters() {
@@ -538,7 +544,7 @@ private struct StopTrainCategoryPicker: View {
                             enabledCategories.insert(category)
                         }
                     } label: {
-                        Text(category)
+                        Text(verbatim: StopTrainCategoryClassifier.localizedTitle(category))
                             .font(.caption.weight(.medium))
                             .padding(.horizontal, 11)
                             .padding(.vertical, 6)
@@ -596,7 +602,6 @@ private struct StationTimeSelector: View {
                         selection: $draftDate,
                         displayedComponents: [.date, .hourAndMinute]
                     )
-                    .environment(\.locale, Locale(identifier: "en_GB"))
                     .environment(
                         \.timeZone,
                         timezoneID.flatMap(TimeZone.init(identifier:)) ?? .autoupdatingCurrent
@@ -642,7 +647,7 @@ private struct StationTimeSelector: View {
         dateFormatter.setLocalizedDateFormatFromTemplate("EEE d MMM")
 
         let dateLabel = calendar.isDate(displayDate, inSameDayAs: Date())
-            ? "Today"
+            ? L10n.string("Today")
             : dateFormatter.string(from: displayDate)
 
         let timeFormatter = DateFormatter()

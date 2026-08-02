@@ -36,7 +36,10 @@ final class SingleTripViewModel: ObservableObject {
         guard let tripID = selection.tripID?.trimmingCharacters(in: .whitespacesAndNewlines),
               !tripID.isEmpty else {
             isLoading = false
-            errorMessage = "This trip does not include a GTFS trip ID, so it cannot be loaded from Ramonda."
+            errorMessage = L10n.string(
+                "trip.missing_gtfs_id",
+                defaultValue: "This trip has no GTFS trip ID and cannot be loaded."
+            )
             return
         }
 

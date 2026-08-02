@@ -536,7 +536,8 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
            let longitude {
             return MapSelectionOption(data: .osmStation(
                 osmID: osmID,
-                name: string(feature, keys: ["name", "displayname"]) ?? "Station",
+                name: string(feature, keys: ["name", "displayname"])
+                    ?? L10n.string("Station"),
                 modeType: string(feature, keys: ["mode_type", "station_type"]) ?? "station",
                 latitude: latitude,
                 longitude: longitude

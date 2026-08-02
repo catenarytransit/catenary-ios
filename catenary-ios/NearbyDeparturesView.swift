@@ -163,7 +163,7 @@ private enum NearbySortMode: String, CaseIterable, Identifiable {
     case alphabetic
 
     var id: String { rawValue }
-    var label: String { self == .distance ? "Distance" : "Name" }
+    var label: LocalizedStringKey { self == .distance ? "Distance" : "Name" }
     var symbol: String { self == .distance ? "ruler" : "textformat.abc" }
 }
 
@@ -342,7 +342,12 @@ struct NearbyDeparturesView: View {
             Button {
                 dropPinAtMapCenter()
             } label: {
-                Label(pinActive ? "Move pin" : "Drop pin", systemImage: "mappin.and.ellipse")
+                Label(
+                    pinActive
+                        ? LocalizedStringKey("Move pin")
+                        : LocalizedStringKey("Drop pin"),
+                    systemImage: "mappin.and.ellipse"
+                )
             }
             .buttonStyle(.bordered)
 
@@ -933,7 +938,11 @@ private struct NearbyLocalDeparturePill: View {
                 }
 
                 if let platform = platformText {
-                    Text("Platform \(platform)")
+                    Text(verbatim: L10n.format(
+                        "platform.value",
+                        defaultValue: "Platform %@",
+                        platform
+                    ))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

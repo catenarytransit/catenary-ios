@@ -1,5 +1,6 @@
 import CoreLocation
 import Foundation
+import SwiftUI
 
 enum StopScreenSource: Hashable, Sendable {
     case stop(chateauID: String, stopID: String)
@@ -174,7 +175,7 @@ enum StopTransitMode: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
-    var title: String {
+    var title: LocalizedStringKey {
         switch self {
         case .rail: return "Rail"
         case .metro: return "Metro & tram"
@@ -224,6 +225,17 @@ enum StopTrainCategoryClassifier {
             return ["ICE/TGV/RJX", "EC/IC", "IR/PE", "RE", "S/SN/R", "ARZ/EXT"]
         default:
             return []
+        }
+    }
+
+    static func localizedTitle(_ category: String) -> String {
+        switch category {
+        case "Grandes lignes":
+            return L10n.string("train.category.mainline", defaultValue: "Mainline")
+        case "Other":
+            return L10n.string("train.category.other", defaultValue: "Other")
+        default:
+            return category
         }
     }
 

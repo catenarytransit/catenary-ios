@@ -92,23 +92,11 @@ struct DelayDiff: View {
         } else {
             Group {
                 if diff < 0 {
-                    Text(verbatim: NSLocalizedString(
-                        "early",
-                        value: "Early",
-                        comment: "A vehicle is running earlier than scheduled"
-                    ))
+                    Text(verbatim: L10n.string("early", defaultValue: "Early", locale: locale))
                 } else if diff > 0 {
-                    Text(verbatim: NSLocalizedString(
-                        "late",
-                        value: "Late",
-                        comment: "A vehicle is running later than scheduled"
-                    ))
+                    Text(verbatim: L10n.string("late", defaultValue: "Late", locale: locale))
                 } else {
-                    Text(verbatim: NSLocalizedString(
-                        "ontime",
-                        value: "On time",
-                        comment: "A vehicle is running on schedule"
-                    ))
+                    Text(verbatim: L10n.string("ontime", defaultValue: "On time", locale: locale))
                     .fontWeight(.semibold)
                 }
             }
@@ -139,28 +127,19 @@ private enum DelayDiffLocale {
     }
 
     static func hourMarking(for locale: Locale) -> String {
-        switch languageCode(for: locale) {
-        case "zh": return "小时"
-        case "ko": return "시간"
-        case "ja": return "時間"
-        default: return "h"
-        }
+        L10n.string("time.unit.hour.short", defaultValue: "h", locale: locale)
     }
 
     static func minuteMarking(for locale: Locale, showSeconds: Bool) -> String {
-        switch languageCode(for: locale) {
-        case "zh", "ja": return "分"
-        case "ko": return "분"
-        default: return showSeconds ? "m" : "min"
-        }
+        L10n.string(
+            showSeconds ? "time.unit.minute.narrow" : "time.unit.minute.short",
+            defaultValue: showSeconds ? "m" : "min",
+            locale: locale
+        )
     }
 
     static func secondMarking(for locale: Locale) -> String {
-        switch languageCode(for: locale) {
-        case "ko": return "초"
-        case "zh","ja": return "秒"
-        default: return "s"
-        }
+        L10n.string("time.unit.second.short", defaultValue: "s", locale: locale)
     }
 }
 

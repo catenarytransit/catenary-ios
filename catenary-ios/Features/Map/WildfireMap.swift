@@ -114,7 +114,7 @@ final class WildfireMapData: ObservableObject {
             let acreage = fire.data?.acreage ?? 0
             let hectares = acreage * 0.4046
             let hectaresRounded = String(format: "%.1f", hectares)
-            let name = fire.name ?? "Unknown Fire"
+            let name = fire.name ?? L10n.string("Unknown Fire")
 
             let feature = MLNPointFeature()
             feature.coordinate = CLLocationCoordinate2D(

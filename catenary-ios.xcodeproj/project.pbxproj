@@ -110,7 +110,32 @@
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				bg,
+				cs,
+				da,
+				de,
+				el,
 				en,
+				es,
+				fi,
+				fr,
+				hu,
+				it,
+				ja,
+				ko,
+				nl,
+				nb,
+				oc,
+				pl,
+				pt,
+				ro,
+				ru,
+				sk,
+				sv,
+				uk,
+				"zh-HK",
+				"zh-Hans",
+				"zh-Hant",
 				Base,
 			);
 			mainGroup = F71913B82EC82B7700AAA2A3;

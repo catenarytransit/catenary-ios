@@ -45,7 +45,6 @@ struct TransitTimePicker: View {
                     )
                     .datePickerStyle(.wheel)
                     .labelsHidden()
-                    .environment(\.locale, Locale(identifier: "en_GB"))
                     .environment(\.timeZone, timezone)
 
                     Button {
@@ -81,7 +80,7 @@ struct TransitTimePicker: View {
     }
 
     private var label: String {
-        if isNow { return "Now" }
+        if isNow { return L10n.string("Now") }
 
         let timeFormatter = DateFormatter()
         timeFormatter.calendar = Calendar(identifier: .gregorian)

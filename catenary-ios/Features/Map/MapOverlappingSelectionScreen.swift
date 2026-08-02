@@ -77,7 +77,11 @@ struct MapOverlappingSelectionScreen: View {
     }
 
     private var selectionCountTitle: String {
-        "\(options.count) \(options.count == 1 ? "item" : "items") selected"
+        L10n.format(
+            "selection.count",
+            defaultValue: "Selected: %d",
+            options.count
+        )
     }
 
     private var vehicles: [MapSelectionOption] {
@@ -101,7 +105,7 @@ struct MapOverlappingSelectionScreen: View {
         return candidates.filter { seen.insert($0.id).inserted }
     }
 
-    private func sectionHeader(_ title: String) -> some View {
+    private func sectionHeader(_ title: LocalizedStringKey) -> some View {
         Text(title)
             .font(.headline)
             .padding(.top, 8)
@@ -176,7 +180,7 @@ private struct VehicleSelectionRow: View {
             if let shortName, let longName, !longName.localizedCaseInsensitiveContains(shortName) {
                 Text("\(Text(shortName).bold()) \(longName)")
             } else {
-                Text(longName ?? shortName ?? "Unknown line")
+                Text(longName ?? shortName ?? L10n.string("Unknown line"))
                     .bold()
             }
         }
@@ -207,9 +211,9 @@ private struct StationSelectionRow: View {
 
     private func stationModeName(_ modeType: String) -> String {
         switch modeType.lowercased() {
-        case "subway", "metro": return "Metro"
-        case "rail", "train": return "Rail"
-        case "tram", "light_rail": return "Tram"
+        case "subway", "metro": return L10n.string("Metro")
+        case "rail", "train": return L10n.string("Rail")
+        case "tram", "light_rail": return L10n.string("Tram")
         default: return modeType.replacingOccurrences(of: "_", with: " ").capitalized
         }
     }
@@ -234,7 +238,7 @@ private struct RouteSelectionRow: View {
 
     var body: some View {
         if case let .route(_, _, colour, name, routeType) = selector {
-            Text(nonEmpty(name) ?? "Unnamed line")
+            Text(nonEmpty(name) ?? L10n.string("Unnamed line"))
                 .font(.body.weight(.bold))
                 .foregroundStyle(Color(catenaryHex: colour) ?? modeColour(routeType))
                 .lineLimit(2)
@@ -259,7 +263,7 @@ private enum SelectionRouteCategory: Hashable {
 
     static let displayOrder: [SelectionRouteCategory] = [.rail, .metro, .tram, .other, .bus]
 
-    var title: String {
+    var title: LocalizedStringKey {
         switch self {
         case .rail: return "Train"
         case .metro: return "Metro"
