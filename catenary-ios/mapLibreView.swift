@@ -823,7 +823,9 @@ struct mapLibreView: View {
     }
 
     private var ranked3456Outside: UIColor {
-        circleOutside
+        colorScheme == .dark
+            ? UIColor(red: 0x1C/255.0, green: 0x26/255.0, blue: 0x36/255.0, alpha: 1.0)
+            : UIColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0)
     }
 
     private func osmStationLabelTextColor(startZoom: Double) -> NSExpression {
