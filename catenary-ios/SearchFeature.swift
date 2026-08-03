@@ -5,23 +5,63 @@ import SwiftUI
 
 // MARK: - Search field
 
+struct SearchLauncher: View {
+    let onSearch: () -> Void
+    let onSettingsClick: () -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button(action: onSearch) {
+                HStack(spacing: 8) {
+                    Image(.catLogo)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 32, height: 32)
+                        .accessibilityHidden(true)
+
+                    Text("Search Here")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+
+                    Spacer(minLength: 8)
+                }
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .padding(.leading, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Search")
+
+            Button(action: onSettingsClick) {
+                Image(systemName: "gearshape.fill")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 48, height: 48)
+            }
+            .accessibilityLabel("Settings")
+        }
+        .frame(height: 48)
+        .catenarySearchBarSurface()
+    }
+}
+
 struct CatenarySearchBar: View {
-    @Binding var query: String
+    @ObservedObject var viewModel: SearchViewModel
     let focus: FocusState<Bool>.Binding
+    let isActive: Bool
+    let onQueryChange: (String) -> Void
+    let onClose: () -> Void
     let onSettingsClick: () -> Void
 
     var body: some View {
         HStack(spacing: 0) {
             Group {
-                if focus.wrappedValue {
-                    Button {
-                        focus.wrappedValue = false
-                    } label: {
+                if isActive {
+                    Button(action: onClose) {
                         Image(systemName: "xmark")
                             .font(.body.weight(.semibold))
                             .foregroundStyle(.secondary)
                     }
-                    .accessibilityLabel("Dismiss search focus")
+                    .accessibilityLabel("Close search")
                 } else {
                     Image(.catLogo)
                         .resizable()
@@ -32,7 +72,7 @@ struct CatenarySearchBar: View {
             }
             .frame(width: 48, height: 48)
 
-            TextField("Search Here", text: $query)
+            TextField("Search Here", text: $viewModel.query)
                 .font(.system(size: 16))
                 .lineLimit(1)
                 .submitLabel(.search)
@@ -40,7 +80,7 @@ struct CatenarySearchBar: View {
                 .frame(maxWidth: .infinity, minHeight: 48)
                 .padding(.horizontal, 8)
 
-            if query.isEmpty && !focus.wrappedValue {
+            if viewModel.query.isEmpty && !isActive {
                 Button(action: onSettingsClick) {
                     Image(systemName: "gearshape.fill")
                         .foregroundStyle(.secondary)
@@ -51,6 +91,9 @@ struct CatenarySearchBar: View {
         }
         .frame(height: 48)
         .catenarySearchBarSurface()
+        .onChange(of: viewModel.query) { _, query in
+            onQueryChange(query)
+        }
     }
 }
 
@@ -58,9 +101,11 @@ struct CatenarySearchBar: View {
 
 @MainActor
 final class SearchViewModel: ObservableObject {
+    @Published var query = ""
     @Published private(set) var rows: [SearchRow] = []
     @Published private(set) var isLoading = false
 
+    private let worker = SearchWorker()
     private var searchTask: Task<Void, Never>?
     private var generation = UUID()
 
@@ -74,75 +119,64 @@ final class SearchViewModel: ObservableObject {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuery.isEmpty else {
             generation = UUID()
-            rows = []
-            isLoading = false
+            if !rows.isEmpty {
+                rows = []
+            }
+            if isLoading {
+                isLoading = false
+            }
             return
         }
 
         let token = UUID()
         generation = token
-        isLoading = true
+        if !isLoading {
+            isLoading = true
+        }
 
         let request = SearchRequestContext(
             query: trimmedQuery,
             userLocation: userLocation.map(SearchCoordinate.init),
             mapCenter: SearchCoordinate(mapCenter)
         )
+        let worker = self.worker
 
         searchTask = Task { [weak self] in
             do {
-                try await Task.sleep(nanoseconds: 200_000_000)
+                try await Task.sleep(nanoseconds: 300_000_000)
             } catch {
                 return
             }
 
-            guard let self, self.generation == token, !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return }
+            let combinedRows = await worker.perform(request)
 
-            var catenary: SearchCatenaryResponse?
-            var cypress: [SearchCypressFeature] = []
-            var osmStations: [SearchOsmStationResult] = []
+            guard let self,
+                  self.generation == token,
+                  !Task.isCancelled else { return }
 
-            await withTaskGroup(of: SearchSourceResult.self) { group in
-                group.addTask {
-                    .catenary(await Self.fetchCatenary(request))
-                }
-                group.addTask {
-                    .cypress(await Self.fetchCypress(request))
-                }
-                group.addTask {
-                    .osmStations(await Self.fetchOsmStations(request))
-                }
-
-                for await result in group {
-                    guard !Task.isCancelled, self.generation == token else {
-                        group.cancelAll()
-                        return
-                    }
-
-                    switch result {
-                    case let .catenary(response):
-                        catenary = response
-                    case let .cypress(features):
-                        cypress = features
-                    case let .osmStations(stations):
-                        osmStations = stations
-                    }
-
-                    self.rows = Self.buildCombinedRows(
-                        catenaryResults: catenary,
-                        cypressResults: cypress,
-                        osmStationResults: osmStations,
-                        userLocation: request.userLocation
-                    )
-                }
-            }
-
-            guard self.generation == token, !Task.isCancelled else { return }
+            self.rows = combinedRows
             self.isLoading = false
         }
     }
 
-    nonisolated private static func fetchCatenary(
+    func reset() {
+        searchTask?.cancel()
+        searchTask = nil
+        generation = UUID()
+
+        if !query.isEmpty {
+            query = ""
+        }
+        if !rows.isEmpty {
+            rows = []
+        }
+        if isLoading {
+            isLoading = false
+        }
+    }
+
+    nonisolated fileprivate static func fetchCatenary(
         _ request: SearchRequestContext
     ) async -> SearchCatenaryResponse? {
         var components = URLComponents(string: "https://birch.catenarymaps.org/text_search_v1")
@@ -160,7 +194,7 @@ final class SearchViewModel: ObservableObject {
         return await fetch(SearchCatenaryResponse.self, url: components?.url)
     }
 
-    nonisolated private static func fetchCypress(
+    nonisolated fileprivate static func fetchCypress(
         _ request: SearchRequestContext
     ) async -> [SearchCypressFeature] {
         var components = URLComponents(string: "https://cypress.catenarymaps.org/v2/search")
@@ -174,7 +208,7 @@ final class SearchViewModel: ObservableObject {
         return response?.features ?? []
     }
 
-    nonisolated private static func fetchOsmStations(
+    nonisolated fileprivate static func fetchOsmStations(
         _ request: SearchRequestContext
     ) async -> [SearchOsmStationResult] {
         var components = URLComponents(string: "https://birch.catenarymaps.org/osm_station_search")
@@ -183,7 +217,7 @@ final class SearchViewModel: ObservableObject {
         return response?.results ?? []
     }
 
-    nonisolated private static func fetch<T: Decodable & Sendable>(
+    nonisolated fileprivate static func fetch<T: Decodable & Sendable>(
         _ type: T.Type,
         url: URL?
     ) async -> T? {
@@ -200,7 +234,7 @@ final class SearchViewModel: ObservableObject {
         }
     }
 
-    nonisolated private static func buildCombinedRows(
+    nonisolated fileprivate static func buildCombinedRows(
         catenaryResults: SearchCatenaryResponse?,
         cypressResults: [SearchCypressFeature],
         osmStationResults: [SearchOsmStationResult],
@@ -286,12 +320,12 @@ final class SearchViewModel: ObservableObject {
         return rows.sorted { $0.weightedScore > $1.weightedScore }
     }
 
-    nonisolated private static func rankToUnitScore(index: Int, total: Int) -> Double {
+    nonisolated fileprivate static func rankToUnitScore(index: Int, total: Int) -> Double {
         guard total > 0 else { return 0 }
         return min(max(Double(total - index) / Double(total), 0), 1)
     }
 
-    nonisolated private static func haversineDistance(
+    nonisolated fileprivate static func haversineDistance(
         from: SearchCoordinate,
         to: SearchCoordinate
     ) -> Double {
@@ -304,6 +338,24 @@ final class SearchViewModel: ObservableObject {
             + cos(latitude1) * cos(latitude2)
             * sin(longitudeDelta / 2) * sin(longitudeDelta / 2)
         return earthRadius * 2 * atan2(sqrt(a), sqrt(1 - a))
+    }
+}
+
+private actor SearchWorker {
+    func perform(_ request: SearchRequestContext) async -> [SearchRow] {
+        async let catenary = SearchViewModel.fetchCatenary(request)
+        async let cypress = SearchViewModel.fetchCypress(request)
+        async let osmStations = SearchViewModel.fetchOsmStations(request)
+
+        let results = await (catenary, cypress, osmStations)
+        guard !Task.isCancelled else { return [] }
+
+        return SearchViewModel.buildCombinedRows(
+            catenaryResults: results.0,
+            cypressResults: results.1,
+            osmStationResults: results.2,
+            userLocation: request.userLocation
+        )
     }
 }
 
@@ -326,12 +378,6 @@ private struct SearchCoordinate: Sendable {
         latitude = coordinate.latitude
         longitude = coordinate.longitude
     }
-}
-
-private enum SearchSourceResult: Sendable {
-    case catenary(SearchCatenaryResponse?)
-    case cypress([SearchCypressFeature])
-    case osmStations([SearchOsmStationResult])
 }
 
 // MARK: - Combined result rows

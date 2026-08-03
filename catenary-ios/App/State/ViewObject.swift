@@ -8,7 +8,6 @@ import Foundation
 import MapLibre
 import MapLibreSwiftUI
 import SwiftUI
-import UIKit
 
 private struct PersistedMapCamera {
     let coordinate: CLLocationCoordinate2D
@@ -94,12 +93,9 @@ class viewObject: ObservableObject {
     @Published var currZoom: Double = 5.0
     @Published var visibleCoordinateBounds: MLNCoordinateBounds = MLNCoordinateBounds(sw: CLLocationCoordinate2D(latitude: 0, longitude: 0), ne: CLLocationCoordinate2D(latitude: 0, longitude: 0))
 
-    @Published var searchText = ""
-    @Published var showTopView = false
     @Published var presDetent: PresentationDetent = .height(350)
     @Published var largeDetentHeight: CGFloat = 0
     @Published var currentRotation: CLLocationDirection = 0
-    @Published var isSearchFocusing: Bool = false
 
     /// `true` whenever the map camera is in any user-tracking mode.
     /// Derived from `camera.state`, so it updates automatically when the user
@@ -122,7 +118,6 @@ class viewObject: ObservableObject {
     func push(_ item: CatenaryStackItem) {
         catenaryStack.append(item)
         presDetent = .large
-        isSearchFocusing = false
     }
 
     func replaceTop(with item: CatenaryStackItem) {
@@ -173,21 +168,5 @@ class viewObject: ObservableObject {
         }
     }
 
-    @Published var isVisible: Bool = false
-
-    init() {
-        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { [weak self] _ in
-            guard self?.isVisible != true else { return }
-            self?.isVisible = true
-        }
-        NotificationCenter.default.addObserver(forName: UIResponder.keyboardDidHideNotification, object: nil, queue: .main) { [weak self] _ in
-            guard self?.isVisible != false else { return }
-            self?.isVisible = false
-        }
-    }
-
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-    }
 
 }

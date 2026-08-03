@@ -15,11 +15,12 @@ var GlobalViewObject: viewObject = viewObject()
 @main
 struct CatenaryMapsApp: App {
     @StateObject var viewobject = GlobalViewObject
+    @StateObject private var searchViewModel = SearchViewModel()
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
         
     var body: some Scene {
         WindowGroup {
-            MainUIView()
+            MainUIView(searchViewModel: searchViewModel)
                 .environmentObject(viewobject)
         }
     }
@@ -107,12 +108,6 @@ struct OverlayRoot: View {
     var body: some View {
         EmptyView()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .inAppSearchOverlay(
-                text: $viewobject.searchText,
-                showField: $viewobject.showTopView,
-                isLargeDetent: viewobject.presDetent == .large,
-                keyboardVisible: viewobject.isVisible
-            )
             .sheet(isPresented: $viewobject.showLayerSelector) {
                 
                 NavigationStack {
@@ -299,79 +294,14 @@ struct LayerSelectorSheet: View {
 }
 
 class PassThroughWindow: UIWindow {
-    // textfield rame
-    var textFieldFrame: CGRect = .zero
-
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        
         if GlobalViewObject.showLayerSelector {
             return super.hitTest(point, with: event)
         }
-
-        
-        if textFieldFrame.contains(point) {
-        
-            return nil
-        }
-
-        
         return nil
     }
 }
 
-
-
-
-
-
-struct InAppNotificationViewModifier: ViewModifier {
-    @Binding var text: String
-    @Binding var showField: Bool
-    var isLargeDetent: Bool
-    var keyboardVisible: Bool
-    func body(content: Content) -> some View {
-        content
-            .overlay(alignment: .top) {
-                if showField && !(isLargeDetent || keyboardVisible) {
-                    TextField("Search Here", text: $text)
-                        .padding(.trailing, 20)
-                        .padding(.vertical, 12)
-                        .safeAreaInset(edge: .leading) { 
-                            Image(.catLogo)
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(height: 18)
-                                .padding(.leading, 10)
-                                
-                        }
-                        .catenarySearchBarSurface()
-                        .padding()
-                        .background (
-                            GeometryReader { geo in
-                                Color.clear
-                                    .onAppear {
-                                        if let windowScene = UIApplication.shared.connectedScenes
-                                            .compactMap({ $0 as? UIWindowScene })
-                                            .first,
-                                           let window = windowScene.windows.last as? PassThroughWindow {
-                                            // Convert frame to window coordinates
-                                            let frameInWindow = geo.frame(in: .global)
-                                            window.textFieldFrame = frameInWindow
-                                        }
-                                    }
-                            }
-                        )
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
-            }
-    }
-}
-
-extension View {
-    func inAppSearchOverlay(text: Binding<String>, showField: Binding<Bool>, isLargeDetent: Bool, keyboardVisible: Bool) -> some View {
-        self.modifier(InAppNotificationViewModifier(text: text, showField: showField, isLargeDetent: isLargeDetent, keyboardVisible: keyboardVisible))
-    }
-}
 
 extension View {
     /// Matches the Compose search field's Material surface, pill shape, and 4 dp shadow
