@@ -26,11 +26,10 @@ final class FloatingWindow: UIWindow {
 }
 
 struct MainUIView: View {
-    
+    let searchViewModel: SearchViewModel
+
     @StateObject var locationManager = LocationManager()
-    @StateObject private var searchViewModel = SearchViewModel()
     @StateObject private var nearbyPinMapCoordinator = NearbyPinMapCoordinator()
-    @FocusState var focus: Bool
     @State private var isSheetPresented = true
     @State private var liveSheetHeight: CGFloat = 350
     @State private var locationOpacity: CGFloat = 1
@@ -40,6 +39,7 @@ struct MainUIView: View {
     @State private var nearbyPinCoordinate: CLLocationCoordinate2D?
     @State private var mapViewportSize: CGSize = .zero
     @State private var mapCameraRevision: UInt64 = 0
+    @State private var searchFocusRequest = 0
     
     
     var body: some View {
@@ -74,7 +74,6 @@ struct MainUIView: View {
                     if viewobject.presDetent != .large {
                         viewobject.presDetent = .large
                     }
-                    focus = false
                 }
                 .sheet(isPresented: $isSheetPresented) {
                     BottomDrawer(
@@ -82,6 +81,7 @@ struct MainUIView: View {
                         sheetHeight: liveSheetHeight,
                         locationManager: locationManager,
                         searchViewModel: searchViewModel,
+                        focusRequest: searchFocusRequest,
                         nearbyPinActive: $nearbyPinActive,
                         nearbyPinCoordinate: $nearbyPinCoordinate
                     )
@@ -104,10 +104,6 @@ struct MainUIView: View {
                                 liveSheetHeight = boundedHeight
                             }
 
-                            let shouldShowTopView = newValue > 400
-                            if viewobject.showTopView != shouldShowTopView {
-                                viewobject.showTopView = shouldShowTopView
-                            }
 
                             let progress = max(min((newValue - 400) / 50, 1), 0)
                             let toolbarOpacity = 1 - progress
@@ -142,35 +138,18 @@ struct MainUIView: View {
                     }
                 }
                 .overlay(alignment: .top) {
-                    if liveSheetHeight < 450 {
-                        CatenarySearchBar(
-                            query: $viewobject.searchText,
-                            focus: $focus,
-                            onSettingsClick: {
-                                focus = false
-                                viewobject.searchText = ""
-                                viewobject.push(.settings)
-                            }
+                    if isSheetPresented,
+                       viewobject.currentStackItem == nil,
+                       viewobject.presDetent != .large {
+                        SearchLauncher(
+                            onSearch: beginSearch,
+                            onSettingsClick: { viewobject.push(.settings) }
                         )
                         .padding()
                         .ignoresSafeArea(.container, edges: .bottom)
-                        .transition(.asymmetric(insertion: .opacity, removal: .opacity))
+                        .transition(.opacity)
                     }
                 }
-                .onChange(of: focus) { _, isFocused in
-                    if isFocused {
-                        viewobject.presDetent = .large
-                        viewobject.isSearchFocusing = true
-                    }
-                }
-                .onChange(of: viewobject.searchText) { _, query in
-                    searchViewModel.search(
-                        query: query,
-                        userLocation: locationManager.lastKnownLocation,
-                        mapCenter: viewobject.visibleCoordinateBounds.catenarySearchCenter
-                    )
-                }
-//            if presentation detent switches to large & issearch focusing is true, switch focus state to true
 
         }
         .onGeometryChange(for: CGSize.self) { proxy in
@@ -191,6 +170,12 @@ struct MainUIView: View {
     }
     @EnvironmentObject var viewobject: viewObject
 
+    private func beginSearch() {
+        guard viewobject.currentStackItem == nil else { return }
+        viewobject.presDetent = .large
+        searchFocusRequest &+= 1
+    }
+
     private func useInitialUserLocationIfNeeded() {
         guard let coordinate = locationManager.lastKnownLocation else { return }
         viewobject.useInitialUserLocationIfNeeded(coordinate)
@@ -198,7 +183,7 @@ struct MainUIView: View {
 
     private var mapContentInset: UIEdgeInsets {
         guard isSheetPresented, mapViewportSize.height > 0 else { return .zero }
-        guard liveSheetHeight >= mapViewportSize.height / 2 else { return .zero }
+        guard viewobject.presDetent == .large else { return .zero }
 
         return UIEdgeInsets(
             top: 0,
@@ -262,5 +247,5 @@ struct MainUIView: View {
 
 
 #Preview {
-    MainUIView().environmentObject(viewObject())
+    MainUIView(searchViewModel: SearchViewModel()).environmentObject(viewObject())
 }

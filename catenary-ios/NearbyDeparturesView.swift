@@ -939,8 +939,8 @@ private struct NearbyLocalDeparturePill: View {
                             showSeconds: showSeconds,
                             showDays: false,
                             showPlus: false,
-                            numSize: 16,
-                            unitSize: 14,
+                            numSize: 12,
+                            unitSize: 12,
                             numberFontWeight: .medium,
                             unitFontWeight: .medium
                         )

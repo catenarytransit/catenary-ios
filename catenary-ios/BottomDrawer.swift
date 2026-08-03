@@ -16,11 +16,13 @@ struct BottomDrawer: View {
     @Binding var selectedDetent: PresentationDetent
     let sheetHeight: CGFloat
     @ObservedObject var locationManager: LocationManager
-    @ObservedObject var searchViewModel: SearchViewModel
+    let searchViewModel: SearchViewModel
+    let focusRequest: Int
     @Binding var nearbyPinActive: Bool
     @Binding var nearbyPinCoordinate: CLLocationCoordinate2D?
     @EnvironmentObject var viewObject: viewObject
-    @FocusState var isFocused: Bool
+    @FocusState private var isFocused: Bool
+    @State private var isSearchActive = false
 
     var body: some View {
         Group {
@@ -31,32 +33,42 @@ struct BottomDrawer: View {
                     nearbyPinActive: $nearbyPinActive,
                     nearbyPinCoordinate: $nearbyPinCoordinate
                 )
-            } else if isFocused {
-                CatenarySearchResultsView(
-                    viewModel: searchViewModel,
-                    onCypressClick: selectCypress,
-                    onStopClick: selectStop,
-                    onRouteClick: selectRoute,
-                    onOsmStationClick: selectOsmStation
-                )
             } else {
-                NearbyDeparturesView(
-                    locationManager: locationManager,
-                    pinActive: $nearbyPinActive,
-                    pickedCoordinate: $nearbyPinCoordinate
-                )
+                ZStack {
+                    NearbyDeparturesView(
+                        locationManager: locationManager,
+                        pinActive: $nearbyPinActive,
+                        pickedCoordinate: $nearbyPinCoordinate
+                    )
+                    .opacity(isSearchActive ? 0 : 1)
+                    .allowsHitTesting(!isSearchActive)
+                    .accessibilityHidden(isSearchActive)
+
+                    if isSearchActive {
+                        CatenarySearchResultsView(
+                            viewModel: searchViewModel,
+                            onCypressClick: selectCypress,
+                            onStopClick: selectStop,
+                            onRouteClick: selectRoute,
+                            onOsmStationClick: selectOsmStation
+                        )
+                        .transition(.opacity)
+                    }
+                }
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack {
                 if viewObject.currentStackItem == nil {
-                    if selectedDetent == .large || viewObject.isVisible {
+                    if selectedDetent == .large {
                         CatenarySearchBar(
-                            query: $viewObject.searchText,
+                            viewModel: searchViewModel,
                             focus: $isFocused,
+                            isActive: isSearchActive,
+                            onQueryChange: performSearch,
+                            onClose: finishSearch,
                             onSettingsClick: openSettings
                         )
-                        .transition(.move(edge: .top).combined(with: .opacity))
                         .padding(.horizontal, 18)
                         .frame(height: 80)
                         .padding(.top, 12)
@@ -77,21 +89,41 @@ struct BottomDrawer: View {
             }
             .ignoresSafeArea(.keyboard)
         }
+        .task(id: focusRequest) {
+            guard focusRequest > 0,
+                  selectedDetent == .large,
+                  viewObject.currentStackItem == nil else { return }
+
+            isSearchActive = true
+            await Task.yield()
+
+            guard selectedDetent == .large,
+                  viewObject.currentStackItem == nil else { return }
+            isFocused = true
+        }
         .onChange(of: selectedDetent) { _, detent in
-            guard detent == .large else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                guard selectedDetent == .large,
-                      viewObject.isSearchFocusing,
-                      viewObject.currentStackItem == nil else { return }
-                isFocused = true
-                viewObject.isSearchFocusing = false
+            if detent != .large, isSearchActive {
+                finishSearch()
             }
         }
         .onChange(of: isFocused) { _, focused in
-            if !focused {
-                viewObject.isSearchFocusing = false
+            if focused {
+                isSearchActive = true
             }
         }
+        .onChange(of: viewObject.catenaryStack) { _, stack in
+            if !stack.isEmpty {
+                finishSearch()
+            }
+        }
+    }
+
+    private func performSearch(_ query: String) {
+        searchViewModel.search(
+            query: query,
+            userLocation: locationManager.lastKnownLocation,
+            mapCenter: viewObject.visibleCoordinateBounds.catenarySearchCenter
+        )
     }
 
     private func selectCypress(_ feature: SearchCypressFeature) {
@@ -134,8 +166,8 @@ struct BottomDrawer: View {
 
     private func finishSearch() {
         isFocused = false
-        viewObject.isSearchFocusing = false
-        viewObject.searchText = ""
+        isSearchActive = false
+        searchViewModel.reset()
     }
 }
 
