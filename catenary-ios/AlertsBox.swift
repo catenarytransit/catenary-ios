@@ -127,16 +127,26 @@ struct AlertsBox: View {
 
     private var languageList: [String] {
         var languages: [String] = []
+
         for alert in sortedAlerts.map(\.value) {
-            for language in alert.allTranslationLanguages where !languages.contains(language) {
-                languages.append(language)
+            for language in alert.allTranslationLanguages {
+                let normalizedLanguage = alertLanguageCode(language)
+                if let existingIndex = languages.firstIndex(where: {
+                    alertLanguageCode($0)
+                        .localizedCaseInsensitiveCompare(normalizedLanguage) == .orderedSame
+                }) {
+                    let newIsHTML = language.lowercased().hasSuffix("-html")
+                    let existingIsHTML = languages[existingIndex].lowercased().hasSuffix("-html")
+                    if newIsHTML && !existingIsHTML {
+                        languages[existingIndex] = language
+                    }
+                } else {
+                    languages.append(language)
+                }
             }
         }
 
-        guard !languages.isEmpty else { return [""] }
-        let htmlLanguages = languages.filter { $0.hasSuffix("-html") }
-        let baseLanguagesToHide = Set(htmlLanguages.map { String($0.dropLast("-html".count)) })
-        return languages.filter { !baseLanguagesToHide.contains($0) }
+        return languages.isEmpty ? [""] : languages
     }
 
     private var effectiveSelectedLanguages: Set<String> {
@@ -270,7 +280,8 @@ private struct AlertItemView: View {
 
     private var visibleLanguages: [String] {
         languageList.filter {
-            selectedLanguages.contains($0) && alert.hasTranslation(for: $0)
+            selectedLanguages.contains($0)
+                && alert.hasDisplayableContent(for: $0, chateauID: chateauID)
         }
     }
 
@@ -288,16 +299,19 @@ private struct AlertItemView: View {
                         .padding(.vertical, 4)
                 }
 
-                if let urlTranslation = alert.url?.translation(for: language) {
+                if let urlTranslation = alert.url?.nonEmptyTranslation(for: language) {
                     AlertURLView(translation: urlTranslation)
                 }
 
-                if let header = alert.headerText?.translation(for: language) {
-                    AlertFormattedText(text: header.text, chateauID: chateauID)
-                }
-
-                if let description = alert.descriptionText?.translation(for: language) {
-                    AlertFormattedText(text: description.text, chateauID: chateauID)
+                let textTranslations = alert.displayTextTranslations(
+                    for: language,
+                    chateauID: chateauID
+                )
+                ForEach(textTranslations.indices, id: \.self) { textIndex in
+                    AlertFormattedText(
+                        text: textTranslations[textIndex].text,
+                        chateauID: chateauID
+                    )
                 }
             }
 
@@ -439,6 +453,7 @@ private struct AlertFormattedText: View {
     var body: some View {
         Text(AlertFormattedTextBuilder.make(from: text, chateauID: chateauID))
             .font(.footnote)
+            .foregroundStyle(.primary)
             .tint(colorScheme == .dark ? Color(red: 43 / 255, green: 127 / 255, blue: 1) : .blue)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -530,7 +545,22 @@ private enum AlertFormattedTextBuilder {
             }
         }
 
-        return output
+        let renderedOutput = String(output.characters)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard renderedOutput.isEmpty else { return output }
+
+        let fallback = renderedText(
+            source.replacingOccurrences(
+                of: #"<[^>]+>"#,
+                with: " ",
+                options: .regularExpression
+            ),
+            chateauID: chateauID
+        )
+        .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return fallback.isEmpty ? output : AttributedString(fallback)
     }
 
     static func plainText(from source: String, chateauID: String?) -> String {
@@ -578,10 +608,12 @@ private enum AlertFormattedTextBuilder {
 }
 
 private func alertLanguageCode(_ language: String) -> String {
-    let withoutHTML = language.hasSuffix("-html")
-        ? String(language.dropLast("-html".count))
-        : language
-    return withoutHTML.replacingOccurrences(of: "_", with: "-")
+    let trimmed = language.trimmingCharacters(in: .whitespacesAndNewlines)
+    let withoutHTML = trimmed.lowercased().hasSuffix("-html")
+        ? String(trimmed.dropLast("-html".count))
+        : trimmed
+    let normalized = withoutHTML.replacingOccurrences(of: "_", with: "-")
+    return normalized.localizedCaseInsensitiveCompare("und") == .orderedSame ? "" : normalized
 }
 
 private func defaultAlertLanguage(_ languages: [String], locale: Locale) -> String {
@@ -655,43 +687,92 @@ private func alertEffectDescription(_ effect: Int?) -> String {
 
 private extension SingleTripAlertText {
     func translation(for language: String) -> SingleTripAlertTranslation? {
-        translation.first { ($0.language ?? "") == language }
-            ?? translation.first {
-                alertLanguageCode($0.language ?? "")
-                    .localizedCaseInsensitiveCompare(alertLanguageCode(language)) == .orderedSame
-            }
+        let normalizedLanguage = alertLanguageCode(language)
+        let exactMatches = translation.filter { ($0.language ?? "") == language }
+        let normalizedMatches = translation.filter {
+            alertLanguageCode($0.language ?? "")
+                .localizedCaseInsensitiveCompare(normalizedLanguage) == .orderedSame
+        }
+
+        return exactMatches.first(where: {
+            !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }) ?? normalizedMatches.first(where: {
+            !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }) ?? exactMatches.first ?? normalizedMatches.first
+    }
+
+    func nonEmptyTranslation(for language: String) -> SingleTripAlertTranslation? {
+        guard let translation = translation(for: language),
+              !translation.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return translation
+    }
+
+    func displayableTranslation(
+        for language: String,
+        chateauID: String?
+    ) -> SingleTripAlertTranslation? {
+        guard let translation = nonEmptyTranslation(for: language),
+              !AlertFormattedTextBuilder.plainText(
+                from: translation.text,
+                chateauID: chateauID
+              ).isEmpty else {
+            return nil
+        }
+        return translation
     }
 }
 
 private extension SingleTripAlert {
-    var allTranslationLanguages: [String] {
-        var languages: [String] = []
-
-        if let headerText = headerText {
-            languages.append(contentsOf: headerText.translation.map { translation in
-                translation.language ?? ""
-            })
-        }
-
-        if let descriptionText = descriptionText {
-            languages.append(contentsOf: descriptionText.translation.map { translation in
-                translation.language ?? ""
-            })
-        }
-
-        if let url = url {
-            languages.append(contentsOf: url.translation.map { translation in
-                translation.language ?? ""
-            })
-        }
-
-        return languages
+    var textualFields: [SingleTripAlertText] {
+        [
+            headerText,
+            descriptionText,
+            ttsHeaderText,
+            ttsDescriptionText,
+            causeDetail,
+            effectDetail
+        ].compactMap { $0 }
     }
 
-    func hasTranslation(for language: String) -> Bool {
-        headerText?.translation(for: language) != nil
-            || descriptionText?.translation(for: language) != nil
-            || url?.translation(for: language) != nil
+    var allTranslationLanguages: [String] {
+        var fields = textualFields
+        if let url {
+            fields.append(url)
+        }
+
+        return fields.flatMap { field in
+            field.translation.map { $0.language ?? "" }
+        }
+    }
+
+    func displayTextTranslations(
+        for language: String,
+        chateauID: String?
+    ) -> [SingleTripAlertTranslation] {
+        let candidates: [SingleTripAlertTranslation] = [
+            headerText?.displayableTranslation(for: language, chateauID: chateauID)
+                ?? ttsHeaderText?.displayableTranslation(for: language, chateauID: chateauID),
+            descriptionText?.displayableTranslation(for: language, chateauID: chateauID)
+                ?? ttsDescriptionText?.displayableTranslation(for: language, chateauID: chateauID),
+            causeDetail?.displayableTranslation(for: language, chateauID: chateauID),
+            effectDetail?.displayableTranslation(for: language, chateauID: chateauID)
+        ].compactMap { $0 }
+
+        var seenText = Set<String>()
+        return candidates.filter { translation in
+            let key = AlertFormattedTextBuilder.plainText(
+                from: translation.text,
+                chateauID: chateauID
+            ).lowercased()
+            return !key.isEmpty && seenText.insert(key).inserted
+        }
+    }
+
+    func hasDisplayableContent(for language: String, chateauID: String?) -> Bool {
+        !displayTextTranslations(for: language, chateauID: chateauID).isEmpty
+            || url?.nonEmptyTranslation(for: language) != nil
     }
 }
 

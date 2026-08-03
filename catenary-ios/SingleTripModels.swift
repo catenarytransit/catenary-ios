@@ -142,6 +142,10 @@ struct SingleTripAlert: Codable, Equatable, Sendable {
     let url: SingleTripAlertText?
     let headerText: SingleTripAlertText?
     let descriptionText: SingleTripAlertText?
+    let ttsHeaderText: SingleTripAlertText?
+    let ttsDescriptionText: SingleTripAlertText?
+    let causeDetail: SingleTripAlertText?
+    let effectDetail: SingleTripAlertText?
     let activePeriod: [SingleTripAlertActivePeriod]
     let informedEntity: [SingleTripAlertEntity]?
 
@@ -151,6 +155,10 @@ struct SingleTripAlert: Codable, Equatable, Sendable {
         case url
         case headerText = "header_text"
         case descriptionText = "description_text"
+        case ttsHeaderText = "tts_header_text"
+        case ttsDescriptionText = "tts_description_text"
+        case causeDetail = "cause_detail"
+        case effectDetail = "effect_detail"
         case activePeriod = "active_period"
         case informedEntity = "informed_entity"
     }
@@ -162,6 +170,13 @@ struct SingleTripAlert: Codable, Equatable, Sendable {
         url = try container.decodeIfPresent(SingleTripAlertText.self, forKey: .url)
         headerText = try container.decodeIfPresent(SingleTripAlertText.self, forKey: .headerText)
         descriptionText = try container.decodeIfPresent(SingleTripAlertText.self, forKey: .descriptionText)
+        ttsHeaderText = try container.decodeIfPresent(SingleTripAlertText.self, forKey: .ttsHeaderText)
+        ttsDescriptionText = try container.decodeIfPresent(
+            SingleTripAlertText.self,
+            forKey: .ttsDescriptionText
+        )
+        causeDetail = try container.decodeIfPresent(SingleTripAlertText.self, forKey: .causeDetail)
+        effectDetail = try container.decodeIfPresent(SingleTripAlertText.self, forKey: .effectDetail)
         activePeriod = try container.decodeIfPresent([SingleTripAlertActivePeriod].self, forKey: .activePeriod) ?? []
         informedEntity = try container.decodeIfPresent([SingleTripAlertEntity].self, forKey: .informedEntity)
     }
@@ -173,6 +188,10 @@ struct SingleTripAlert: Codable, Equatable, Sendable {
         try container.encodeIfPresent(url, forKey: .url)
         try container.encodeIfPresent(headerText, forKey: .headerText)
         try container.encodeIfPresent(descriptionText, forKey: .descriptionText)
+        try container.encodeIfPresent(ttsHeaderText, forKey: .ttsHeaderText)
+        try container.encodeIfPresent(ttsDescriptionText, forKey: .ttsDescriptionText)
+        try container.encodeIfPresent(causeDetail, forKey: .causeDetail)
+        try container.encodeIfPresent(effectDetail, forKey: .effectDetail)
         try container.encode(activePeriod, forKey: .activePeriod)
         try container.encodeIfPresent(informedEntity, forKey: .informedEntity)
     }
