@@ -39,6 +39,7 @@ struct MainUIView: View {
     @State private var nearbyPinActive = false
     @State private var nearbyPinCoordinate: CLLocationCoordinate2D?
     @State private var mapViewportSize: CGSize = .zero
+    @State private var mapCameraRevision: UInt64 = 0
     
     
     var body: some View {
@@ -50,11 +51,19 @@ struct MainUIView: View {
                 nearbyPinCoordinate: nearbyPinCoordinate,
                 contentInset: mapContentInset,
                 camera: $viewobject.camera,
+                cameraRevision: mapCameraRevision,
                 layerSettings: viewobject.allLayerSettings,
                 selectedStopContext: viewobject.selectedStopContext,
                 viewobject: viewobject
             )
                 .equatable()
+                .onChange(of: viewobject.camera) { _, camera in
+                    guard camera.lastReasonForChange == nil
+                            || camera.lastReasonForChange == .programmatic else {
+                        return
+                    }
+                    mapCameraRevision &+= 1
+                }
                 .onOpenURL { url in
                     viewobject.openDeepLink(url)
                     isSheetPresented = true

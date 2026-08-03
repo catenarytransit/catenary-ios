@@ -765,6 +765,7 @@ struct mapLibreView: View, Equatable {
     let nearbyPinCoordinate: CLLocationCoordinate2D?
     let contentInset: UIEdgeInsets
     @Binding var camera: MapViewCamera
+    let cameraRevision: UInt64
     let layerSettings: AllLayerSettings
     let selectedStopContext: SelectedStopMapContext?
     let viewobject: viewObject
@@ -779,11 +780,16 @@ struct mapLibreView: View, Equatable {
             && lhs.nearbyPinActive == rhs.nearbyPinActive
             && coordinatesEqual(lhs.nearbyPinCoordinate, rhs.nearbyPinCoordinate)
             && insetsEqual(lhs.contentInset, rhs.contentInset)
-            && lhs.camera == rhs.camera
+            && lhs.cameraRevision == rhs.cameraRevision
             && lhs.layerSettings == rhs.layerSettings
             && lhs.selectedStopContext == rhs.selectedStopContext
             && lhs.viewobject === rhs.viewobject
     }
+
+    // MapLibreSwiftUI rebuilds all DSL-managed layers and sources whenever its
+    // representable updates. Camera gestures write their position back through
+    // the binding, so comparing the camera directly here made every pinch zoom
+    // remove and recreate the live vehicle and trajectory layers.
 
     private static func coordinatesEqual(
         _ lhs: CLLocationCoordinate2D?,
@@ -2206,6 +2212,7 @@ struct mapLibreView: View, Equatable {
         nearbyPinCoordinate: nil,
         contentInset: .zero,
         camera: .constant(previewViewObject.camera),
+        cameraRevision: 0,
         layerSettings: previewViewObject.allLayerSettings,
         selectedStopContext: previewViewObject.selectedStopContext,
         viewobject: previewViewObject
