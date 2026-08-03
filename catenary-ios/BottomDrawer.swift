@@ -58,6 +58,7 @@ struct BottomDrawer: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                         .padding(.horizontal, 18)
                         .frame(height: 80)
+                        .padding(.top, 12)
                     } else if selectedDetent != .height(80) {
                         Spacer()
                             .frame(height: 0.5 * max(160 - (viewObject.largeDetentHeight - viewObject.sheetHeight), 0))
@@ -70,6 +71,7 @@ struct BottomDrawer: View {
                     )
                     .padding(.horizontal, 18)
                     .frame(height: 64)
+                    .padding(.top, 12)
                 }
             }
             .ignoresSafeArea(.keyboard)

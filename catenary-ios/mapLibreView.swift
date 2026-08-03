@@ -2090,6 +2090,10 @@ struct mapLibreView: View {
                 viewobject.currentRotation = proxy.direction
                 viewobject.currZoom = proxy.zoomLevel
                 viewobject.visibleCoordinateBounds = proxy.visibleCoordinateBounds
+                viewobject.rememberMapCamera(
+                    center: proxy.visibleCoordinateBounds.catenarySearchCenter,
+                    zoom: proxy.zoomLevel
+                )
                 realtimeVM.updateViewport(
                     bounds: proxy.visibleCoordinateBounds,
                     zoom: proxy.zoomLevel

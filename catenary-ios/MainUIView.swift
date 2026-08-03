@@ -79,7 +79,7 @@ struct MainUIView: View {
                         .presentationBackgroundInteraction(.enabled)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         
-                        .ignoresSafeArea()
+                        .ignoresSafeArea(.container, edges: .bottom)
                         .interactiveDismissDisabled()
                         .onGeometryChange(for: CGFloat.self) { proxy in
                             proxy.size.height
@@ -186,8 +186,23 @@ struct MainUIView: View {
         } action: { _, newSize in
             mapViewportSize = newSize
         }
+        .task {
+            locationManager.checkLocationAuthorization()
+            useInitialUserLocationIfNeeded()
+        }
+        .onChange(of: locationManager.lastKnownLocation?.latitude) { _, _ in
+            useInitialUserLocationIfNeeded()
+        }
+        .onChange(of: locationManager.lastKnownLocation?.longitude) { _, _ in
+            useInitialUserLocationIfNeeded()
+        }
     }
     @EnvironmentObject var viewobject: viewObject
+
+    private func useInitialUserLocationIfNeeded() {
+        guard let coordinate = locationManager.lastKnownLocation else { return }
+        viewobject.useInitialUserLocationIfNeeded(coordinate)
+    }
 
     private var mapContentInset: UIEdgeInsets {
         guard isSheetPresented, mapViewportSize.height > 0 else { return .zero }

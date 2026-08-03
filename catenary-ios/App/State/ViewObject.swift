@@ -10,8 +10,55 @@ import MapLibreSwiftUI
 import SwiftUI
 import UIKit
 
+private struct PersistedMapCamera {
+    let coordinate: CLLocationCoordinate2D
+    let zoom: Double
+}
+
+private enum MapCameraPersistence {
+    private static let latitudeKey = "map.camera.latitude"
+    private static let longitudeKey = "map.camera.longitude"
+    private static let zoomKey = "map.camera.zoom"
+
+    static func load(defaults: UserDefaults = .standard) -> PersistedMapCamera? {
+        guard defaults.object(forKey: latitudeKey) != nil,
+              defaults.object(forKey: longitudeKey) != nil,
+              defaults.object(forKey: zoomKey) != nil else { return nil }
+
+        let coordinate = CLLocationCoordinate2D(
+            latitude: defaults.double(forKey: latitudeKey),
+            longitude: defaults.double(forKey: longitudeKey)
+        )
+        let zoom = defaults.double(forKey: zoomKey)
+        guard CLLocationCoordinate2DIsValid(coordinate), zoom.isFinite else { return nil }
+        return PersistedMapCamera(coordinate: coordinate, zoom: zoom)
+    }
+
+    static func save(
+        coordinate: CLLocationCoordinate2D,
+        zoom: Double,
+        defaults: UserDefaults = .standard
+    ) {
+        guard CLLocationCoordinate2DIsValid(coordinate), zoom.isFinite else { return }
+        defaults.set(coordinate.latitude, forKey: latitudeKey)
+        defaults.set(coordinate.longitude, forKey: longitudeKey)
+        defaults.set(zoom, forKey: zoomKey)
+    }
+}
+
+private let persistedMapCameraAtLaunch = MapCameraPersistence.load()
+
 class viewObject: ObservableObject {
-    @Published var camera: MapViewCamera = MapViewCamera.center(CLLocationCoordinate2D(latitude: 34.0522, longitude: -118.2437), zoom: 5.0)
+    @Published var camera: MapViewCamera = {
+        if let saved = persistedMapCameraAtLaunch {
+            return .center(saved.coordinate, zoom: saved.zoom)
+        }
+        return .center(
+            CLLocationCoordinate2D(latitude: 34.0522, longitude: -118.2437),
+            zoom: 5.0
+        )
+    }()
+    private var hasResolvedInitialMapCamera = persistedMapCameraAtLaunch != nil
     @Published private(set) var selectedStopContext: SelectedStopMapContext?
 
     func setSelectedStopContext(_ context: SelectedStopMapContext) {
@@ -22,6 +69,21 @@ class viewObject: ObservableObject {
     func clearSelectedStopContext(id: String) {
         guard selectedStopContext?.id == id else { return }
         selectedStopContext = nil
+    }
+
+    func useInitialUserLocationIfNeeded(_ coordinate: CLLocationCoordinate2D) {
+        guard !hasResolvedInitialMapCamera,
+              CLLocationCoordinate2DIsValid(coordinate) else { return }
+
+        let zoom = 13.0
+        camera = .center(coordinate, zoom: zoom)
+        hasResolvedInitialMapCamera = true
+        MapCameraPersistence.save(coordinate: coordinate, zoom: zoom)
+    }
+
+    func rememberMapCamera(center: CLLocationCoordinate2D, zoom: Double) {
+        guard hasResolvedInitialMapCamera else { return }
+        MapCameraPersistence.save(coordinate: center, zoom: zoom)
     }
 
     @Published var allLayerSettings: AllLayerSettings = LayerSettingsPersistence.load() {
