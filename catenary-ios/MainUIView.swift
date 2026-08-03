@@ -32,16 +32,14 @@ struct MainUIView: View {
     @StateObject private var nearbyPinMapCoordinator = NearbyPinMapCoordinator()
     @FocusState var focus: Bool
     @State private var isSheetPresented = true
-//    @State private var selectedDetent: PresentationDetent = .height(80)
-    @State private var sheetHeight: CGFloat = 350
-    @State private var newValVal: CGFloat = 0
+    @State private var liveSheetHeight: CGFloat = 350
     @State private var locationOpacity: CGFloat = 1
-    @State private var animationDuration: CGFloat = 0
     @State private var text = ""
     @State var tempSheetOpacity: CGFloat = 0
     @State private var nearbyPinActive = false
     @State private var nearbyPinCoordinate: CLLocationCoordinate2D?
     @State private var mapViewportSize: CGSize = .zero
+    @State private var mapCameraRevision: UInt64 = 0
     
     
     var body: some View {
@@ -51,8 +49,21 @@ struct MainUIView: View {
                 nearbyPinMapCoordinator: nearbyPinMapCoordinator,
                 nearbyPinActive: nearbyPinActive,
                 nearbyPinCoordinate: nearbyPinCoordinate,
-                contentInset: mapContentInset
+                contentInset: mapContentInset,
+                camera: $viewobject.camera,
+                cameraRevision: mapCameraRevision,
+                layerSettings: viewobject.allLayerSettings,
+                selectedStopContext: viewobject.selectedStopContext,
+                viewobject: viewobject
             )
+                .equatable()
+                .onChange(of: viewobject.camera) { _, camera in
+                    guard camera.lastReasonForChange == nil
+                            || camera.lastReasonForChange == .programmatic else {
+                        return
+                    }
+                    mapCameraRevision &+= 1
+                }
                 .onOpenURL { url in
                     viewobject.openDeepLink(url)
                     isSheetPresented = true
@@ -68,6 +79,7 @@ struct MainUIView: View {
                 .sheet(isPresented: $isSheetPresented) {
                     BottomDrawer(
                         selectedDetent: $viewobject.presDetent,
+                        sheetHeight: liveSheetHeight,
                         locationManager: locationManager,
                         searchViewModel: searchViewModel,
                         nearbyPinActive: $nearbyPinActive,
@@ -79,49 +91,29 @@ struct MainUIView: View {
                         .presentationBackgroundInteraction(.enabled)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         
-                        .ignoresSafeArea()
+                        .ignoresSafeArea(.container, edges: .bottom)
                         .interactiveDismissDisabled()
                         .onGeometryChange(for: CGFloat.self) { proxy in
-                            proxy.size.height
-                        } action: { oldValue, newValue in
-                            if viewobject.isVisible {
-                                let raisedHeight = newValue + (viewobject.largeDetentHeight - viewobject.topHeightKeys)
-                                                               
-                                viewobject.sheetHeight = viewobject.largeDetentHeight <= raisedHeight ? viewobject.largeDetentHeight : raisedHeight
-                                
-                                if viewobject.largeDetentHeight != viewobject.sheetHeight {
-                                    withAnimation {
-                                        viewobject.isVisible = false
-                                    }
-                                }
-                            } else {
-                                
-                                viewobject.sheetHeight = newValue 
+                            max(proxy.size.height, 0)
+                        } action: { _, newValue in
+                            let maximumHeight = viewobject.largeDetentHeight > 0
+                                ? viewobject.largeDetentHeight
+                                : newValue
+                            let boundedHeight = min(newValue, maximumHeight)
+                            if abs(liveSheetHeight - boundedHeight) > 0.5 {
+                                liveSheetHeight = boundedHeight
                             }
-                        }
-                        .onGeometryChange(for: CGFloat.self) { proxy in
-                            
-                            return max(min(proxy.size.height, 450), 0)
-                            
-                            
-                        } action: { oldValue, newValue in
-                            
-                                print(newValue, isSheetPresented)
-                                
-                                sheetHeight = min(newValue, 350)
-                                if newValue > 400 {
-                                    viewobject.showTopView = true
-                                } else {
-                                    viewobject.showTopView = false
-                                }
-                                let progress = max(min((newValue - (400)) / 50, 1), 0)
-                                let toolbarOpacity = 1 - progress
+
+                            let shouldShowTopView = newValue > 400
+                            if viewobject.showTopView != shouldShowTopView {
+                                viewobject.showTopView = shouldShowTopView
+                            }
+
+                            let progress = max(min((newValue - 400) / 50, 1), 0)
+                            let toolbarOpacity = 1 - progress
+                            if abs(locationOpacity - toolbarOpacity) > 0.005 {
                                 locationOpacity = toolbarOpacity
-                                
-                                let diff = abs(newValue - oldValue)
-                                let duration = max(min(diff / 100, 0.3), 0)
-                                animationDuration = duration
-                            
+                            }
                         }
                 }
                 
@@ -150,7 +142,7 @@ struct MainUIView: View {
                     }
                 }
                 .overlay(alignment: .top) {
-                    if viewobject.sheetHeight < 450 {
+                    if liveSheetHeight < 450 {
                         CatenarySearchBar(
                             query: $viewobject.searchText,
                             focus: $focus,
@@ -186,12 +178,27 @@ struct MainUIView: View {
         } action: { _, newSize in
             mapViewportSize = newSize
         }
+        .task {
+            locationManager.checkLocationAuthorization()
+            useInitialUserLocationIfNeeded()
+        }
+        .onChange(of: locationManager.lastKnownLocation?.latitude) { _, _ in
+            useInitialUserLocationIfNeeded()
+        }
+        .onChange(of: locationManager.lastKnownLocation?.longitude) { _, _ in
+            useInitialUserLocationIfNeeded()
+        }
     }
     @EnvironmentObject var viewobject: viewObject
 
+    private func useInitialUserLocationIfNeeded() {
+        guard let coordinate = locationManager.lastKnownLocation else { return }
+        viewobject.useInitialUserLocationIfNeeded(coordinate)
+    }
+
     private var mapContentInset: UIEdgeInsets {
         guard isSheetPresented, mapViewportSize.height > 0 else { return .zero }
-        guard viewobject.sheetHeight >= mapViewportSize.height / 2 else { return .zero }
+        guard liveSheetHeight >= mapViewportSize.height / 2 else { return .zero }
 
         return UIEdgeInsets(
             top: 0,
@@ -242,9 +249,8 @@ struct MainUIView: View {
                 
             }
             .font(.title3)
-            .offset(y: -sheetHeight)
+            .offset(y: -min(liveSheetHeight, 350))
             .opacity(locationOpacity)
-            .animation(.interpolatingSpring(duration: animationDuration, bounce: 0, initialVelocity: 0), value: sheetHeight)
         }
         
     }

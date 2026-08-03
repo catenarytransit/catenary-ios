@@ -220,7 +220,8 @@ final class RealtimeVehicles: ObservableObject {
     }
 
     func updateLayerSettings(_ settings: AllLayerSettings) {
-        self.layerSettings = settings
+        guard settings != layerSettings else { return }
+        layerSettings = settings
         scheduleSend()
     }
 
@@ -256,16 +257,14 @@ final class RealtimeVehicles: ObservableObject {
     /// Merge a `map_update` payload into `byChateau`, respecting `replaces_all`,
     /// then republish the flattened vehicle list.
     private func apply(_ resp: BulkRealtimeResponseV2) {
-        var touched = 0
         for (chateauID, chateauResp) in resp.chateaus {
             guard let cats = chateauResp.categories else { continue }
-            touched += applyCategory(chateauID, "metro", cats.metro)
-            touched += applyCategory(chateauID, "bus",   cats.bus)
-            touched += applyCategory(chateauID, "rail",  cats.rail)
-            touched += applyCategory(chateauID, "other", cats.other)
+            _ = applyCategory(chateauID, "metro", cats.metro)
+            _ = applyCategory(chateauID, "bus",   cats.bus)
+            _ = applyCategory(chateauID, "rail",  cats.rail)
+            _ = applyCategory(chateauID, "other", cats.other)
         }
         rebuildVehicles()
-        print("RealtimeVehicles: applied msg (touched=\(touched), total=\(vehicles.count))")
     }
 
     /// Apply one category's payload. Returns the number of vehicles ingested.

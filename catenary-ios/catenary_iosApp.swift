@@ -15,27 +15,12 @@ var GlobalViewObject: viewObject = viewObject()
 @main
 struct CatenaryMapsApp: App {
     @StateObject var viewobject = GlobalViewObject
-//    @StateObject var liveTransitData: TransitViewModel = TransitViewModel()
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
         
     var body: some Scene {
         WindowGroup {
             MainUIView()
                 .environmentObject(viewobject)
-            
-            
-//                .environmentObject(liveTransitData)
-//                .onAppear {
-//                    liveTransitData.loadData()
-//                    
-//                }
-//                .onTapGesture {
-//                    liveTransitData.vehicles.forEach {
-//                        print("\($0.agencyName), \($0.type) — \($0.headsign), \($0.routeId)")
-//                        
-//                    }
-//                }
-            
         }
     }
 }
@@ -96,7 +81,6 @@ final class SceneDelegate: NSObject, UIWindowSceneDelegate {
 
         let rootSwiftUIView = HiddenSheetHeightMeasurer { measuredHeight in
             GlobalViewObject.largeDetentHeight = measuredHeight
-            print("Measured .large detent height:", measuredHeight)
 
             measurementWindow.isHidden = true
             self.measurementWindow = nil
@@ -126,8 +110,7 @@ struct OverlayRoot: View {
             .inAppSearchOverlay(
                 text: $viewobject.searchText,
                 showField: $viewobject.showTopView,
-                presDetent: viewobject.presDetent,
-                confirmedEqual: viewobject.confirmedEqual, 
+                isLargeDetent: viewobject.presDetent == .large,
                 keyboardVisible: viewobject.isVisible
             )
             .sheet(isPresented: $viewobject.showLayerSelector) {
@@ -344,13 +327,12 @@ class PassThroughWindow: UIWindow {
 struct InAppNotificationViewModifier: ViewModifier {
     @Binding var text: String
     @Binding var showField: Bool
-    var presDetent: PresentationDetent
-    var confirmedEqual: Bool
+    var isLargeDetent: Bool
     var keyboardVisible: Bool
     func body(content: Content) -> some View {
         content
             .overlay(alignment: .top) {
-                if showField && !(confirmedEqual || keyboardVisible) {
+                if showField && !(isLargeDetent || keyboardVisible) {
                     TextField("Search Here", text: $text)
                         .padding(.trailing, 20)
                         .padding(.vertical, 12)
@@ -386,8 +368,8 @@ struct InAppNotificationViewModifier: ViewModifier {
 }
 
 extension View {
-    func inAppSearchOverlay(text: Binding<String>, showField: Binding<Bool>, presDetent: PresentationDetent, confirmedEqual: Bool, keyboardVisible: Bool) -> some View {
-        self.modifier(InAppNotificationViewModifier(text: text, showField: showField, presDetent: presDetent, confirmedEqual: confirmedEqual, keyboardVisible: keyboardVisible))
+    func inAppSearchOverlay(text: Binding<String>, showField: Binding<Bool>, isLargeDetent: Bool, keyboardVisible: Bool) -> some View {
+        self.modifier(InAppNotificationViewModifier(text: text, showField: showField, isLargeDetent: isLargeDetent, keyboardVisible: keyboardVisible))
     }
 }
 

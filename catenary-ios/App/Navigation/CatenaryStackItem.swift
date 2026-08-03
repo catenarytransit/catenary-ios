@@ -21,6 +21,7 @@ enum CatenaryStackItem: Hashable, Identifiable {
         routeType: Int?
     )
     case vehicleSelected(chateauID: String, vehicleID: String?, gtfsID: String)
+    case vehicleHistory(chateauID: String, vehicleID: String, routeID: String?)
     case route(chateauID: String, routeID: String)
     case stop(chateauID: String, stopID: String, timeEpochSeconds: Int64? = nil)
     case nearbyDepartures(chateauID: String, latitude: Double, longitude: Double)
@@ -43,6 +44,8 @@ enum CatenaryStackItem: Hashable, Identifiable {
             return "trip|\(chateauID)|\(tripID ?? "")|\(routeID ?? "")|\(startTime ?? "")|\(startDate ?? "")|\(vehicleID ?? "")|\(routeType.map { String($0) } ?? "")"
         case let .vehicleSelected(chateauID, vehicleID, gtfsID):
             return "vehicle|\(chateauID)|\(vehicleID ?? "")|\(gtfsID)"
+        case let .vehicleHistory(chateauID, vehicleID, routeID):
+            return "vehicle-history|\(chateauID)|\(vehicleID)|\(routeID ?? "")"
         case let .route(chateauID, routeID):
             return "route|\(chateauID)|\(routeID)"
         case let .stop(chateauID, stopID, timeEpochSeconds):

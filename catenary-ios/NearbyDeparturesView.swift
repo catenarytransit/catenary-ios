@@ -164,7 +164,6 @@ private enum NearbySortMode: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
     var label: LocalizedStringKey { self == .distance ? "Distance" : "Name" }
-    var symbol: String { self == .distance ? "ruler" : "textformat.abc" }
 }
 
 private enum NearbyListItem: Identifiable {
@@ -224,7 +223,7 @@ struct NearbyDeparturesView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             if fixedOrigin == nil {
                 controls
             } else {
@@ -281,6 +280,7 @@ struct NearbyDeparturesView: View {
             }
         }
         .padding(.horizontal, 12)
+        .padding(.top, 12)
         .padding(.bottom, 8)
         .task {
             if fixedOrigin == nil {
@@ -364,17 +364,7 @@ struct NearbyDeparturesView: View {
 
             Spacer()
 
-            Menu {
-                Picker("Sort", selection: $sortMode) {
-                    ForEach(NearbySortMode.allCases) { mode in
-                        Label(mode.label, systemImage: mode.symbol).tag(mode)
-                    }
-                }
-            } label: {
-                Image(systemName: sortMode.symbol)
-                    .frame(width: 34, height: 34)
-            }
-            .buttonStyle(.bordered)
+            NearbySortToggle(selection: $sortMode)
         }
         .font(.subheadline)
     }
@@ -498,6 +488,52 @@ struct NearbyDeparturesView: View {
         guard fixedOrigin == nil, pinActive, let pickedCoordinate else { return }
         lockedOrigin = pickedCoordinate
         reloadNonce += 1
+    }
+}
+
+private struct NearbySortToggle: View {
+    @Binding var selection: NearbySortMode
+
+    var body: some View {
+        HStack(spacing: 0) {
+            sortButton(for: .alphabetic) {
+                Text("A–Z")
+                    .font(.caption2.weight(.bold))
+            }
+
+            sortButton(for: .distance) {
+                Image(systemName: "ruler")
+                    .font(.system(size: 15, weight: .semibold))
+            }
+        }
+        .padding(2)
+        .background(.thinMaterial, in: Capsule())
+        .overlay {
+            Capsule()
+                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+        }
+    }
+
+    private func sortButton<Label: View>(
+        for mode: NearbySortMode,
+        @ViewBuilder label: () -> Label
+    ) -> some View {
+        Button {
+            selection = mode
+        } label: {
+            label()
+                .frame(width: 32, height: 32)
+                .foregroundStyle(selection == mode ? Color.accentColor : Color.primary)
+                .background {
+                    if selection == mode {
+                        Circle().fill(Color.accentColor.opacity(0.2))
+                    }
+                }
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(mode.label)
+        .accessibilityAddTraits(selection == mode ? .isSelected : [])
     }
 }
 
@@ -825,7 +861,7 @@ private struct NearbyRouteCard: View {
                             }
 
                             ScrollView(.horizontal) {
-                                LazyHStack(spacing: 4) {
+                                LazyHStack(spacing: 2) {
                                     ForEach(visibleDepartures) { departure in
                                         NearbyLocalDeparturePill(
                                             departure: departure,
@@ -869,7 +905,6 @@ private struct NearbyLocalDeparturePill: View {
 
     @EnvironmentObject private var viewObject: viewObject
     @AppStorage("showSeconds") private var showSeconds = false
-    @AppStorage("showLocalTransitCountdowns") private var showLocalTransitCountdowns = false
 
     private var scheduledTime: Int64? {
         departure.departureSchedule ?? departure.arrivalSchedule
@@ -896,19 +931,20 @@ private struct NearbyLocalDeparturePill: View {
             ))
         } label: {
             VStack(spacing: 1) {
-                if showLocalTransitCountdowns,
-                   let targetTime,
-                   targetTime - Int64(Date().timeIntervalSince1970) > -60,
-                   targetTime - Int64(Date().timeIntervalSince1970) < 3_600 {
-                    SelfUpdatingDiffTimer(
-                        targetTimeSeconds: targetTime,
-                        showBrackets: false,
-                        showSeconds: showSeconds,
-                        showDays: false,
-                        showPlus: false,
-                        numSize: 13,
-                        unitSize: 10
-                    )
+                if let targetTime {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        TimeDiff(
+                            diff: TimeInterval(targetTime) - context.date.timeIntervalSince1970,
+                            showBrackets: false,
+                            showSeconds: showSeconds,
+                            showDays: false,
+                            showPlus: false,
+                            numSize: 16,
+                            unitSize: 14,
+                            numberFontWeight: .medium,
+                            unitFontWeight: .medium
+                        )
+                    }
                 }
 
                 Text(TransitFormatting.date(
@@ -947,9 +983,9 @@ private struct NearbyLocalDeparturePill: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .frame(minWidth: showSeconds ? 92 : 76)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
+            .frame(minWidth: showSeconds ? 92 : 64)
             .background(
                 Color(uiColor: .tertiarySystemBackground),
                 in: RoundedRectangle(cornerRadius: 6, style: .continuous)
