@@ -14,6 +14,7 @@ final class NearbyPinMapCoordinator: ObservableObject {
     private var pinActive = false
     private var pinCoordinate: CLLocationCoordinate2D?
     private var contentInset: UIEdgeInsets = .zero
+    private var screenPointRefreshScheduled = false
 
     func install(on mapView: MLNMapView) {
         self.mapView = mapView
@@ -21,7 +22,7 @@ final class NearbyPinMapCoordinator: ObservableObject {
         applyContentInset()
         updatePinSource()
         configurePinLayer()
-        refreshScreenPoint()
+        scheduleScreenPointRefresh()
     }
 
     func updatePin(active: Bool, coordinate: CLLocationCoordinate2D?) {
@@ -35,14 +36,14 @@ final class NearbyPinMapCoordinator: ObservableObject {
         }
 
         updatePinSource()
-        refreshScreenPoint()
+        scheduleScreenPointRefresh()
     }
 
     func updateContentInset(_ inset: UIEdgeInsets) {
         guard !insetsEqual(contentInset, inset) else { return }
         contentInset = inset
         applyContentInset()
-        refreshScreenPoint()
+        scheduleScreenPointRefresh()
     }
 
     func refreshScreenPoint() {
@@ -69,6 +70,20 @@ final class NearbyPinMapCoordinator: ObservableObject {
     private func applyContentInset() {
         guard let mapView, !insetsEqual(mapView.contentInset, contentInset) else { return }
         mapView.contentInset = contentInset
+    }
+
+    private func scheduleScreenPointRefresh() {
+        guard !screenPointRefreshScheduled else { return }
+        screenPointRefreshScheduled = true
+
+        Task { @MainActor [weak self] in
+            // The map-view modifier runs during SwiftUI's update pass. Publish the
+            // derived screen point only after that pass has returned.
+            await Task.yield()
+            guard let self else { return }
+            self.screenPointRefreshScheduled = false
+            self.refreshScreenPoint()
+        }
     }
 
     private func updatePinSource() {
