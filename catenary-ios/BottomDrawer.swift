@@ -14,6 +14,7 @@ import MapLibreSwiftUI
 
 struct BottomDrawer: View {
     @Binding var selectedDetent: PresentationDetent
+    let sheetHeight: CGFloat
     @ObservedObject var locationManager: LocationManager
     @ObservedObject var searchViewModel: SearchViewModel
     @Binding var nearbyPinActive: Bool
@@ -49,7 +50,7 @@ struct BottomDrawer: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack {
                 if viewObject.currentStackItem == nil {
-                    if viewObject.confirmedEqual || viewObject.isVisible {
+                    if selectedDetent == .large || viewObject.isVisible {
                         CatenarySearchBar(
                             query: $viewObject.searchText,
                             focus: $isFocused,
@@ -61,7 +62,7 @@ struct BottomDrawer: View {
                         .padding(.top, 12)
                     } else if selectedDetent != .height(80) {
                         Spacer()
-                            .frame(height: 0.5 * max(160 - (viewObject.largeDetentHeight - viewObject.sheetHeight), 0))
+                            .frame(height: 0.5 * max(160 - (viewObject.largeDetentHeight - sheetHeight), 0))
                     }
                 } else {
                     StackNavigationControls(
@@ -76,12 +77,14 @@ struct BottomDrawer: View {
             }
             .ignoresSafeArea(.keyboard)
         }
-        .onChange(of: viewObject.confirmedEqual) { _, confirmed in
-            if confirmed && viewObject.isSearchFocusing && viewObject.currentStackItem == nil {
-                DispatchQueue.main.async {
-                    isFocused = true
-                    viewObject.isSearchFocusing = false
-                }
+        .onChange(of: selectedDetent) { _, detent in
+            guard detent == .large else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                guard selectedDetent == .large,
+                      viewObject.isSearchFocusing,
+                      viewObject.currentStackItem == nil else { return }
+                isFocused = true
+                viewObject.isSearchFocusing = false
             }
         }
         .onChange(of: isFocused) { _, focused in

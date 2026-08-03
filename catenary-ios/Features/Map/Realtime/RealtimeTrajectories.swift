@@ -292,6 +292,7 @@ final class RealtimeTrajectories: ObservableObject {
     }
 
     func updateLayerSettings(_ settings: AllLayerSettings) {
+        guard settings != layerSettings else { return }
         layerSettings = settings
         scheduleSubscription()
     }

@@ -97,9 +97,6 @@ class viewObject: ObservableObject {
     @Published var searchText = ""
     @Published var showTopView = false
     @Published var presDetent: PresentationDetent = .height(80)
-    @Published var sheetHeight: CGFloat = 350 {
-            didSet { checkHeightEquality() }
-        }
     @Published var largeDetentHeight: CGFloat = 0
     @Published var currentRotation: CLLocationDirection = 0
     @Published var isSearchFocusing: Bool = false
@@ -176,45 +173,21 @@ class viewObject: ObservableObject {
         }
     }
 
-    @Published var confirmedEqual: Bool = false
-    private var equalityTimer: Timer?
-    private let equalityDuration: TimeInterval = 0.25
+    @Published var isVisible: Bool = false
 
-    private func checkHeightEquality() {
-        if sheetHeight == largeDetentHeight {
-            // start or restart the timer
-            equalityTimer?.invalidate()
-            equalityTimer = Timer.scheduledTimer(withTimeInterval: equalityDuration, repeats: false) { [weak self] _ in
-                withAnimation {
-                    self?.confirmedEqual = true
-                }
-            }
-        } else {
-            // if diiverged: reset
-            equalityTimer?.invalidate()
-            withAnimation {
-                confirmedEqual = false
-            }
+    init() {
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { [weak self] _ in
+            guard self?.isVisible != true else { return }
+            self?.isVisible = true
+        }
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardDidHideNotification, object: nil, queue: .main) { [weak self] _ in
+            guard self?.isVisible != false else { return }
+            self?.isVisible = false
         }
     }
 
     deinit {
-        equalityTimer?.invalidate()
         NotificationCenter.default.removeObserver(self)
-    }
-    @Published var isVisible: Bool = false
-    @Published var topHeightKeys: CGFloat = 0
-//    @Published var sheetHeight: CGFloat = 0
-
-    init() {
-        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.isVisible = true
-            self?.topHeightKeys = self?.sheetHeight ?? 350
-            self?.sheetHeight = self?.largeDetentHeight ?? 350
-        }
-        NotificationCenter.default.addObserver(forName: UIResponder.keyboardDidHideNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.isVisible = false
-        }
     }
 
 }

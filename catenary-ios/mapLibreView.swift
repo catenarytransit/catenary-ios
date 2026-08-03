@@ -396,6 +396,8 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
     private var trajectoryVehicles: [RealtimeTrajectoryVehicle] = []
     private var realtimeFeatureCache: [String: MLNPointFeature] = [:]
     private var trajectoryFeatureCache: [String: MLNPointFeature] = [:]
+    private weak var publishedRealtimeSource: MLNShapeSource?
+    private weak var publishedTrajectorySource: MLNShapeSource?
 
     private let selectableLayerIDs: Set<String> = [
         LayersPerCategory.IntercityRail.Livedots,
@@ -456,7 +458,10 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
 
     func install(on mapView: MLNMapView, navigator: viewObject) {
         self.navigator = navigator
-        guard self.mapView !== mapView else { return }
+        if self.mapView === mapView {
+            refreshDynamicSourcesIfNeeded()
+            return
+        }
 
         if let recognizer, let oldMap = self.mapView {
             oldMap.removeGestureRecognizer(recognizer)
@@ -468,6 +473,7 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         recognizer.delegate = self
         mapView.addGestureRecognizer(recognizer)
         self.recognizer = recognizer
+        refreshDynamicSourcesIfNeeded()
     }
 
     func gestureRecognizer(
@@ -577,6 +583,7 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
     }
 
     func updateLayerSettings(_ settings: AllLayerSettings) {
+        guard settings != layerSettings else { return }
         layerSettings = settings
         realtimeFeatureCache.removeAll(keepingCapacity: true)
         trajectoryFeatureCache.removeAll(keepingCapacity: true)
@@ -644,6 +651,22 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         source.shape = MLNShapeCollectionFeature(shapes: shapes)
     }
 
+    private func refreshDynamicSourcesIfNeeded() {
+        let realtimeSource = mapView?.style?.source(
+            withIdentifier: "realtime-vehicles"
+        ) as? MLNShapeSource
+        if publishedRealtimeSource !== realtimeSource {
+            publishRealtimeSource()
+        }
+
+        let trajectorySource = mapView?.style?.source(
+            withIdentifier: "trajectory-vehicles"
+        ) as? MLNShapeSource
+        if publishedTrajectorySource !== trajectorySource {
+            publishTrajectorySource()
+        }
+    }
+
     private func rebuildRealtimeSource() {
         realtimeFeatureCache.removeAll(keepingCapacity: true)
         for vehicle in realtimeVehicles {
@@ -662,6 +685,7 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         let features: [MLNShape & MLNFeature] = realtimeVehicles.compactMap {
             realtimeFeatureCache[$0.id]
         }
+        publishedRealtimeSource = source
         source.shape = MLNShapeCollectionFeature(shapes: features)
     }
 
@@ -683,6 +707,7 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         let features: [MLNShape & MLNFeature] = trajectoryVehicles.compactMap {
             trajectoryFeatureCache[$0.id]
         }
+        publishedTrajectorySource = source
         source.shape = MLNShapeCollectionFeature(shapes: features)
     }
 
@@ -732,24 +757,60 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
     }
 }
 
-struct mapLibreView: View {
+struct mapLibreView: View, Equatable {
     @Environment(\.colorScheme) var colorScheme: ColorScheme
     @ObservedObject var locationManager: LocationManager
     @ObservedObject var nearbyPinMapCoordinator: NearbyPinMapCoordinator
     let nearbyPinActive: Bool
     let nearbyPinCoordinate: CLLocationCoordinate2D?
     let contentInset: UIEdgeInsets
+    @Binding var camera: MapViewCamera
+    let layerSettings: AllLayerSettings
+    let selectedStopContext: SelectedStopMapContext?
+    let viewobject: viewObject
     @StateObject private var realtimeVM = RealtimeVehicles()
     @StateObject private var trajectoryVM = RealtimeTrajectories()
     @StateObject private var wildfireVM = WildfireMapData()
     @StateObject private var featureTapCoordinator = MapFeatureTapCoordinator()
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.locationManager === rhs.locationManager
+            && lhs.nearbyPinMapCoordinator === rhs.nearbyPinMapCoordinator
+            && lhs.nearbyPinActive == rhs.nearbyPinActive
+            && coordinatesEqual(lhs.nearbyPinCoordinate, rhs.nearbyPinCoordinate)
+            && insetsEqual(lhs.contentInset, rhs.contentInset)
+            && lhs.camera == rhs.camera
+            && lhs.layerSettings == rhs.layerSettings
+            && lhs.selectedStopContext == rhs.selectedStopContext
+            && lhs.viewobject === rhs.viewobject
+    }
+
+    private static func coordinatesEqual(
+        _ lhs: CLLocationCoordinate2D?,
+        _ rhs: CLLocationCoordinate2D?
+    ) -> Bool {
+        switch (lhs, rhs) {
+        case (nil, nil):
+            return true
+        case let (lhs?, rhs?):
+            return lhs.latitude == rhs.latitude && lhs.longitude == rhs.longitude
+        default:
+            return false
+        }
+    }
+
+    private static func insetsEqual(_ lhs: UIEdgeInsets, _ rhs: UIEdgeInsets) -> Bool {
+        lhs.top == rhs.top
+            && lhs.left == rhs.left
+            && lhs.bottom == rhs.bottom
+            && lhs.right == rhs.right
+    }
     
     var styleURL: URL {
             URL(string: colorScheme == .light
                 ? "https://maps.catenarymaps.org/light-style.json"
                 : "https://maps.catenarymaps.org/dark-style.json")!
         }
-    @EnvironmentObject var viewobject: viewObject
     @State var railInFrame = false
     
     @State private var userFeature: [String: Any]? = nil
@@ -1586,11 +1647,7 @@ struct mapLibreView: View {
     /// Live vehicle position dots, enriched with route metadata from Birch.
     @MapViewContentBuilder
     var realtimeLayer: some StyleLayerCollection {
-        let source = ShapeSource(identifier: "realtime-vehicles") {
-            for vehicle in realtimeVM.vehicles {
-                VehicleFeatureBuilder.realtime(vehicle, settings: viewobject.allLayerSettings)
-            }
-        }
+        let source = ShapeSource(identifier: "realtime-vehicles") {}
         let dotStroke = colorScheme == .dark
             ? UIColor(red: 46/255, green: 57/255, blue: 75/255, alpha: 1)
             : UIColor.white
@@ -1788,11 +1845,7 @@ struct mapLibreView: View {
     /// Synthetic positions interpolated from Spruce trajectory buffers.
     @MapViewContentBuilder
     var trajectoryLayer: some StyleLayerCollection {
-        let source = ShapeSource(identifier: "trajectory-vehicles") {
-            for vehicle in trajectoryVM.vehicles {
-                VehicleFeatureBuilder.trajectory(vehicle, settings: viewobject.allLayerSettings)
-            }
-        }
+        let source = ShapeSource(identifier: "trajectory-vehicles") {}
         let dotStroke = colorScheme == .dark
             ? UIColor(red: 46/255, green: 57/255, blue: 75/255, alpha: 1)
             : UIColor.white
@@ -2045,7 +2098,7 @@ struct mapLibreView: View {
     }
 
     var body: some View {
-        MapView(styleURL: styleURL, camera: $viewobject.camera) {
+        MapView(styleURL: styleURL, camera: $camera) {
             shapeLayer
             stationFeaturesLayer
             stopsLayer
@@ -2071,7 +2124,6 @@ struct mapLibreView: View {
                 coordinate: nearbyPinCoordinate
             )
             featureTapCoordinator.install(on: map.mapView, navigator: viewobject)
-            featureTapCoordinator.updateLayerSettings(viewobject.allLayerSettings)
 
             let sourceCoordinator = featureTapCoordinator
             realtimeVM.onVehiclesChanged = { [weak sourceCoordinator] vehicles in
@@ -2105,22 +2157,23 @@ struct mapLibreView: View {
             }
         })
         .task {
-            realtimeVM.updateLayerSettings(viewobject.allLayerSettings)
+            featureTapCoordinator.updateLayerSettings(layerSettings)
+            realtimeVM.updateLayerSettings(layerSettings)
             await realtimeVM.run()
         }
         .task {
-            trajectoryVM.updateLayerSettings(viewobject.allLayerSettings)
+            trajectoryVM.updateLayerSettings(layerSettings)
             await trajectoryVM.run()
         }
         .task {
             await wildfireVM.run()
         }
-        .onChange(of: viewobject.allLayerSettings) { _, settings in
+        .onChange(of: layerSettings) { _, settings in
             featureTapCoordinator.updateLayerSettings(settings)
             realtimeVM.updateLayerSettings(settings)
             trajectoryVM.updateLayerSettings(settings)
         }
-        .onChange(of: viewobject.selectedStopContext) { _, context in
+        .onChange(of: selectedStopContext) { _, context in
             featureTapCoordinator.updateSelectedStop(context)
         }
         .onDisappear {
@@ -2145,14 +2198,18 @@ struct mapLibreView: View {
 }
 
 #Preview {
+    let previewViewObject = viewObject()
     mapLibreView(
         locationManager: LocationManager(),
         nearbyPinMapCoordinator: NearbyPinMapCoordinator(),
         nearbyPinActive: false,
         nearbyPinCoordinate: nil,
-        contentInset: .zero
+        contentInset: .zero,
+        camera: .constant(previewViewObject.camera),
+        layerSettings: previewViewObject.allLayerSettings,
+        selectedStopContext: previewViewObject.selectedStopContext,
+        viewobject: previewViewObject
     )
-    .environmentObject(viewObject())
 }
 
 struct TileBox {
