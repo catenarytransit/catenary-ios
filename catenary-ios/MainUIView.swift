@@ -40,6 +40,7 @@ struct MainUIView: View {
     @State private var mapViewportSize: CGSize = .zero
     @State private var mapCameraRevision: UInt64 = 0
     @State private var searchFocusRequest = 0
+    @State private var isSearchSheetTransitioning = false
     
     
     var body: some View {
@@ -96,6 +97,8 @@ struct MainUIView: View {
                         .onGeometryChange(for: CGFloat.self) { proxy in
                             max(proxy.size.height, 0)
                         } action: { _, newValue in
+                            guard !isSearchSheetTransitioning else { return }
+
                             let maximumHeight = viewobject.largeDetentHeight > 0
                                 ? viewobject.largeDetentHeight
                                 : newValue
@@ -157,6 +160,19 @@ struct MainUIView: View {
         } action: { _, newSize in
             mapViewportSize = newSize
         }
+        .task(id: searchFocusRequest) {
+            guard searchFocusRequest > 0 else { return }
+
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            isSearchSheetTransitioning = false
+        }
+        .onChange(of: viewobject.presDetent) { _, detent in
+            guard detent != .large else { return }
+
+            isSearchSheetTransitioning = false
+            locationOpacity = 1
+            liveSheetHeight = detent == .height(80) ? 80 : 350
+        }
         .task {
             locationManager.checkLocationAuthorization()
             useInitialUserLocationIfNeeded()
@@ -172,6 +188,8 @@ struct MainUIView: View {
 
     private func beginSearch() {
         guard viewobject.currentStackItem == nil else { return }
+        isSearchSheetTransitioning = true
+        locationOpacity = 0
         viewobject.presDetent = .large
         searchFocusRequest &+= 1
     }

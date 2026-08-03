@@ -116,14 +116,9 @@ struct OverlayRoot: View {
                         .presentationBackgroundInteraction(PresentationBackgroundInteraction.disabled)
                         
                         .interactiveDismissDisabled(false)
+                        .navigationTitle("Layers")
+                        .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
-                            ToolbarItem(placement: .topBarLeading) {
-                                Text("Layers")
-                                    .font(.title2)
-                                    .fontWeight(.semibold)
-                                    .fixedSize()
-                            }
-                            
                             ToolbarItem(placement: .topBarTrailing) {
                                 Button {
                                     viewobject.showLayerSelector = false
@@ -212,7 +207,6 @@ extension View {
 struct layerTabView: View {
     @Environment(\.colorScheme) var colorScheme: ColorScheme
     @Binding var layerSettings: LayerCategorySettings
-    @State private var showVehicleLabels = false
     var accentColor: Color = .catenaryBlue
 
     private let labelColumns = [
@@ -241,7 +235,10 @@ struct layerTabView: View {
             }
             .padding(.horizontal)
 
-            DisclosureGroup("Vehicle labels", isExpanded: $showVehicleLabels) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Vehicle labels")
+                    .font(.subheadline.weight(.semibold))
+
                 LazyVGrid(columns: labelColumns, alignment: .leading, spacing: 8) {
                     Toggle("Route", isOn: $layerSettings.labelrealtimedots.route)
                     Toggle("Trip", isOn: $layerSettings.labelrealtimedots.trip)
@@ -257,6 +254,7 @@ struct layerTabView: View {
             }
             .font(.subheadline)
             .padding(.horizontal)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
