@@ -269,9 +269,22 @@ struct SingleTripScreen: View {
                 if let vehicle = nonEmpty(data.vehicle?.label)
                     ?? nonEmpty(data.vehicle?.id)
                     ?? nonEmpty(selection.vehicleID) {
-                    Label(vehicle, systemImage: "bus.fill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Button {
+                        viewObject.push(
+                            .vehicleHistory(
+                                chateauID: selection.chateauID,
+                                vehicleID: vehicle,
+                                routeID: data.routeID ?? selection.routeID
+                            )
+                        )
+                    } label: {
+                        Label(vehicle, systemImage: "clock.arrow.circlepath")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tint)
+                            .underline()
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Shows previous trips operated by this vehicle")
                 }
 
                 if let blockID = nonEmpty(data.blockID),
