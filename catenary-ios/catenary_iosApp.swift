@@ -15,27 +15,12 @@ var GlobalViewObject: viewObject = viewObject()
 @main
 struct CatenaryMapsApp: App {
     @StateObject var viewobject = GlobalViewObject
-//    @StateObject var liveTransitData: TransitViewModel = TransitViewModel()
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
         
     var body: some Scene {
         WindowGroup {
             MainUIView()
                 .environmentObject(viewobject)
-            
-            
-//                .environmentObject(liveTransitData)
-//                .onAppear {
-//                    liveTransitData.loadData()
-//                    
-//                }
-//                .onTapGesture {
-//                    liveTransitData.vehicles.forEach {
-//                        print("\($0.agencyName), \($0.type) — \($0.headsign), \($0.routeId)")
-//                        
-//                    }
-//                }
-            
         }
     }
 }

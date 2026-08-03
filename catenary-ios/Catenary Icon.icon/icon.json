@@ -57,12 +57,6 @@
           "hidden" : false,
           "image-name" : "catenarylogobackground.svg",
           "name" : "catenarylogobackground",
-          "opacity-specializations" : [
-            {
-              "appearance" : "dark",
-              "value" : 0.2
-            }
-          ],
           "position" : {
             "scale" : 1,
             "translation-in-points" : [
