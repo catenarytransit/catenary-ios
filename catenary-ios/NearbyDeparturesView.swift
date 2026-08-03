@@ -861,7 +861,7 @@ private struct NearbyRouteCard: View {
                             }
 
                             ScrollView(.horizontal) {
-                                LazyHStack(spacing: 4) {
+                                LazyHStack(spacing: 2) {
                                     ForEach(visibleDepartures) { departure in
                                         NearbyLocalDeparturePill(
                                             departure: departure,
@@ -905,7 +905,6 @@ private struct NearbyLocalDeparturePill: View {
 
     @EnvironmentObject private var viewObject: viewObject
     @AppStorage("showSeconds") private var showSeconds = false
-    @AppStorage("showLocalTransitCountdowns") private var showLocalTransitCountdowns = false
 
     private var scheduledTime: Int64? {
         departure.departureSchedule ?? departure.arrivalSchedule
@@ -932,19 +931,20 @@ private struct NearbyLocalDeparturePill: View {
             ))
         } label: {
             VStack(spacing: 1) {
-                if showLocalTransitCountdowns,
-                   let targetTime,
-                   targetTime - Int64(Date().timeIntervalSince1970) > -60,
-                   targetTime - Int64(Date().timeIntervalSince1970) < 3_600 {
-                    SelfUpdatingDiffTimer(
-                        targetTimeSeconds: targetTime,
-                        showBrackets: false,
-                        showSeconds: showSeconds,
-                        showDays: false,
-                        showPlus: false,
-                        numSize: 13,
-                        unitSize: 10
-                    )
+                if let targetTime {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        TimeDiff(
+                            diff: TimeInterval(targetTime) - context.date.timeIntervalSince1970,
+                            showBrackets: false,
+                            showSeconds: showSeconds,
+                            showDays: false,
+                            showPlus: false,
+                            numSize: 16,
+                            unitSize: 14,
+                            numberFontWeight: .medium,
+                            unitFontWeight: .medium
+                        )
+                    }
                 }
 
                 Text(TransitFormatting.date(
@@ -983,9 +983,9 @@ private struct NearbyLocalDeparturePill: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .frame(minWidth: showSeconds ? 92 : 76)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
+            .frame(minWidth: showSeconds ? 92 : 64)
             .background(
                 Color(uiColor: .tertiarySystemBackground),
                 in: RoundedRectangle(cornerRadius: 6, style: .continuous)

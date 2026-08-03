@@ -96,7 +96,7 @@ class viewObject: ObservableObject {
 
     @Published var searchText = ""
     @Published var showTopView = false
-    @Published var presDetent: PresentationDetent = .height(80)
+    @Published var presDetent: PresentationDetent = .height(350)
     @Published var largeDetentHeight: CGFloat = 0
     @Published var currentRotation: CLLocationDirection = 0
     @Published var isSearchFocusing: Bool = false
