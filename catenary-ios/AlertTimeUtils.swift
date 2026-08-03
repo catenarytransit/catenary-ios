@@ -25,10 +25,9 @@ func condenseActivePeriods(
     }
 
     let timeZone = resolveAlertTimeZone(defaultTimezone)
-    let language = alertScheduleLanguage(locale)
     let calendar = alertCalendar(timeZone: timeZone)
     let timeFormatter = DateFormatter()
-    timeFormatter.locale = Locale(identifier: "en_GB")
+    timeFormatter.locale = locale
     timeFormatter.calendar = calendar
     timeFormatter.timeZone = timeZone
     timeFormatter.dateFormat = "HH:mm"
@@ -52,7 +51,6 @@ func condenseActivePeriods(
                 start: start,
                 end: end,
                 locale: locale,
-                language: language,
                 timeZone: timeZone
             )
         )
@@ -95,22 +93,23 @@ func condenseActivePeriods(
     for key in deviationOrder {
         guard let group = groupedDeviations[key], let sample = group.first else { continue }
         if group.count >= 2 {
-            let start = replaceAlertTimeSeparator(sample.startTime, language: language)
-            let end = replaceAlertTimeSeparator(sample.endTime, language: language)
-
             if sample.startTime == baseStart {
-                switch language {
-                case "de": weekdayRules.append("\(sample.weekdayPair) bis \(end) Uhr")
-                case "fr": weekdayRules.append("\(sample.weekdayPair) jusqu’à \(end)")
-                case "it": weekdayRules.append("\(sample.weekdayPair) fino alle \(end)")
-                default: weekdayRules.append("\(sample.weekdayPair) until \(end)")
-                }
+                weekdayRules.append(L10n.format(
+                    "alert.schedule.weekday_until",
+                    defaultValue: "%1$@ until %2$@",
+                    locale: locale,
+                    sample.weekdayPair,
+                    sample.endTime
+                ))
             } else {
-                switch language {
-                case "de": weekdayRules.append("\(sample.weekdayPair) \(start)–\(end) Uhr")
-                case "fr": weekdayRules.append("\(sample.weekdayPair) de \(start) à \(end)")
-                default: weekdayRules.append("\(sample.weekdayPair) \(start)–\(end)")
-                }
+                weekdayRules.append(L10n.format(
+                    "alert.schedule.weekday_range",
+                    defaultValue: "%1$@ %2$@–%3$@",
+                    locale: locale,
+                    sample.weekdayPair,
+                    sample.startTime,
+                    sample.endTime
+                ))
             }
         } else {
             exceptions.append(sample)
@@ -118,21 +117,21 @@ func condenseActivePeriods(
     }
 
     let exceptionText = exceptions.map { exception -> String in
-        let start = replaceAlertTimeSeparator(exception.startTime, language: language)
-        let end = replaceAlertTimeSeparator(exception.endTime, language: language)
-        switch language {
-        case "fr": return "\(exception.label), de \(start) à \(end)"
-        case "de": return "\(exception.label), \(start)–\(end) Uhr"
-        default: return "\(exception.label), \(start)–\(end)"
-        }
+        L10n.format(
+            "alert.schedule.exception_range",
+            defaultValue: "%1$@, %2$@–%3$@",
+            locale: locale,
+            exception.label,
+            exception.startTime,
+            exception.endTime
+        )
     }
 
-    let ruleSeparator = ["de", "fr", "it"].contains(language) ? ", " : "; "
-    let rules = weekdayRules.joined(separator: ruleSeparator)
+    let rules = weekdayRules.joined(separator: "; ")
     let firstLabel = nights.first?.label ?? ""
     let lastLabel = nights.last?.label ?? ""
-    let start = replaceAlertTimeSeparator(baseStart, language: language)
-    let end = replaceAlertTimeSeparator(baseEnd, language: language)
+    let start = baseStart
+    let end = baseEnd
     let firstYear = calendar.component(.year, from: nights.first?.originalStart ?? Date())
     let lastYear = calendar.component(.year, from: nights.last?.originalStart ?? Date())
     let currentYear = calendar.component(.year, from: Date())
@@ -140,22 +139,24 @@ func condenseActivePeriods(
     let yearSuffix = showYear ? " \(lastYear)" : ""
     let commaYearSuffix = showYear ? ", \(lastYear)" : ""
 
-    let baseRule: String
-    let exceptionsRule: String
-    switch language {
-    case "de":
-        baseRule = "Nächte \(firstLabel)–\(lastLabel)\(yearSuffix), jeweils \(start)–\(end) Uhr"
-        exceptionsRule = exceptionText.isEmpty ? "" : "Ausnahmen: \(exceptionText.joined(separator: "; "))"
-    case "fr":
-        baseRule = "Nuits du \(firstLabel) au \(lastLabel)\(yearSuffix), de \(start) à \(end)"
-        exceptionsRule = exceptionText.isEmpty ? "" : "Exceptions : \(exceptionText.joined(separator: "; "))"
-    case "it":
-        baseRule = "Notti dal \(firstLabel) all’\(lastLabel)\(yearSuffix), \(start)–\(end)"
-        exceptionsRule = exceptionText.isEmpty ? "" : "Eccezioni: \(exceptionText.joined(separator: "; "))"
-    default:
-        baseRule = "Nights \(firstLabel)–\(lastLabel)\(commaYearSuffix), \(start)–\(end)"
-        exceptionsRule = exceptionText.isEmpty ? "" : "Exceptions: \(exceptionText.joined(separator: "; "))"
-    }
+    let baseRule = L10n.format(
+        "alert.schedule.base_rule",
+        defaultValue: "Nights %1$@–%2$@%3$@, %4$@–%5$@",
+        locale: locale,
+        firstLabel,
+        lastLabel,
+        showYear ? yearSuffix : commaYearSuffix,
+        start,
+        end
+    )
+    let exceptionsRule = exceptionText.isEmpty
+        ? ""
+        : L10n.format(
+            "alert.schedule.exceptions",
+            defaultValue: "Exceptions: %1$@",
+            locale: locale,
+            exceptionText.joined(separator: "; ")
+        )
 
     return CondensedAlertSchedule(
         isCondensed: true,
@@ -221,46 +222,16 @@ private func formatAlertWeekday(_ date: Date, locale: Locale, timeZone: TimeZone
     return String(first).uppercased(with: locale) + value.dropFirst()
 }
 
-private func replaceAlertTimeSeparator(_ value: String, language: String) -> String {
-    switch language {
-    case "de", "it": return value.replacingOccurrences(of: ":", with: ".", options: [], range: value.range(of: ":"))
-    case "fr": return value.replacingOccurrences(of: ":", with: "h", options: [], range: value.range(of: ":"))
-    default: return value
-    }
-}
-
 private func formatAlertNightLabel(
     start: Date,
     end: Date,
     locale: Locale,
-    language: String,
     timeZone: TimeZone
 ) -> String {
-    let calendar = alertCalendar(timeZone: timeZone)
-    let sameDay = calendar.isDate(start, inSameDayAs: end)
-    let startDay = calendar.component(.day, from: start)
-    let endDay = calendar.component(.day, from: end)
-    let endMonth = calendar.component(.month, from: end)
-
-    switch language {
-    case "de":
-        let endDate = String(format: "%02d.%02d.", endDay, endMonth)
-        return sameDay ? endDate : String(format: "%02d./%@", startDay, endDate)
-
-    case "fr", "it":
-        let formatter = DateFormatter()
-        formatter.locale = locale
-        formatter.timeZone = timeZone
-        formatter.dateFormat = "MMMM"
-        let month = formatter.string(from: start).lowercased(with: locale)
-        return sameDay ? "\(startDay) \(month)" : "\(startDay)/\(endDay) \(month)"
-
-    default:
-        let formatter = DateFormatter()
-        formatter.locale = locale
-        formatter.timeZone = timeZone
-        formatter.dateFormat = "MMM"
-        let month = formatter.string(from: start)
-        return sameDay ? "\(month) \(startDay)" : "\(month) \(startDay)/\(endDay)"
-    }
+    let formatter = DateIntervalFormatter()
+    formatter.locale = locale
+    formatter.timeZone = timeZone
+    formatter.dateStyle = .medium
+    formatter.timeStyle = .none
+    return formatter.string(from: start, to: end)
 }

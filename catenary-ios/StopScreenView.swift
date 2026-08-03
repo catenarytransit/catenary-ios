@@ -460,7 +460,9 @@ struct StopScreenView: View {
            let stationName, !stationName.isEmpty {
             return stationName
         }
-        return source.id.hasPrefix("osm|") ? "Station" : "Stop"
+        return source.id.hasPrefix("osm|")
+            ? L10n.string("Station")
+            : L10n.string("Stop")
     }
 
     private var timezoneID: String? {
@@ -560,7 +562,7 @@ private struct StopDepartureRow: View {
             } label: {
                 HStack(alignment: .center, spacing: 8) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(event.finalStationName ?? event.headsign ?? "Departure")
+                        Text(event.finalStationName ?? event.headsign ?? L10n.string("Departure"))
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(event.isCancelled ? .red : .primary)
                             .strikethrough(event.isCancelled)
@@ -571,7 +573,11 @@ private struct StopDepartureRow: View {
                                 Text(trip)
                             }
                             if let platform = event.platformStringRealtime, !platform.isEmpty {
-                                Text("Platform \(platform)")
+                                Text(verbatim: L10n.format(
+                                    "platform.value",
+                                    defaultValue: "Platform %@",
+                                    platform
+                                ))
                             }
                             if let vehicle = event.vehicleNumber, !vehicle.isEmpty {
                                 Text(vehicle)
@@ -620,7 +626,7 @@ private struct StopDepartureTimeColumn: View {
         (realtimeTime ?? scheduledTime ?? 0) < Int64(Date().timeIntervalSince1970) - 60
     }
 
-    private var statusText: String? {
+    private var statusText: LocalizedStringKey? {
         if event.tripCancelled == true { return "Cancelled" }
         if event.tripDeleted == true { return "Deleted" }
         if event.stopCancelled == true { return "Stop cancelled" }

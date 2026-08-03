@@ -63,9 +63,9 @@ struct SettingsScreen: View {
 }
 
 private struct SettingsSectionTitle: View {
-    let title: String
+    let title: LocalizedStringKey
 
-    init(_ title: String) {
+    init(_ title: LocalizedStringKey) {
         self.title = title
     }
 
@@ -78,8 +78,8 @@ private struct SettingsSectionTitle: View {
 }
 
 private struct SettingsToggleRow: View {
-    let title: String
-    let description: String?
+    let title: LocalizedStringKey
+    let description: LocalizedStringKey?
     @Binding var isOn: Bool
 
     var body: some View {

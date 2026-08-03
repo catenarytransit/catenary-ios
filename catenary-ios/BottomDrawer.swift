@@ -228,7 +228,7 @@ private struct StackDestinationSummary: View {
             ForEach(rows.indices, id: \.self) { index in
                 let row = rows[index]
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(row.0)
+                    Text(L10n.key(row.0))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text(row.1)
@@ -241,16 +241,17 @@ private struct StackDestinationSummary: View {
 
     private var title: String {
         switch destination {
-        case .singleTrip: return "Trip"
-        case .vehicleSelected: return "Vehicle"
-        case .route: return "Route"
-        case .stop: return "Stop"
-        case .nearbyDepartures: return "Nearby departures"
-        case .mapSelectionScreen: return "Selection"
-        case .settings: return "Settings"
-        case .block: return "Block"
-        case .osmItem: return "Map item"
-        case let .osmStation(_, stationName, _, _, _, _): return stationName ?? "Station"
+        case .singleTrip: return L10n.string("Trip")
+        case .vehicleSelected: return L10n.string("Vehicle")
+        case .route: return L10n.string("Route")
+        case .stop: return L10n.string("Stop")
+        case .nearbyDepartures: return L10n.string("Nearby departures")
+        case .mapSelectionScreen: return L10n.string("Selection")
+        case .settings: return L10n.string("Settings")
+        case .block: return L10n.string("Block")
+        case .osmItem: return L10n.string("Map item")
+        case let .osmStation(_, stationName, _, _, _, _):
+            return stationName ?? L10n.string("Station")
         }
     }
 

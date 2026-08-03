@@ -175,7 +175,9 @@ struct StationDepartureRow: View {
             components.append(tripName)
         }
 
-        return components.isEmpty ? "Departure" : components.joined(separator: " ")
+        return components.isEmpty
+            ? L10n.string("Departure")
+            : components.joined(separator: " ")
     }
 
     private var effectiveTripName: String? {
@@ -376,7 +378,7 @@ private struct StopRouteBadge: View {
     private var label: String {
         if let shortName, !shortName.isEmpty { return shortName.replacingOccurrences(of: " Line", with: "") }
         if let longName, !longName.isEmpty { return String(longName.replacingOccurrences(of: " Line", with: "").prefix(8)) }
-        return mode == .rail ? "Rail" : "—"
+        return mode == .rail ? L10n.string("Rail") : "—"
     }
 
     private var routeShape: AnyShape {

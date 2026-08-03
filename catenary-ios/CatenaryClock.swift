@@ -27,7 +27,7 @@ struct FormattedTimeText: View {
 
     private var timeParts: (main: String, seconds: String) {
         guard let timeZone = TimeZone(identifier: timezone) else {
-            return ("Invalid Timezone", "")
+            return (L10n.string("Invalid timezone"), "")
         }
 
         let date = Date(timeIntervalSince1970: TimeInterval(timeSeconds))

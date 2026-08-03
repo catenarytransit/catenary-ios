@@ -9,7 +9,7 @@ enum TransitDisplayMode: String, CaseIterable, Hashable, Identifiable {
 
     var id: String { rawValue }
 
-    var label: String {
+    var label: LocalizedStringKey {
         switch self {
         case .rail: return "Rail"
         case .metro: return "Metro/Tram"
@@ -91,7 +91,11 @@ struct TransitRouteBadge: View {
             .padding(.vertical, 4)
             .foregroundStyle(Color.transitHex(textColorHex, fallback: .white))
             .background(Color.transitHex(colorHex, fallback: .secondary), in: .rect(cornerRadius: 6))
-            .accessibilityLabel("Route \(displayName)")
+            .accessibilityLabel(Text(verbatim: L10n.format(
+                "route.accessibility",
+                defaultValue: "Route %@",
+                displayName
+            )))
     }
 
     private var displayName: String {
@@ -99,7 +103,7 @@ struct TransitRouteBadge: View {
         if let candidate, !candidate.isEmpty { return candidate }
         let longCandidate = longName?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let longCandidate, !longCandidate.isEmpty { return longCandidate }
-        return "Route"
+        return L10n.string("Route")
     }
 }
 
@@ -143,26 +147,35 @@ enum TransitFormatting {
     static func relative(_ epochSeconds: Int64?, now: Date = Date()) -> String? {
         guard let epochSeconds else { return nil }
         let seconds = Int(Date(timeIntervalSince1970: TimeInterval(epochSeconds)).timeIntervalSince(now))
-        if seconds <= -60 { return "Departed" }
-        if abs(seconds) < 60 { return "Now" }
+        if seconds <= -60 { return L10n.string("Departed") }
+        if abs(seconds) < 60 { return L10n.string("Now") }
         let minutes = Int((Double(seconds) / 60.0).rounded())
-        if minutes < 60 { return "in \(minutes) min" }
+        if minutes < 60 {
+            return L10n.format("time.in_minutes", defaultValue: "in %d min", minutes)
+        }
         return nil
     }
 
     static func distance(_ meters: Double, useImperial: Bool = false) -> String {
+        let formatter = MeasurementFormatter()
+        formatter.locale = .autoupdatingCurrent
+        formatter.unitOptions = .providedUnit
+        formatter.unitStyle = .short
+        formatter.numberFormatter.maximumFractionDigits = 1
+        formatter.numberFormatter.minimumFractionDigits = 0
+
         if useImperial {
-            let feet = meters * 3.28084
-            if feet < 5_280 {
-                return "\(Int(feet.rounded())) ft"
-            }
-            return String(format: "%.1f mi", feet / 5_280)
+            let feet = Measurement(value: meters, unit: UnitLength.meters)
+                .converted(to: .feet)
+            return formatter.string(from: feet.value < 5_280
+                ? feet
+                : Measurement(value: meters, unit: UnitLength.meters).converted(to: .miles))
         }
 
-        if meters < 1_000 {
-            return "\(Int(meters.rounded())) m"
-        }
-        return String(format: "%.1f km", meters / 1_000)
+        let measurement = Measurement(value: meters, unit: UnitLength.meters)
+        return formatter.string(from: meters < 1_000
+            ? measurement
+            : measurement.converted(to: .kilometers))
     }
 
     static func delay(scheduled: Int64?, realtime: Int64?) -> String? {

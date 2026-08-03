@@ -462,15 +462,15 @@ private struct CypressSearchResultRow: View {
         let properties = feature.properties
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 8) {
-                Text(properties?.displayName ?? "Unknown")
+                Text(properties?.displayName ?? L10n.string("Unknown"))
                     .font(.system(size: 16, weight: .medium))
                     .lineLimit(1)
-                Text(properties?.displayTag ?? "Place")
+                Text(properties?.displayTag ?? L10n.string("Place"))
                     .font(.system(size: 14, weight: .light))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            Text(properties?.displaySubtitle ?? "Place")
+            Text(properties?.displaySubtitle ?? L10n.string("Place"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -491,7 +491,7 @@ private struct StopSearchResultRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(stop.name ?? "Unknown stop")
+                Text(stop.name ?? L10n.string("Unknown stop"))
                     .font(.system(size: 16, weight: .medium))
                     .lineLimit(1)
                 Spacer(minLength: 8)
@@ -572,7 +572,7 @@ private struct OsmStationSearchResultRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(station.name ?? "Unknown station")
+            Text(station.name ?? L10n.string("Unknown station"))
                 .font(.system(size: 16, weight: .medium))
                 .lineLimit(1)
 
@@ -701,14 +701,15 @@ struct SearchCypressProperties: Decodable, Sendable {
     let confidence: Double?
 
     fileprivate var displayName: String {
-        name ?? names?["default"] ?? "Unknown"
+        name ?? names?["default"] ?? L10n.string("Unknown")
     }
 
     fileprivate var displayTag: String {
         if let category = categories?.first {
             return category.split(separator: ":").last.map(String.init) ?? category
         }
-        return (layer ?? "place").replacingOccurrences(of: "_", with: " ").capitalized
+        guard let layer, !layer.isEmpty else { return L10n.string("Place") }
+        return layer.replacingOccurrences(of: "_", with: " ").capitalized
     }
 
     fileprivate var displaySubtitle: String {
@@ -813,7 +814,7 @@ struct SearchRouteInfo: Decodable, Sendable {
     fileprivate var displayName: String {
         if let shortName, !shortName.isEmpty { return shortName }
         if let longName, !longName.isEmpty { return longName }
-        return routeID ?? "Route"
+        return routeID ?? L10n.string("Route")
     }
 }
 

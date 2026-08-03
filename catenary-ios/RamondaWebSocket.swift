@@ -134,7 +134,10 @@ final class RamondaWebSocket: NSObject, ObservableObject {
     private func ensureConnection() {
         guard webSocketTask == nil, status != "connecting", status != "connected" else { return }
         guard let url = URL(string: "wss://ramonda.catenarymaps.org/ws/") else {
-            errorMessage = "Invalid Ramonda WebSocket URL."
+            errorMessage = L10n.string(
+                "ramonda.invalid_url",
+                defaultValue: "The live trip service URL is invalid."
+            )
             status = "error"
             return
         }
@@ -217,13 +220,20 @@ final class RamondaWebSocket: NSObject, ObservableObject {
                 break
 
             case "error":
-                errorMessage = object["message"] as? String ?? "Ramonda returned an unknown error."
+                errorMessage = object["message"] as? String ?? L10n.string(
+                    "ramonda.unknown_error",
+                    defaultValue: "The live trip service returned an unknown error."
+                )
 
             default:
                 break
             }
         } catch {
-            errorMessage = "Unable to decode Ramonda data: \(error.localizedDescription)"
+            errorMessage = L10n.format(
+                "ramonda.decode_error",
+                defaultValue: "Unable to decode live trip data: %@",
+                error.localizedDescription
+            )
         }
     }
 
@@ -248,12 +258,22 @@ final class RamondaWebSocket: NSObject, ObservableObject {
                 do {
                     try await webSocketTask.send(.string(text))
                 } catch {
-                    self?.errorMessage = "Unable to send \(context): \(error.localizedDescription)"
+                    self?.errorMessage = L10n.format(
+                        "ramonda.send_error",
+                        defaultValue: "Unable to send %@: %@",
+                        L10n.string(context),
+                        error.localizedDescription
+                    )
                     self?.handleFailure(error)
                 }
             }
         } catch {
-            errorMessage = "Unable to encode \(context): \(error.localizedDescription)"
+            errorMessage = L10n.format(
+                "ramonda.encode_error",
+                defaultValue: "Unable to encode %@: %@",
+                L10n.string(context),
+                error.localizedDescription
+            )
         }
     }
 
@@ -336,11 +356,20 @@ private enum RamondaSocketError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidEnvelope:
-            return "The server returned an invalid message envelope."
+            return L10n.string(
+                "ramonda.invalid_envelope",
+                defaultValue: "The server returned an invalid message."
+            )
         case .missingPayload:
-            return "The server message did not contain trip data."
+            return L10n.string(
+                "ramonda.missing_payload",
+                defaultValue: "The server message did not contain trip data."
+            )
         case .invalidUTF8:
-            return "The outgoing message could not be encoded as UTF-8."
+            return L10n.string(
+                "ramonda.invalid_utf8",
+                defaultValue: "The outgoing message could not be encoded as UTF-8."
+            )
         }
     }
 }

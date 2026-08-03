@@ -536,7 +536,8 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
            let longitude {
             return MapSelectionOption(data: .osmStation(
                 osmID: osmID,
-                name: string(feature, keys: ["name", "displayname"]) ?? "Station",
+                name: string(feature, keys: ["name", "displayname"])
+                    ?? L10n.string("Station"),
                 modeType: string(feature, keys: ["mode_type", "station_type"]) ?? "station",
                 latitude: latitude,
                 longitude: longitude
@@ -822,7 +823,9 @@ struct mapLibreView: View {
     }
 
     private var ranked3456Outside: UIColor {
-        circleOutside
+        colorScheme == .dark
+            ? UIColor(red: 0x1C/255.0, green: 0x26/255.0, blue: 0x36/255.0, alpha: 1.0)
+            : UIColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0)
     }
 
     private func osmStationLabelTextColor(startZoom: Double) -> NSExpression {

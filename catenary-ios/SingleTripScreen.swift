@@ -136,10 +136,15 @@ struct SingleTripScreen: View {
                                 showPreviousStops = true
                             }
                         } label: {
-                            Label(
-                                "Show \(model.lastInactiveStopIndex) previous stops",
-                                systemImage: "chevron.up"
-                            )
+                            Label {
+                                Text(verbatim: L10n.format(
+                                    "trip.show_previous_stops",
+                                    defaultValue: "Show %d previous stops",
+                                    model.lastInactiveStopIndex
+                                ))
+                            } icon: {
+                                Image(systemName: "chevron.up")
+                            }
                             .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
@@ -278,7 +283,11 @@ struct SingleTripScreen: View {
                             serviceDate: serviceDate
                         ))
                     } label: {
-                        Text("Block \(blockID)")
+                        Text(verbatim: L10n.format(
+                            "trip.block",
+                            defaultValue: "Block %@",
+                            blockID
+                        ))
                             .font(.caption.weight(.semibold))
                     }
                     .buttonStyle(.bordered)
@@ -309,7 +318,11 @@ struct SingleTripScreen: View {
         .controlSize(.small)
     }
 
-    private func statusBanner(text: String, systemImage: String, color: Color) -> some View {
+    private func statusBanner(
+        text: LocalizedStringKey,
+        systemImage: String,
+        color: Color
+    ) -> some View {
         Label(text, systemImage: systemImage)
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(color)
@@ -358,24 +371,43 @@ struct SingleTripScreen: View {
         nonEmpty(data.routeShortName)
             ?? nonEmpty(data.tripShortName)
             ?? nonEmpty(data.routeLongName)
-            ?? "Trip"
+            ?? L10n.string("Trip")
     }
 
     private var occupancyLabel: String? {
         if let percentage = model.vehicleData?.occupancyPercentage {
-            return "Occupancy: \(percentage)%"
+            return L10n.format(
+                "occupancy.percentage",
+                defaultValue: "Occupancy: %d%%",
+                percentage
+            )
         }
-        return model.vehicleData?.occupancyStatus?
-            .replacingOccurrences(of: "_", with: " ")
-            .capitalized
+
+        guard let status = model.vehicleData?.occupancyStatus?.uppercased() else {
+            return nil
+        }
+        let key: String
+        switch status {
+        case "EMPTY": key = "Empty"
+        case "MANY_SEATS_AVAILABLE": key = "Many seats available"
+        case "FEW_SEATS_AVAILABLE": key = "Few seats available"
+        case "STANDING_ROOM_ONLY": key = "Standing room only"
+        case "CRUSHED_STANDING_ROOM_ONLY": key = "Crushed standing room only"
+        case "FULL": key = "Full"
+        case "NOT_ACCEPTING_PASSENGERS": key = "Not accepting passengers"
+        case "NO_DATA": key = "No data"
+        case "NOT_BOARDABLE": key = "Not boardable"
+        default: return nil
+        }
+        return L10n.string(key)
     }
 
     private var connectionLabel: String {
         switch model.connectionStatus {
-        case "connected": return "Live"
-        case "connecting": return "Connecting"
-        case "error": return "Reconnecting"
-        default: return "Offline"
+        case "connected": return L10n.string("Live")
+        case "connecting": return L10n.string("Connecting")
+        case "error": return L10n.string("Reconnecting")
+        default: return L10n.string("Offline")
         }
     }
 
@@ -465,7 +497,7 @@ private struct SingleTripAlertsLink: View {
         guard let alert = alerts.sorted(by: { $0.key < $1.key }).first?.value,
               let translations = alert.headerText?.translation,
               !translations.isEmpty else {
-            return "Service Alerts"
+            return L10n.string("Service Alerts")
         }
 
         let localeTag = normalizedLanguage(locale.identifier)
@@ -485,7 +517,7 @@ private struct SingleTripAlertsLink: View {
             .replacingOccurrences(of: "&nbsp;", with: " ")
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return plainText.isEmpty ? "Service Alerts" : plainText
+        return plainText.isEmpty ? L10n.string("Service Alerts") : plainText
     }
 
     private func normalizedLanguage(_ value: String?) -> String {
@@ -675,10 +707,14 @@ private struct SingleTripStopRow: View {
         guard let effectiveEpochSeconds else { return nil }
         let difference = effectiveEpochSeconds - Int64(currentDate.timeIntervalSince1970)
         if difference <= -60 { return nil }
-        if abs(difference) < 30 { return "Now" }
+        if abs(difference) < 30 { return L10n.string("Now") }
 
         let minutes = Int(ceil(Double(abs(difference)) / 60))
-        return difference > 0 ? "\(minutes) min" : "-\(minutes) min"
+        return L10n.format(
+            "time.minutes",
+            defaultValue: "%d min",
+            difference > 0 ? minutes : -minutes
+        )
     }
 
     private var delaySeconds: Int64? {

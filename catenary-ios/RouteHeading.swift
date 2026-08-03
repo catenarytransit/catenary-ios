@@ -81,7 +81,11 @@ struct RouteHeading<Controls: View>: View {
                         }
 
                         if isDBFernverkehr, let shortName = nonBlank(shortName) {
-                            Text("Linie \(shortName)")
+                            Text(verbatim: L10n.format(
+                                "route.line",
+                                defaultValue: "Linie %@",
+                                shortName
+                            ))
                                 .font(.headline)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -134,7 +138,10 @@ struct RouteHeading<Controls: View>: View {
     private func routeIcon(_ kind: RouteIconKind) -> some View {
         switch kind {
         case let .ratp(url):
-            RemoteSVGImage(url: url, accessibilityLabel: shortName ?? "Route") {
+            RemoteSVGImage(
+                url: url,
+                accessibilityLabel: shortName ?? L10n.string("Route")
+            ) {
                 genericBadge(
                     text: cleanedShortName,
                     background: routeColor,
@@ -145,7 +152,10 @@ struct RouteHeading<Controls: View>: View {
             .frame(width: 44, height: 32)
 
         case let .mta(url, background, symbol):
-            RemoteSVGImage(url: url, accessibilityLabel: shortName ?? "Subway route") {
+            RemoteSVGImage(
+                url: url,
+                accessibilityLabel: shortName ?? L10n.string("Route")
+            ) {
                 mtaFallbackBadge(background: background, symbol: symbol)
             }
             .frame(width: 32, height: 32)

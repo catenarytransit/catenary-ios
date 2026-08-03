@@ -245,10 +245,15 @@ final class RealtimeTrajectories: ObservableObject {
     private(set) var vehicles: [RealtimeTrajectoryVehicle] = []
     var onVehiclesChanged: (([RealtimeTrajectoryVehicle]) -> Void)?
 
-    private struct Subscription: Equatable {
+    private struct Subscription {
         let bbox: [Double]
         let zoom: Int
         let modes: [String]
+        let clientReference: String
+
+        func matches(bbox: [Double], zoom: Int, modes: [String]) -> Bool {
+            self.bbox == bbox && self.zoom == zoom && self.modes == modes
+        }
     }
 
     private struct ChunkAccumulator {
@@ -268,6 +273,7 @@ final class RealtimeTrajectories: ObservableObject {
     private var positionPublishTask: Task<Void, Never>?
     private var bufferCancellable: AnyCancellable?
     private var isRunning = false
+    private var subscriptionGeneration: UInt64 = 0
     private var renderGeneration: UInt64 = 0
 
     private var accumulators: [String: ChunkAccumulator] = [:]
@@ -275,9 +281,9 @@ final class RealtimeTrajectories: ObservableObject {
     private var latestSnapshotTimestampByChateau: [String: UInt64] = [:]
     private let interpolationWorker = TrajectoryInterpolationWorker()
 
-    private let subscriptionDebounce: Duration = .milliseconds(175)
+    private let subscriptionDebounce: Duration = .milliseconds(125)
     private let subscriptionRefreshInterval: Duration = .seconds(15)
-    private static let clientReference = "trajectories_layer"
+    private static let clientReferencePrefix = "trajectories_layer"
 
     func updateViewport(bounds: MLNCoordinateBounds, zoom: Double) {
         self.bounds = bounds
@@ -388,27 +394,35 @@ final class RealtimeTrajectories: ObservableObject {
         ]
         guard bbox.allSatisfy({ $0.isFinite }) else { return }
         let requestedZoom = Int(currentZoom.rounded(.down))
+        let zoom = max(0, min(255, requestedZoom))
+        if !forceRefresh,
+           activeSubscription?.matches(bbox: bbox, zoom: zoom, modes: modes) == true {
+            return
+        }
+
+        subscriptionGeneration &+= 1
         let subscription = Subscription(
             bbox: bbox,
-            zoom: max(0, min(255, requestedZoom)),
-            modes: modes
+            zoom: zoom,
+            modes: modes,
+            clientReference: "\(Self.clientReferencePrefix)-\(subscriptionGeneration)"
         )
-        guard forceRefresh || subscription != activeSubscription else { return }
-
         activeSubscription = subscription
+        accumulators.removeAll(keepingCapacity: true)
+
         // Keep the previous completed snapshot visible until each chateau's new
-        // chunk set is complete. This prevents dots from disappearing while the
-        // user pans or zooms, matching the Compose trajectory manager.
+        // chunk set is complete. A unique reference prevents late chunks from a
+        // superseded fast-pan request from replacing the newest snapshot.
         SpruceWebSocket.shared.subscribeTrajectories(
             bbox: subscription.bbox,
             zoom: subscription.zoom,
             modes: subscription.modes,
-            clientReference: Self.clientReference
+            clientReference: subscription.clientReference
         )
     }
 
     private func apply(_ message: TrajectoryBuffer) {
-        guard message.clientReference == Self.clientReference else { return }
+        guard message.clientReference == activeSubscription?.clientReference else { return }
 
         // A delayed chunk from an older subscription must never replace a newer,
         // already-published snapshot for the same chateau.

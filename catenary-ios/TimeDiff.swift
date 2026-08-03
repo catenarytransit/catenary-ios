@@ -168,35 +168,18 @@ private enum TimeDiffLocale {
     }
 
     static func hourMarking(for locale: Locale) -> String {
-        let identifier = normalizedIdentifier(for: locale)
-        if isTraditionalChinese(identifier) { return "小時" }
-        if isChinese(identifier) { return "小时" }
-        if identifier.hasPrefix("ko") { return "시간" }
-        if identifier.hasPrefix("ja") { return "時間" }
-        return "h"
+        L10n.string("time.unit.hour.short", defaultValue: "h", locale: locale)
     }
 
     static func dayMarking(for locale: Locale) -> String {
-        let identifier = normalizedIdentifier(for: locale)
-        if isChinese(identifier) { return "天" }
-        if identifier.hasPrefix("ko") { return "일" }
-        if identifier.hasPrefix("ja") { return "日" }
-        return "d"
+        L10n.string("time.unit.day.short", defaultValue: "d", locale: locale)
     }
 
     static func minuteMarking(for locale: Locale) -> String {
-        let identifier = normalizedIdentifier(for: locale)
-        if isChinese(identifier) { return "分" }
-        if identifier.hasPrefix("ko") { return "분" }
-        if identifier.hasPrefix("ja") { return "分" }
-        return "min"
+        L10n.string("time.unit.minute.short", defaultValue: "min", locale: locale)
     }
 
     static func secondMarking(for locale: Locale) -> String {
-        let identifier = normalizedIdentifier(for: locale)
-        if isChinese(identifier) { return "秒" }
-        if identifier.hasPrefix("ko") { return "초" }
-        if identifier.hasPrefix("ja") { return "秒" }
-        return "s"
+        L10n.string("time.unit.second.short", defaultValue: "s", locale: locale)
     }
 }

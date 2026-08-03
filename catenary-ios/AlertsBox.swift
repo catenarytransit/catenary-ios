@@ -64,7 +64,11 @@ struct AlertsBox: View {
                     .buttonStyle(.plain)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 8)
-                    .accessibilityLabel(expanded ? "Collapse service alerts" : "Expand service alerts")
+                    .accessibilityLabel(
+                        expanded
+                            ? Text("Collapse service alerts")
+                            : Text("Expand service alerts")
+                    )
 
                     if expanded {
                         expandedAlertContent
@@ -239,7 +243,8 @@ private struct AlertURLView: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
-            Text("\(translation.language ?? "Link"): ")
+            let language = translation.language ?? L10n.string("Link")
+            Text(verbatim: "\(language): ")
                 .font(.caption)
 
             if let url = URL(string: translation.text) {
@@ -324,9 +329,9 @@ private struct AlertActivePeriodRow: View {
         }
     }
 
-    private func periodRow(label: String, epochSeconds: Int64) -> some View {
+    private func periodRow(label: LocalizedStringKey, epochSeconds: Int64) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Text("\(label): \(formattedDate(epochSeconds))")
+            (Text(label) + Text(verbatim: ": \(formattedDate(epochSeconds))"))
                 .font(.caption)
 
             SelfUpdatingDiffTimer(
@@ -647,42 +652,46 @@ private func alertScheduleLocale(_ locale: Locale) -> Locale {
 }
 
 private func serviceAlertsTitle(_ count: Int) -> String {
-    count == 1 ? "Service Alert (1)" : "Service Alerts (\(count))"
+    L10n.format("alerts.count", defaultValue: "Service alerts: %d", count)
 }
 
 private func alertCauseDescription(_ cause: Int?) -> String {
+    let key: String
     switch cause {
-    case 1: "Unknown cause"
-    case 2: "Other cause"
-    case 3: "Technical problem"
-    case 4: "Labour strike"
-    case 5: "Demonstration or street blockage"
-    case 6: "Accident"
-    case 7: "Holiday"
-    case 8: "Weather"
-    case 9: "Maintenance"
-    case 10: "Construction"
-    case 11: "Police activity"
-    case 12: "Medical emergency"
-    default: "Unknown cause"
+    case 1: key = "Unknown cause"
+    case 2: key = "Other cause"
+    case 3: key = "Technical problem"
+    case 4: key = "Labour strike"
+    case 5: key = "Demonstration or street blockage"
+    case 6: key = "Accident"
+    case 7: key = "Holiday"
+    case 8: key = "Weather"
+    case 9: key = "Maintenance"
+    case 10: key = "Construction"
+    case 11: key = "Police activity"
+    case 12: key = "Medical emergency"
+    default: key = "Unknown cause"
     }
+    return L10n.string(key)
 }
 
 private func alertEffectDescription(_ effect: Int?) -> String {
+    let key: String
     switch effect {
-    case 1: "No service"
-    case 2: "Reduced service"
-    case 3: "Significant delays"
-    case 4: "Detour"
-    case 5: "Additional service"
-    case 6: "Modified service"
-    case 7: "Other effect"
-    case 8: "Unknown effect"
-    case 9: "Stop moved"
-    case 10: "No effect"
-    case 11: "Accessibility issue"
-    default: "Unknown effect"
+    case 1: key = "No service"
+    case 2: key = "Reduced service"
+    case 3: key = "Significant delays"
+    case 4: key = "Detour"
+    case 5: key = "Additional service"
+    case 6: key = "Modified service"
+    case 7: key = "Other effect"
+    case 8: key = "Unknown effect"
+    case 9: key = "Stop moved"
+    case 10: key = "No effect"
+    case 11: key = "Accessibility issue"
+    default: key = "Unknown effect"
     }
+    return L10n.string(key)
 }
 
 private extension SingleTripAlertText {
