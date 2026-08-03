@@ -394,6 +394,7 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
     private var layerSettings = AllLayerSettings()
     private var realtimeVehicles: [RealtimeVehicle] = []
     private var trajectoryVehicles: [RealtimeTrajectoryVehicle] = []
+    private var userLocationCoordinate: CLLocationCoordinate2D?
     private var realtimeFeatureCache: [String: MLNPointFeature] = [:]
     private var trajectoryFeatureCache: [String: MLNPointFeature] = [:]
     private weak var publishedRealtimeSource: MLNShapeSource?
@@ -665,6 +666,7 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         if publishedTrajectorySource !== trajectorySource {
             publishTrajectorySource()
         }
+        publishUserLocationSource()
     }
 
     private func rebuildRealtimeSource() {
@@ -740,6 +742,27 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
             let feature = MLNPointFeature()
             feature.coordinate = context.coordinate
             feature.attributes = ["name": context.name]
+            features = [feature]
+        } else {
+            features = []
+        }
+        source.shape = MLNShapeCollectionFeature(shapes: features)
+    }
+
+    func updateUserLocation(_ coordinate: CLLocationCoordinate2D?) {
+        userLocationCoordinate = coordinate
+        publishUserLocationSource()
+    }
+
+    private func publishUserLocationSource() {
+        guard let source = mapView?.style?.source(
+            withIdentifier: "user-location"
+        ) as? MLNShapeSource else { return }
+
+        let features: [MLNShape & MLNFeature]
+        if let coordinate = userLocationCoordinate {
+            let feature = MLNPointFeature()
+            feature.coordinate = coordinate
             features = [feature]
         } else {
             features = []
@@ -2053,6 +2076,22 @@ struct mapLibreView: View, Equatable {
     }
 
     @MapViewContentBuilder
+    var userLocationLayer: some StyleLayerCollection {
+        let source = ShapeSource(identifier: "user-location") {}
+
+        CircleStyleLayer(identifier: "user-location-dot", source: source)
+            .color(UIColor(red: 0x1D/255.0, green: 0x4E/255.0, blue: 0xD8/255.0, alpha: 1.0))
+            .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
+                    stops: NSExpression(forConstantValue: [0: 3, 12: 6, 15: 8]))
+            .strokeColor(.white)
+            .strokeWidth(2)
+            .circleOpacity(1)
+            .circleStrokeOpacity(1)
+            .minimumZoomLevel(0)
+            .visible(true)
+    }
+
+    @MapViewContentBuilder
     var nearbyPinLayer: some StyleLayerCollection {
         let source = ShapeSource(identifier: NearbyPinMapCoordinator.sourceIdentifier) {
             if nearbyPinActive, let nearbyPinCoordinate {
@@ -2114,6 +2153,7 @@ struct mapLibreView: View, Equatable {
             )
             realtimeLayer
             trajectoryLayer
+            userLocationLayer
             nearbyPinLayer
             selectedStopLayer
         }
@@ -2122,7 +2162,7 @@ struct mapLibreView: View, Equatable {
             map.mapView.logoView.isHidden = true
             map.mapView.attributionButton.isHidden = true
             map.mapView.compassView.isHidden = true
-            map.mapView.showsUserLocation = true
+            map.mapView.showsUserLocation = false
             nearbyPinMapCoordinator.install(on: map.mapView)
             nearbyPinMapCoordinator.updateContentInset(contentInset)
             nearbyPinMapCoordinator.updatePin(
@@ -2130,6 +2170,7 @@ struct mapLibreView: View, Equatable {
                 coordinate: nearbyPinCoordinate
             )
             featureTapCoordinator.install(on: map.mapView, navigator: viewobject)
+            featureTapCoordinator.updateUserLocation(locationManager.lastKnownLocation)
 
             let sourceCoordinator = featureTapCoordinator
             realtimeVM.onVehiclesChanged = { [weak sourceCoordinator] vehicles in
@@ -2187,15 +2228,6 @@ struct mapLibreView: View, Equatable {
             trajectoryVM.stop()
             wildfireVM.stop()
         }
-        .mapUserAnnotationStyle(
-            MapUserAnnotationStyle(
-                approximateHaloBorderColor: .catenaryBlue,
-                approximateHaloFillColor: .catenaryBlue,
-                haloFillColor: .catenaryBlue,
-                puckArrowFillColor: .catenaryBlue,
-                puckFillColor: .white
-            )
-        )
         .ignoresSafeArea()
         
         
