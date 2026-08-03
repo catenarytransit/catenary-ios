@@ -90,6 +90,7 @@ struct RouteScreen: View {
     let routeID: String
 
     @StateObject private var model: RouteScreenViewModel
+    @State private var alertsPresented = false
 
     init(chateauID: String, routeID: String) {
         self.chateauID = chateauID
@@ -116,11 +117,9 @@ struct RouteScreen: View {
                     )
 
                     if !route.alerts.isEmpty {
-                        AlertsBox(
-                            alerts: route.alerts,
-                            chateauID: chateauID,
-                            initiallyExpanded: true
-                        )
+                        ServiceAlertsLink(alerts: route.alerts) {
+                            alertsPresented = true
+                        }
                     }
 
                     if let routeURL = route.url.flatMap(URL.init(string:)) {
@@ -152,6 +151,13 @@ struct RouteScreen: View {
         }
         .task(id: "\(chateauID)|\(routeID)") {
             await model.load()
+        }
+        .fullScreenCover(isPresented: $alertsPresented) {
+            ServiceAlertsScreen(
+                alerts: model.route?.alerts ?? [:],
+                defaultTimezone: nil,
+                chateauID: chateauID
+            )
         }
     }
 }

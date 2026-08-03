@@ -250,53 +250,34 @@ struct StationDeparturesScreen: View {
     }
 
     private var alertsButton: some View {
-        Button {
+        ServiceAlertsLink(alerts: flattenedNonTripSpecificAlerts) {
             alertsPresented = true
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
-                Text(verbatim: L10n.format(
-                    "alerts.count",
-                    defaultValue: "Service alerts: %d",
-                    totalAlertCount
-                ))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.red)
-                Spacer()
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.red)
-            }
-            .padding(12)
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(.red, lineWidth: 1)
-            }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
         .padding(.vertical, 8)
     }
 
     private var alertsSheet: some View {
         NavigationStack {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
-                    ForEach(nonTripSpecificAlerts, id: \.chateauID) { group in
-                        AlertsBox(
-                            alerts: group.alerts,
-                            defaultTimezone: timezoneID,
-                            chateauID: group.chateauID,
-                            isScrollable: false,
-                            initiallyExpanded: true
-                        )
+            ZStack {
+                serviceAlertsBackground.ignoresSafeArea()
+
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 16) {
+                        ForEach(nonTripSpecificAlerts, id: \.chateauID) { group in
+                            AlertsBox(
+                                alerts: group.alerts,
+                                defaultTimezone: timezoneID,
+                                chateauID: group.chateauID
+                            )
+                        }
                     }
+                    .padding()
                 }
-                .padding()
             }
             .navigationTitle("Service alerts")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(serviceAlertsBackground, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { alertsPresented = false }
@@ -314,8 +295,14 @@ struct StationDeparturesScreen: View {
         }
     }
 
+    private var flattenedNonTripSpecificAlerts: [SingleTripAlert] {
+        nonTripSpecificAlerts.flatMap { group in
+            group.alerts.sorted { $0.key < $1.key }.map(\.value)
+        }
+    }
+
     private var totalAlertCount: Int {
-        nonTripSpecificAlerts.reduce(0) { $0 + $1.alerts.count }
+        flattenedNonTripSpecificAlerts.count
     }
 
     private var referenceDate: Date {

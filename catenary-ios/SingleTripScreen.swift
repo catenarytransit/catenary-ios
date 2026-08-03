@@ -123,7 +123,7 @@ struct SingleTripScreen: View {
                     tripMetadata(data)
 
                     if !activeAlerts.isEmpty {
-                        SingleTripAlertsLink(alerts: activeAlerts) {
+                        ServiceAlertsLink(alerts: activeAlerts) {
                             showAlertsScreen = true
                         }
                     }
@@ -195,7 +195,7 @@ struct SingleTripScreen: View {
             }
         }
         .fullScreenCover(isPresented: $showAlertsScreen) {
-            SingleTripAlertsScreen(
+            ServiceAlertsScreen(
                 alerts: activeAlerts,
                 defaultTimezone: data.timezone,
                 chateauID: selection.chateauID
@@ -459,125 +459,6 @@ struct SingleTripScreen: View {
         guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
               !value.isEmpty else { return nil }
         return value
-    }
-}
-
-private let singleTripAlertColor = Color(red: 249 / 255, green: 156 / 255, blue: 36 / 255)
-
-private struct SingleTripAlertsLink: View {
-    let alerts: [String: SingleTripAlert]
-    let action: () -> Void
-
-    @Environment(\.locale) private var locale
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                HStack(spacing: 2) {
-                    Text("!")
-                    Text(String(alerts.count))
-                }
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(singleTripAlertColor, in: Capsule())
-
-                Text(localizedHeader)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Image(systemName: "chevron.forward")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                Color(uiColor: .secondarySystemBackground),
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Open service alerts")
-    }
-
-    private var localizedHeader: String {
-        guard let alert = alerts.sorted(by: { $0.key < $1.key }).first?.value,
-              let translations = alert.headerText?.translation,
-              !translations.isEmpty else {
-            return L10n.string("Service Alerts")
-        }
-
-        let localeTag = normalizedLanguage(locale.identifier)
-        let localeLanguage = locale.language.languageCode?.identifier.lowercased()
-            ?? localeTag.split(separator: "-").first.map(String.init)
-            ?? ""
-        let translation = translations.first {
-            normalizedLanguage($0.language) == localeTag
-        } ?? translations.first {
-            (normalizedLanguage($0.language).split(separator: "-").first.map(String.init) ?? "") == localeLanguage
-        } ?? translations.first {
-            normalizedLanguage($0.language).isEmpty
-        } ?? translations[0]
-
-        let plainText = translation.text
-            .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
-            .replacingOccurrences(of: "&nbsp;", with: " ")
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return plainText.isEmpty ? L10n.string("Service Alerts") : plainText
-    }
-
-    private func normalizedLanguage(_ value: String?) -> String {
-        var normalized = (value ?? "").replacingOccurrences(of: "_", with: "-")
-        if normalized.lowercased().hasSuffix("-html") {
-            normalized.removeLast("-html".count)
-        }
-        return normalized.lowercased()
-    }
-}
-
-private struct SingleTripAlertsScreen: View {
-    let alerts: [String: SingleTripAlert]
-    let defaultTimezone: String?
-    let chateauID: String
-
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                AlertsBox(
-                    alerts: alerts,
-                    defaultTimezone: defaultTimezone,
-                    chateauID: chateauID,
-                    initiallyExpanded: true
-                )
-                .padding(.horizontal)
-                .padding(.top, 8)
-                .padding(.bottom, 32)
-            }
-            .navigationTitle("Service Alerts")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .frame(width: 32, height: 32)
-                    }
-                    .buttonStyle(.bordered)
-                    .buttonBorderShape(.circle)
-                    .accessibilityLabel("Close service alerts")
-                }
-            }
-        }
     }
 }
 

@@ -1,79 +1,50 @@
 import Foundation
 import SwiftUI
 import UIKit
-import WebKit
 
 private let serviceAlertColor = Color(red: 249 / 255, green: 156 / 255, blue: 36 / 255)
+let serviceAlertsBackground = Color(uiColor: .secondarySystemBackground)
 
 struct AlertsBox: View {
     let alerts: [String: SingleTripAlert]
     let defaultTimezone: String?
     let chateauID: String?
-    let isScrollable: Bool
 
     @Environment(\.locale) private var locale
-    @State private var expanded: Bool
     @State private var selectedLanguages = Set<String>()
 
     init(
         alerts: [String: SingleTripAlert],
         defaultTimezone: String? = nil,
-        chateauID: String? = nil,
-        isScrollable: Bool = false,
-        initiallyExpanded: Bool = true
+        chateauID: String? = nil
     ) {
         self.alerts = alerts
         self.defaultTimezone = defaultTimezone
         self.chateauID = chateauID
-        self.isScrollable = isScrollable
-        _expanded = State(initialValue: initiallyExpanded)
     }
 
     @ViewBuilder
     var body: some View {
         if !alerts.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
-                if expanded {
-                    languagePicker
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                }
+                languagePicker
 
                 VStack(alignment: .leading, spacing: 0) {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            expanded.toggle()
-                        }
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(serviceAlertColor)
-                                .accessibilityHidden(true)
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(serviceAlertColor)
+                            .accessibilityHidden(true)
 
-                            Text(serviceAlertsTitle(alerts.count))
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(serviceAlertColor)
+                        Text(serviceAlertsTitle(alerts.count))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(serviceAlertColor)
 
-                            Spacer(minLength: 8)
-
-                            Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                        .contentShape(Rectangle())
+                        Spacer(minLength: 8)
                     }
-                    .buttonStyle(.plain)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 8)
-                    .accessibilityLabel(
-                        expanded
-                            ? Text("Collapse service alerts")
-                            : Text("Expand service alerts")
-                    )
 
-                    if expanded {
-                        expandedAlertContent
-                            .transition(.opacity)
-                    }
+                    alertItems
                 }
                 .overlay {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -90,14 +61,16 @@ struct AlertsBox: View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
                 ForEach(languageList, id: \.self) { language in
-                    let selected = selectedLanguages.contains(language)
+                    let selected = effectiveSelectedLanguages.contains(language)
                     Button {
+                        var updated = effectiveSelectedLanguages
                         if selected {
-                            guard selectedLanguages.count > 1 else { return }
-                            selectedLanguages.remove(language)
+                            guard updated.count > 1 else { return }
+                            updated.remove(language)
                         } else {
-                            selectedLanguages.insert(language)
+                            updated.insert(language)
                         }
+                        selectedLanguages = updated
                     } label: {
                         Text(alertLanguageLabel(language))
                             .font(.caption.weight(.medium))
@@ -125,21 +98,6 @@ struct AlertsBox: View {
         }
     }
 
-    @ViewBuilder
-    private var expandedAlertContent: some View {
-        if isScrollable {
-            GeometryReader { proxy in
-                ScrollView {
-                    alertItems
-                }
-                .frame(maxHeight: proxy.size.height * 0.8)
-            }
-            .frame(maxHeight: .infinity)
-        } else {
-            alertItems
-        }
-    }
-
     private var alertItems: some View {
         LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(sortedAlerts.indices, id: \.self) { index in
@@ -152,7 +110,7 @@ struct AlertsBox: View {
                 AlertItemView(
                     alert: sortedAlerts[index].value,
                     languageList: languageList,
-                    selectedLanguages: selectedLanguages,
+                    selectedLanguages: effectiveSelectedLanguages,
                     locale: locale,
                     defaultTimezone: defaultTimezone,
                     chateauID: chateauID
@@ -181,8 +139,124 @@ struct AlertsBox: View {
         return languages.filter { !baseLanguagesToHide.contains($0) }
     }
 
+    private var effectiveSelectedLanguages: Set<String> {
+        let availableSelection = selectedLanguages.intersection(languageList)
+        if !availableSelection.isEmpty {
+            return availableSelection
+        }
+        return [defaultAlertLanguage(languageList, locale: locale)]
+    }
+
     private var languageSelectionKey: String {
         languageList.joined(separator: "\u{1F}") + "|" + locale.identifier
+    }
+}
+
+struct ServiceAlertsLink: View {
+    let alerts: [SingleTripAlert]
+    let action: () -> Void
+
+    @Environment(\.locale) private var locale
+
+    init(alerts: [String: SingleTripAlert], action: @escaping () -> Void) {
+        self.alerts = alerts.sorted { $0.key < $1.key }.map(\.value)
+        self.action = action
+    }
+
+    init(alerts: [SingleTripAlert], action: @escaping () -> Void) {
+        self.alerts = alerts
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                HStack(spacing: 2) {
+                    Text("!")
+                    Text(String(alerts.count))
+                }
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(serviceAlertColor, in: Capsule())
+
+                Text(localizedHeader)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: "chevron.forward")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                serviceAlertsBackground,
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open service alerts")
+    }
+
+    private var localizedHeader: String {
+        guard let translation = alerts.first?.headerText?.preferredTranslation(locale: locale) else {
+            return L10n.string("Service Alerts")
+        }
+        let plainText = AlertFormattedTextBuilder.plainText(
+            from: translation.text,
+            chateauID: nil
+        )
+        return plainText.isEmpty ? L10n.string("Service Alerts") : plainText
+    }
+}
+
+struct ServiceAlertsScreen: View {
+    let alerts: [String: SingleTripAlert]
+    let defaultTimezone: String?
+    let chateauID: String
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                serviceAlertsBackground.ignoresSafeArea()
+
+                ScrollView {
+                    AlertsBox(
+                        alerts: alerts,
+                        defaultTimezone: defaultTimezone,
+                        chateauID: chateauID
+                    )
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+                    .padding(.bottom, 32)
+                }
+            }
+            .navigationTitle("Service Alerts")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(serviceAlertsBackground, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .frame(width: 32, height: 32)
+                    }
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.circle)
+                    .accessibilityLabel("Close service alerts")
+                }
+            }
+        }
     }
 }
 
@@ -361,140 +435,57 @@ private struct AlertFormattedText: View {
     let chateauID: String?
 
     @Environment(\.colorScheme) private var colorScheme
-    @State private var measuredHeight: CGFloat = 1
 
     var body: some View {
-        AlertHTMLView(
-            html: AlertHTMLDocument.make(
-                from: text,
-                chateauID: chateauID,
-                colorScheme: colorScheme
-            ),
-            measuredHeight: $measuredHeight
-        )
-        .frame(height: max(measuredHeight, 1))
-        .frame(maxWidth: .infinity, alignment: .leading)
+        Text(AlertFormattedTextBuilder.make(from: text, chateauID: chateauID))
+            .font(.footnote)
+            .tint(colorScheme == .dark ? Color(red: 43 / 255, green: 127 / 255, blue: 1) : .blue)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .textSelection(.enabled)
     }
 }
 
-private struct AlertHTMLView: UIViewRepresentable {
-    let html: String
-    @Binding var measuredHeight: CGFloat
-
-    final class Coordinator: NSObject, WKNavigationDelegate {
-        var parent: AlertHTMLView
-        var contentSizeObservation: NSKeyValueObservation?
-        var lastHTML: String?
-
-        init(parent: AlertHTMLView) {
-            self.parent = parent
-        }
-
-        func webView(
-            _ webView: WKWebView,
-            decidePolicyFor navigationAction: WKNavigationAction,
-            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
-        ) {
-            guard navigationAction.navigationType == .linkActivated,
-                  let url = navigationAction.request.url else {
-                decisionHandler(.allow)
-                return
-            }
-            UIApplication.shared.open(url)
-            decisionHandler(.cancel)
-        }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(parent: self)
-    }
-
-    func makeUIView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
-
-        let webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.navigationDelegate = context.coordinator
-        webView.isOpaque = false
-        webView.backgroundColor = .clear
-        webView.scrollView.backgroundColor = .clear
-        webView.scrollView.isScrollEnabled = false
-        webView.scrollView.contentInset = .zero
-        webView.scrollView.contentInsetAdjustmentBehavior = .never
-
-        context.coordinator.contentSizeObservation = webView.scrollView.observe(
-            \.contentSize,
-            options: [.initial, .new]
-        ) { _, change in
-            let height = max(change.newValue?.height ?? 1, 1)
-            DispatchQueue.main.async {
-                context.coordinator.parent.measuredHeight = height
-            }
-        }
-        return webView
-    }
-
-    func updateUIView(_ webView: WKWebView, context: Context) {
-        context.coordinator.parent = self
-        guard context.coordinator.lastHTML != html else { return }
-        context.coordinator.lastHTML = html
-        webView.loadHTMLString(html, baseURL: nil)
-    }
-
-    static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
-        coordinator.contentSizeObservation?.invalidate()
-        webView.navigationDelegate = nil
-    }
-}
-
-private enum AlertHTMLDocument {
+private enum AlertFormattedTextBuilder {
     private static let tokenRegex = try! NSRegularExpression(
         pattern: #"<(/?[a-zA-Z0-9]+)(\s[^>]*)?>|([^<]+)"#
     )
-    private static let hrefRegex = try! NSRegularExpression(pattern: #"href\s*=\s*[\"']([^\"']+)[\"']"#)
-    private static let mtaIconRegex = try! NSRegularExpression(
-        pattern: #"\[([A-Z0-9]+|shuttle bus icon|accessibility icon)\]"#
+    private static let hrefRegex = try! NSRegularExpression(
+        pattern: #"href\s*=\s*[\"']([^\"']+)[\"']"#
     )
 
-    static func make(from source: String, chateauID: String?, colorScheme: ColorScheme) -> String {
-        let body = supportedHTML(from: source, chateauID: chateauID)
-        let textColor = colorScheme == .dark ? "#FFFFFF" : "#000000"
-        let linkColor = colorScheme == .dark ? "#2B7FFF" : "#0000EE"
-        let fontSize = UIFont.preferredFont(forTextStyle: .footnote).pointSize
-
-        return """
-        <!doctype html>
-        <html>
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-          <style>
-            html, body { margin: 0; padding: 0; background: transparent; }
-            body {
-              color: \(textColor);
-              font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-              font-size: \(fontSize)px;
-              line-height: 1.25;
-              overflow-wrap: anywhere;
-            }
-            a { color: \(linkColor); text-decoration: underline; }
-            p { margin: 0 0 0.65em 0; }
-            ul { margin: 0.15em 0 0.65em 1.25em; padding: 0; }
-            li { margin: 0; padding: 0; }
-            .mta-icon { width: 16px; height: 16px; vertical-align: -3px; object-fit: contain; }
-          </style>
-        </head>
-        <body>\(body)</body>
-        </html>
-        """
-    }
-
-    private static func supportedHTML(from source: String, chateauID: String?) -> String {
+    static func make(from source: String, chateauID: String?) -> AttributedString {
         let fullRange = NSRange(source.startIndex..<source.endIndex, in: source)
-        var output = ""
+        var output = AttributedString()
+        var boldDepth = 0
+        var activeLink: URL?
+        var justAddedBullet = false
+
+        func appendFragment(_ source: String) {
+            let rendered = renderedText(source, chateauID: chateauID)
+            guard !rendered.isEmpty else { return }
+
+            var fragment = AttributedString(rendered)
+            if boldDepth > 0 {
+                fragment.font = .footnote.bold()
+            }
+            if let activeLink {
+                fragment.link = activeLink
+            }
+            output.append(fragment)
+        }
+
+        func ensureNewlines(_ count: Int) {
+            guard !output.characters.isEmpty else { return }
+            let existing = String(output.characters).reversed().prefix { $0 == "\n" }.count
+            guard existing < count else { return }
+            output.append(AttributedString(String(repeating: "\n", count: count - existing)))
+        }
 
         for match in tokenRegex.matches(in: source, range: fullRange) {
             if let content = capture(3, in: match, source: source), !content.isEmpty {
-                output += renderedText(content, chateauID: chateauID)
+                justAddedBullet = false
+                appendFragment(content)
                 continue
             }
 
@@ -505,58 +496,67 @@ private enum AlertHTMLDocument {
 
             switch tag {
             case "a":
-                if let href = firstMatch(in: attributes, regex: hrefRegex, capture: 1),
-                   let url = URL(string: href),
-                   ["http", "https", "mailto", "tel"].contains(url.scheme?.lowercased() ?? "") {
-                    output += "<a href=\"\(escapeAttribute(href))\">"
+                if let href = firstMatch(in: attributes, regex: hrefRegex, capture: 1) {
+                    let decodedHref = decodeEntities(href)
+                    if let url = URL(string: decodedHref),
+                       ["http", "https", "mailto", "tel"].contains(url.scheme?.lowercased() ?? "") {
+                        activeLink = url
+                    }
                 }
-            case "/a": output += "</a>"
-            case "b", "strong": output += "<strong>"
-            case "/b", "/strong": output += "</strong>"
-            case "br": output += "<br>"
-            case "p": output += "<p>"
-            case "/p": output += "</p>"
-            case "ul": output += "<ul>"
-            case "/ul": output += "</ul>"
-            case "li": output += "<li>"
-            case "/li": output += "</li>"
-            default: break
+            case "/a":
+                activeLink = nil
+            case "b", "strong":
+                boldDepth += 1
+            case "/b", "/strong":
+                boldDepth = max(0, boldDepth - 1)
+            case "br":
+                ensureNewlines(1)
+                justAddedBullet = false
+            case "p":
+                if !justAddedBullet { ensureNewlines(2) }
+                justAddedBullet = false
+            case "/p":
+                ensureNewlines(1)
+                justAddedBullet = false
+            case "ul", "/ul":
+                ensureNewlines(1)
+                justAddedBullet = false
+            case "li":
+                ensureNewlines(1)
+                appendFragment("  • ")
+                justAddedBullet = true
+            default:
+                break
             }
         }
+
         return output
     }
 
+    static func plainText(from source: String, chateauID: String?) -> String {
+        String(make(from: source, chateauID: chateauID).characters)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private static func renderedText(_ source: String, chateauID: String?) -> String {
-        guard chateauID == "nyct" else {
-            return escapeText(source).replacingOccurrences(of: "\n", with: "<br>")
-        }
+        let decoded = decodeEntities(source)
+        guard chateauID == "nyct" else { return decoded }
 
-        let range = NSRange(source.startIndex..<source.endIndex, in: source)
-        var output = ""
-        var cursor = source.startIndex
+        return decoded
+            .replacingOccurrences(of: "[shuttle bus icon]", with: "[S]")
+            .replacingOccurrences(of: "[accessibility icon]", with: "♿︎")
+    }
 
-        for match in mtaIconRegex.matches(in: source, range: range) {
-            guard let matchRange = Range(match.range, in: source),
-                  let rawID = capture(1, in: match, source: source) else { continue }
-            output += escapeText(String(source[cursor..<matchRange.lowerBound]))
-
-            let routeID: String
-            switch rawID {
-            case "shuttle bus icon": routeID = "GS"
-            case "accessibility icon": routeID = "ADA"
-            default: routeID = rawID
-            }
-
-            if let iconURL = MTAAlertIcon.url(for: routeID) {
-                output += "<img class=\"mta-icon\" src=\"\(escapeAttribute(iconURL.absoluteString))\" alt=\"\(escapeAttribute(rawID))\">"
-            } else {
-                output += escapeText(String(source[matchRange]))
-            }
-            cursor = matchRange.upperBound
-        }
-
-        output += escapeText(String(source[cursor...]))
-        return output.replacingOccurrences(of: "\n", with: "<br>")
+    private static func decodeEntities(_ source: String) -> String {
+        source
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&apos;", with: "'")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&amp;", with: "&")
     }
 
     private static func capture(_ index: Int, in match: NSTextCheckingResult, source: String) -> String? {
@@ -574,47 +574,6 @@ private enum AlertHTMLDocument {
         let range = NSRange(source.startIndex..<source.endIndex, in: source)
         guard let match = regex.firstMatch(in: source, range: range) else { return nil }
         return capture(index, in: match, source: source)
-    }
-
-    private static func escapeText(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
-    }
-
-    private static func escapeAttribute(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "\"", with: "&quot;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
-    }
-}
-
-private enum MTAAlertIcon {
-    private static let routeIDs: Set<String> = [
-        "A", "C", "E", "B", "D", "F", "FX", "M", "G", "J", "Z",
-        "L", "N", "Q", "R", "W", "GS", "FS", "H", "SIR", "1", "2", "3",
-        "4", "5", "6", "6X", "7", "7X"
-    ]
-
-    static func url(for rawRouteID: String) -> URL? {
-        let routeID = rawRouteID.uppercased()
-        if routeID == "ADA" {
-            return URL(string: "https://maps.catenarymaps.org/mtaicons/ada.svg")
-        }
-        guard routeIDs.contains(routeID) else { return nil }
-
-        let iconName: String
-        switch routeID {
-        case "6X": iconName = "6d"
-        case "7X": iconName = "7d"
-        case "FX": iconName = "fd"
-        case "GS", "FS", "H": iconName = "s"
-        case "SIR": iconName = "sir"
-        default: iconName = routeID.lowercased()
-        }
-        return URL(string: "https://maps.catenarymaps.org/mtaicons/\(iconName).svg")
     }
 }
 
