@@ -234,7 +234,7 @@ struct MainUIView: View {
                 }
 
         }
-        .onGeometryChange(for: CGSize.self) { proxy in
+        .catenaryOnGeometryChange(for: CGSize.self) { proxy in
             proxy.size
         } action: { _, newSize in
             mapViewportSize = newSize
@@ -300,7 +300,7 @@ struct MainUIView: View {
         .background(
             NativeSheetLeadingAnchor(sheetWidth: $nativeSheetWidth)
         )
-        .onGeometryChange(for: CGFloat.self) { proxy in
+        .catenaryOnGeometryChange(for: CGFloat.self) { proxy in
             max(proxy.size.height, 0)
         } action: { _, newValue in
             guard !isSearchSheetTransitioning else { return }
