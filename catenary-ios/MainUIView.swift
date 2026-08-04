@@ -45,20 +45,8 @@ struct MainUIView: View {
     
     var body: some View {
         ZStack {
-            mapLibreView(
-                locationManager: locationManager,
-                nearbyPinMapCoordinator: nearbyPinMapCoordinator,
-                nearbyPinActive: nearbyPinActive,
-                nearbyPinCoordinate: nearbyPinCoordinate,
-                contentInset: mapContentInset,
-                camera: $viewobject.camera,
-                cameraRevision: mapCameraRevision,
-                layerSettings: viewobject.allLayerSettings,
-                selectedStopContext: viewobject.selectedStopContext,
-                viewobject: viewobject
-            )
-                .equatable()
-                .onChange(of: viewobject.camera) { _, camera in
+            baseMapView
+                .catenaryOnChange(of: viewobject.camera) { _, camera in
                     guard camera.lastReasonForChange == nil
                             || camera.lastReasonForChange == .programmatic else {
                         return
@@ -69,7 +57,7 @@ struct MainUIView: View {
                     viewobject.openDeepLink(url)
                     isSheetPresented = true
                 }
-                .onChange(of: viewobject.catenaryStack) { _, stack in
+                .catenaryOnChange(of: viewobject.catenaryStack) { _, stack in
                     guard !stack.isEmpty else { return }
                     isSheetPresented = true
                     if viewobject.presDetent != .large {
@@ -77,47 +65,11 @@ struct MainUIView: View {
                     }
                 }
                 .sheet(isPresented: $isSheetPresented) {
-                    BottomDrawer(
-                        selectedDetent: $viewobject.presDetent,
-                        sheetHeight: liveSheetHeight,
-                        locationManager: locationManager,
-                        searchViewModel: searchViewModel,
-                        focusRequest: searchFocusRequest,
-                        nearbyPinActive: $nearbyPinActive,
-                        nearbyPinCoordinate: $nearbyPinCoordinate
-                    )
-                        .ignoresSafeArea(.keyboard)
-                        .presentationDetents([.height(80), .height(350), .large], selection: $viewobject.presDetent)
-                        
-                        .presentationBackgroundInteraction(.enabled)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        
-                        .ignoresSafeArea(.container, edges: .bottom)
-                        .interactiveDismissDisabled()
-                        .onGeometryChange(for: CGFloat.self) { proxy in
-                            max(proxy.size.height, 0)
-                        } action: { _, newValue in
-                            guard !isSearchSheetTransitioning else { return }
-
-                            let maximumHeight = viewobject.largeDetentHeight > 0
-                                ? viewobject.largeDetentHeight
-                                : newValue
-                            let boundedHeight = min(newValue, maximumHeight)
-                            if abs(liveSheetHeight - boundedHeight) > 0.5 {
-                                liveSheetHeight = boundedHeight
-                            }
-
-
-                            let progress = max(min((newValue - 400) / 50, 1), 0)
-                            let toolbarOpacity = 1 - progress
-                            if abs(locationOpacity - toolbarOpacity) > 0.005 {
-                                locationOpacity = toolbarOpacity
-                            }
-                        }
+                    bottomDrawerSheet
                 }
                 
-                .onChange(of: viewobject.showLayerSelector) { last, current in
-                    withAnimation(.bouncy) {
+                .catenaryOnChange(of: viewobject.showLayerSelector) { last, current in
+                    withAnimation(.catenaryBouncy) {
                         if current {
                             isSheetPresented = false
                         } else {
@@ -166,7 +118,7 @@ struct MainUIView: View {
             try? await Task.sleep(nanoseconds: 450_000_000)
             isSearchSheetTransitioning = false
         }
-        .onChange(of: viewobject.presDetent) { _, detent in
+        .catenaryOnChange(of: viewobject.presDetent) { _, detent in
             guard detent != .large else { return }
 
             isSearchSheetTransitioning = false
@@ -177,14 +129,67 @@ struct MainUIView: View {
             locationManager.checkLocationAuthorization()
             useInitialUserLocationIfNeeded()
         }
-        .onChange(of: locationManager.lastKnownLocation?.latitude) { _, _ in
+        .catenaryOnChange(of: locationManager.lastKnownLocation?.latitude) { _, _ in
             useInitialUserLocationIfNeeded()
         }
-        .onChange(of: locationManager.lastKnownLocation?.longitude) { _, _ in
+        .catenaryOnChange(of: locationManager.lastKnownLocation?.longitude) { _, _ in
             useInitialUserLocationIfNeeded()
         }
     }
     @EnvironmentObject var viewobject: viewObject
+
+    private var baseMapView: some View {
+        mapLibreView(
+            locationManager: locationManager,
+            nearbyPinMapCoordinator: nearbyPinMapCoordinator,
+            nearbyPinActive: nearbyPinActive,
+            nearbyPinCoordinate: nearbyPinCoordinate,
+            contentInset: mapContentInset,
+            camera: $viewobject.camera,
+            cameraRevision: mapCameraRevision,
+            layerSettings: viewobject.allLayerSettings,
+            selectedStopContext: viewobject.selectedStopContext,
+            viewobject: viewobject
+        )
+        .equatable()
+    }
+
+    private var bottomDrawerSheet: some View {
+        BottomDrawer(
+            selectedDetent: $viewobject.presDetent,
+            sheetHeight: liveSheetHeight,
+            locationManager: locationManager,
+            searchViewModel: searchViewModel,
+            focusRequest: searchFocusRequest,
+            nearbyPinActive: $nearbyPinActive,
+            nearbyPinCoordinate: $nearbyPinCoordinate
+        )
+        .ignoresSafeArea(.keyboard)
+        .presentationDetents([.height(80), .height(350), .large], selection: $viewobject.presDetent)
+        .presentationBackgroundInteraction(.enabled)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(.container, edges: .bottom)
+        .interactiveDismissDisabled()
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            max(proxy.size.height, 0)
+        } action: { _, newValue in
+            guard !isSearchSheetTransitioning else { return }
+
+            let maximumHeight = viewobject.largeDetentHeight > 0
+                ? viewobject.largeDetentHeight
+                : newValue
+            let boundedHeight = min(newValue, maximumHeight)
+            if abs(liveSheetHeight - boundedHeight) > 0.5 {
+                liveSheetHeight = boundedHeight
+            }
+
+            let progress = max(min((newValue - 400) / 50, 1), 0)
+            let toolbarOpacity = 1 - progress
+            if abs(locationOpacity - toolbarOpacity) > 0.005 {
+                locationOpacity = toolbarOpacity
+            }
+        }
+    }
 
     private func beginSearch() {
         guard viewobject.currentStackItem == nil else { return }
