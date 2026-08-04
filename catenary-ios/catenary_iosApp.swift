@@ -112,7 +112,7 @@ struct OverlayRoot: View {
                 
                 NavigationStack {
                     LayerSelectorSheet(tabPage: $currentPage)
-                        .presentationDetents([.height(430), .medium])
+                        .presentationDetents([.height(380), .medium])
                         .presentationBackgroundInteraction(PresentationBackgroundInteraction.disabled)
                         
                         .interactiveDismissDisabled(false)
@@ -254,7 +254,7 @@ struct layerTabView: View {
     @Binding var layerSettings: LayerCategorySettings
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 layerSettingButton(specificLayerSetting: $layerSettings.shapes,
                                    imageName: "routesicon", label: "Routes")
@@ -270,7 +270,7 @@ struct layerTabView: View {
             }
             .padding(.horizontal)
 
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
 
                 Text("Vehicle labels")
                     .font(.subheadline.weight(.semibold))
@@ -334,6 +334,8 @@ struct layerTabView: View {
             .padding(.horizontal)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.top, 6)
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 }
 
