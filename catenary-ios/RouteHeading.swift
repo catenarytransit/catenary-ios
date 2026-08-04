@@ -2,8 +2,6 @@
 //  RouteHeading.swift
 //  catenary-ios
 //
-//  SwiftUI port of catenary-compose's RouteHeading.kt.
-//
 
 import Foundation
 import SwiftUI
@@ -425,8 +423,6 @@ private enum RouteIconKind: Equatable {
     case generic(isSBahn: Bool)
 }
 
-// MARK: - Agency-specific styles
-
 private enum RATPRouteStyle {
     static let idfmChateauID = "île~de~france~mobilités"
 
@@ -614,8 +610,6 @@ private struct SBBRouteLogo: View {
     }
 }
 
-// MARK: - DB Fernverkehr lookup
-
 private enum DBFernverkehrLookup {
     private struct FullEntry: Decodable {
         let displayName: String?
@@ -656,8 +650,6 @@ private enum DBFernverkehrLookup {
         displayNames[tripNumberWithoutLeadingZeroes]
     }
 }
-
-// MARK: - SVG rendering
 
 private struct RemoteSVGImage<Placeholder: View>: View {
     let url: URL?
@@ -805,8 +797,6 @@ private struct InlineSVGView: UIViewRepresentable {
         """
     }
 }
-
-// MARK: - Route color parsing and contrast correction
 
 private struct RouteHeadingColor: Equatable {
     let red: Double

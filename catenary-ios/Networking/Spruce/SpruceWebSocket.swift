@@ -8,8 +8,6 @@
 import Foundation
 import Combine
 
-// MARK: - Wire formats (send-only — we encode these but never decode them)
-
 struct MapViewportUpdate: Encodable {
     var type: String = "subscribe_map_v2"
     let categories: [String]
@@ -66,10 +64,6 @@ struct SpruceCommonMessage: Decodable {
     let total_chunks: Int?
 }
 
-// MARK: - JSON helper for arbitrary payloads
-
-/// A lightweight JSON value enum to carry arbitrary data akin to Kotlin's JsonElement.
-/// If your project already has such a type, feel free to replace this.
 indirect enum JSONValue: Codable, Equatable {
     case string(String)
     case number(Double)
@@ -116,11 +110,7 @@ indirect enum JSONValue: Codable, Equatable {
     }
 }
 
-// MARK: - Wire types used by the WebSocket
-
 /// Tile-coordinate bounding box sent to Spruce in `update_map` messages.
-/// Matches Android's `BoundsInput` in `FetchRealtimeData.kt`.
-/// `BoundsInputPerLevel` is shared with `RealtimeVehicles.swift`.
 struct BoundsInput: Encodable, Equatable {
     let level5: BoundsInputPerLevel
     let level7: BoundsInputPerLevel
@@ -128,22 +118,15 @@ struct BoundsInput: Encodable, Equatable {
     let level12: BoundsInputPerLevel
 }
 
-/// `map_update` payload from Spruce. Re-uses `EachChateauResponseV2` from
-/// `RealtimeVehicles.swift` (same wire format as the HTTP `bulk_realtime_fetch_v3`).
 struct BulkRealtimeResponseV2: Decodable {
     let chateaus: [String: EachChateauResponseV2]
 }
-
-// MARK: - SpruceWebSocket (Swift)
 
 private let TAG = "SpruceWebSocket"
 
 final class SpruceWebSocket: NSObject, ObservableObject {
     static let shared = SpruceWebSocket()
 
-    // StateFlow analogues — @Published gives SwiftUI views the same
-    // "latest value, multi-subscriber, observe-from-anywhere" semantics
-    // that Kotlin's MutableStateFlow provides.
     @Published private(set) var spruceStatus: String = "disconnected"
     @Published private(set) var spruceMapData: BulkRealtimeResponseV2?
     @Published private(set) var spruceTripData: JSONValue?
@@ -167,12 +150,10 @@ final class SpruceWebSocket: NSObject, ObservableObject {
     private var session: URLSession!
     private var task: URLSessionWebSocketTask?
 
-    // Keep last-sent params to resend on reconnect
     private var activeMapParams: MapViewportUpdate?
     private var activeTripParams: SubscribeTrip?
     private var activeTrajectoryParams: SubscribeTrajectories?
 
-    // Reconnect control
     private var reconnectWorkItem: DispatchWorkItem?
     private let queue = DispatchQueue(label: "SpruceWebSocket.queue")
 
@@ -183,8 +164,6 @@ final class SpruceWebSocket: NSObject, ObservableObject {
         config.timeoutIntervalForResource = 0 // keep-alive
         session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
     }
-
-    // MARK: - Public API
 
     func initConnection() {
         ensureConnection()
@@ -245,7 +224,6 @@ final class SpruceWebSocket: NSObject, ObservableObject {
     }
 
     func unsubscribeTrip(chateau: String) {
-        // Clear active subscription so it doesn't resend on reconnect
         let paramsToSend = activeTripParams
         activeTripParams = nil
         guard spruceStatus == "connected" else { return }
@@ -256,8 +234,6 @@ final class SpruceWebSocket: NSObject, ObservableObject {
                                   start_time: paramsToSend?.start_time)
         sendCodable(msg, errorContext: "unsubscribe trip")
     }
-
-    // MARK: - Connection lifecycle
 
     private func ensureConnection() {
         if task != nil, spruceStatus == "connected" || spruceStatus == "connecting" { return }
@@ -292,7 +268,6 @@ final class SpruceWebSocket: NSObject, ObservableObject {
                 @unknown default:
                     break
                 }
-                // Continue listening
                 self.listen()
             }
         }
@@ -368,8 +343,6 @@ final class SpruceWebSocket: NSObject, ObservableObject {
         queue.asyncAfter(deadline: .now() + 5, execute: work)
     }
 
-    // MARK: - Sending
-
     // NOTE: we don't gate sends on `spruceStatus == "connected"` because the
     // status update is dispatched to main async (so it lags behind the actual
     // connection by one runloop). URLSessionWebSocketTask.send() will queue
@@ -405,15 +378,11 @@ final class SpruceWebSocket: NSObject, ObservableObject {
         }
     }
 
-    // MARK: - Helpers
-
-    /// Mirror `MutableStateFlow.value =`: only emit when the value actually changes.
     private func setStatus(_ newValue: String) {
         guard spruceStatus != newValue else { return }
         publish { self.spruceStatus = newValue }
     }
 
-    /// Publish `@Published` writes on the main thread to keep SwiftUI happy.
     private func publish(_ apply: @escaping () -> Void) {
         if Thread.isMainThread {
             apply()
@@ -423,13 +392,10 @@ final class SpruceWebSocket: NSObject, ObservableObject {
     }
 }
 
-// MARK: - URLSessionWebSocketDelegate
-
 extension SpruceWebSocket: URLSessionWebSocketDelegate {
     func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
         print("\(TAG): Spruce WS Connected")
         setStatus("connected")
-        // Resend active subscriptions
         if let map = activeMapParams {
             print("\(TAG): Resending active map params")
             sendMapUpdate(map)
@@ -446,7 +412,6 @@ extension SpruceWebSocket: URLSessionWebSocketDelegate {
 
     func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
         print("\(TAG): Spruce WS Closing: \(closeCode.rawValue)")
-        // Match Kotlin onClosing: do NOT schedule a reconnect here; only onFailure does.
         setStatus("disconnected")
         task = nil
     }

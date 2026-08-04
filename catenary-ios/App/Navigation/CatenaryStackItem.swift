@@ -3,13 +3,6 @@
 //  catenary-ios
 //
 
-// MARK: - Typed navigation stack
-
-/// Swift equivalent of catenary-compose's `CatenaryStackEnum`.
-///
-/// Keeping the full destination payload in the stack makes back navigation
-/// deterministic and lets individual screens restore local state (for example,
-/// the selected departure time on a stop screen).
 enum CatenaryStackItem: Hashable, Identifiable {
     case singleTrip(
         chateauID: String,

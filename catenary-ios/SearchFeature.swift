@@ -3,8 +3,6 @@ import Foundation
 import MapLibre
 import SwiftUI
 
-// MARK: - Search field
-
 struct SearchLauncher: View {
     let onSearch: () -> Void
     let onSettingsClick: () -> Void
@@ -96,8 +94,6 @@ struct CatenarySearchBar: View {
         }
     }
 }
-
-// MARK: - Search state and networking
 
 @MainActor
 final class SearchViewModel: ObservableObject {
@@ -380,8 +376,6 @@ private struct SearchCoordinate: Sendable {
     }
 }
 
-// MARK: - Combined result rows
-
 enum SearchRow: Identifiable, Sendable {
     case cypress(SearchCypressFeature, score: Double)
     case osmStation(SearchOsmStationResult, score: Double)
@@ -422,8 +416,6 @@ enum SearchRow: Identifiable, Sendable {
         }
     }
 }
-
-// MARK: - Results UI
 
 struct CatenarySearchResultsView: View {
     @ObservedObject var viewModel: SearchViewModel
@@ -704,8 +696,6 @@ private struct SearchFlowLayout: Layout {
     }
 }
 
-// MARK: - API models
-
 struct SearchCypressResponse: Decodable, Sendable {
     let features: [SearchCypressFeature]?
 }
@@ -942,8 +932,6 @@ struct SearchAdminHierarchy: Decodable, Sendable {
 struct SearchAdminArea: Decodable, Sendable {
     let name: String?
 }
-
-// MARK: - Map focus helper
 
 extension MLNCoordinateBounds {
     var catenarySearchCenter: CLLocationCoordinate2D {

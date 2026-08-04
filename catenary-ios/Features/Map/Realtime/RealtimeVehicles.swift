@@ -2,23 +2,11 @@
 //  RealtimeVehicles.swift
 //  catenary-ios
 //
-//  Drives the Spruce WebSocket subscription and exposes a flattened,
-//  observable list of vehicle positions for the map to render. Mirrors the
-//  Android `FetchRealtimeData.kt`: on every viewport / zoom / toggle change
-//  we compute the appropriate categories + chateaus + tile bounds and call
-//  `SpruceWebSocket.updateMap`. Vehicle updates arrive pushed from the
-//  server via `SpruceWebSocket.shared.$spruceMapData`.
-//
-//  Response wire types mirror `catenary-backend/src/birch/aspenised_data_over_https.rs`
-//  and `src/aspen_dataset.rs`.
-//
 
 import Combine
 import CoreLocation
 import Foundation
 import MapLibre
-
-// MARK: - Tile-bounds wire type (shared with SpruceWebSocket.BoundsInput)
 
 struct BoundsInputPerLevel: Encodable, Equatable {
     let min_x: UInt32
@@ -26,8 +14,6 @@ struct BoundsInputPerLevel: Encodable, Equatable {
     let min_y: UInt32
     let max_y: UInt32
 }
-
-// MARK: - Response wire types (received via SpruceWebSocket `map_update`)
 
 struct EachChateauResponseV2: Decodable {
     let categories: PositionDataCategoryV2?
@@ -88,8 +74,6 @@ struct CatenaryRtVehiclePosition: Decodable {
     let odometer: Double?
     let speed: Float?
 }
-
-// MARK: - Flattened, view-friendly vehicle
 
 struct RealtimeVehicle: Identifiable, Hashable {
     let id: String
@@ -163,8 +147,6 @@ struct RealtimeVehicle: Identifiable, Hashable {
             && l.routeLongName == r.routeLongName
     }
 }
-
-// MARK: - View model
 
 @MainActor
 final class RealtimeVehicles: ObservableObject {
@@ -241,8 +223,6 @@ final class RealtimeVehicles: ObservableObject {
         SpruceWebSocket.shared.initConnection()
         scheduleSend()
 
-        // Observe spruceMapData pushes. Server sends one chateau per message
-        // and most are incremental, so we accumulate.
         for await mapData in SpruceWebSocket.shared.$spruceMapData.values {
             if Task.isCancelled { break }
             if let mapData {
@@ -295,8 +275,7 @@ final class RealtimeVehicles: ObservableObject {
         }
 
         guard let xs = payload.vehicle_positions else {
-            // Match ProcessRealtimeData.kt: a missing positions field carries
-            // metadata only and must never erase the last rendered snapshot.
+            // A missing positions field is metadata-only and must not clear the snapshot.
             lastUpdatedByChateau[chateauID, default: [:]][category] = payload.last_updated_time_ms
             return false
         }
