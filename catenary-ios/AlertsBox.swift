@@ -419,7 +419,8 @@ private struct AlertActivePeriodRow: View {
 
     private func periodRow(label: LocalizedStringKey, epochSeconds: Int64) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
-            (Text(label) + Text(verbatim: ": \(formattedDate(epochSeconds))"))
+            
+            Text("\(Text(label))\(Text(verbatim: ": \(formattedDate(epochSeconds))"))")
                 .font(.caption)
 
             SelfUpdatingDiffTimer(
