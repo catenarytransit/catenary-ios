@@ -2,17 +2,11 @@
 //  RealtimeTrajectories.swift
 //  catenary-ios
 //
-//  Receives chunked Spruce trajectory buffers and interpolates synthetic
-//  vehicle positions along each active trip. Networking stays in
-//  SpruceWebSocket; this type owns map-facing state and lifecycle only.
-//
 
 import Combine
 import CoreLocation
 import Foundation
 import MapLibre
-
-// MARK: - Spruce trajectory wire models
 
 struct TrajectoryBuffer {
     let timestamp: UInt64
@@ -58,8 +52,6 @@ struct TrajectoryStop: Decodable {
 struct TrajectorySegment: Decodable {
     let coordinates: [[Double]]?
 }
-
-// MARK: - Map-facing model
 
 struct RealtimeTrajectoryVehicle: Identifiable, Hashable, @unchecked Sendable {
     let id: String
@@ -237,8 +229,6 @@ private func trajectoryBearing(
         - sin(startLatitude) * cos(endLatitude) * cos(longitudeDelta)
     return (atan2(y, x) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
 }
-
-// MARK: - Store
 
 @MainActor
 final class RealtimeTrajectories: ObservableObject {
@@ -432,9 +422,7 @@ final class RealtimeTrajectories: ObservableObject {
             return
         }
 
-        // Spruce uses total_chunks == 0 for an unchunked/empty snapshot. Treat
-        // its content as the complete replacement rather than always deleting
-        // the chateau; this mirrors the Compose implementation.
+        // A zero total means the content is the complete unchunked snapshot.
         if message.totalChunks == 0 {
             accumulators.removeValue(forKey: message.chateau)
             let trajectories = Self.prepareTrajectories(
