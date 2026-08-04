@@ -521,12 +521,14 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         if string(feature, keys: ["selection_kind"]) == "vehicle",
            let chateauID = string(feature, keys: ["chateau", "chateau_id"]),
            let routeType = integer(feature, keys: ["route_type"]) {
+            let vehicleID = string(feature, keys: ["vehicle_id"])
+            let isTrajectory = vehicleID?.hasPrefix("trajectory_") == true
             return MapSelectionOption(data: .vehicle(
                 chateauID: chateauID,
-                vehicleID: string(feature, keys: ["vehicle_id"]),
+                vehicleID: isTrajectory ? nil : vehicleID,
                 routeID: string(feature, keys: ["route_id"]),
                 headsign: string(feature, keys: ["headsign", "trip_headsign"]) ?? "",
-                tripLabel: string(feature, keys: ["vehicle_label", "display_name"]),
+                tripLabel: isTrajectory ? nil : string(feature, keys: ["vehicle_label", "display_name"]),
                 colour: string(feature, keys: ["color", "colour"]) ?? "777777",
                 routeShortName: string(feature, keys: ["route_short_name", "route_label"]),
                 routeLongName: string(feature, keys: ["route_long_name"]),

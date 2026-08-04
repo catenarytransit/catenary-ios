@@ -35,8 +35,35 @@ struct StationDepartureRow: View {
         .from(routeType: routeInfo?.routeType ?? event.routeType)
     }
 
+    private var showsRouteBadge: Bool {
+        guard routeLabel != nil else { return false }
+        return event.chateau != NationalRailUtils.chateauID
+            || isNationalRailRouteBadgeException
+    }
+
+    private var isNationalRailRouteBadgeException: Bool {
+        guard event.chateau == NationalRailUtils.chateauID else { return false }
+
+        let agencyID = routeInfo?.agencyId?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+        if agencyID == "LO" || agencyID == "XR" {
+            return true
+        }
+
+        let agencyName = NationalRailUtils.resolvedAgencyName(
+            agencyID: routeInfo?.agencyId,
+            agencyName: agency?.agencyName
+        )?
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+
+        return agencyName == "london overground"
+            || agencyName == "elizabeth line"
+    }
+
     private var showsLeadingRoute: Bool {
-        layout != .regular || mode != .rail
+        showsRouteBadge && (layout != .regular || mode != .rail)
     }
 
     var body: some View {
@@ -59,8 +86,7 @@ struct StationDepartureRow: View {
             Button(action: openTrip) {
                 HStack(alignment: .center, spacing: 8) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(destinationText)
-                            .font(mode == .rail ? .headline : .subheadline.weight(.semibold))
+                        destinationLabel
                             .foregroundStyle(event.isCancelled ? .red : .primary)
                             .strikethrough(event.isCancelled)
                             .lineLimit(2)
@@ -73,7 +99,11 @@ struct StationDepartureRow: View {
 
                     if let platformText {
                         Text(platformText)
-                            .font(.body.weight(.semibold))
+                            .font(
+                                mode == .rail
+                                    ? .system(size: 14, weight: .regular)
+                                    : .body.weight(.semibold)
+                            )
                             .monospacedDigit()
                             .frame(minWidth: 24, alignment: .trailing)
                     }
@@ -89,7 +119,7 @@ struct StationDepartureRow: View {
 
     @ViewBuilder
     private var leadingRouteButton: some View {
-        if routeLabel != nil {
+        if showsRouteBadge {
             Button {
                 openRoute()
             } label: {
@@ -112,17 +142,17 @@ struct StationDepartureRow: View {
     private var metadataLine: some View {
         let values = [
             mode == .rail ? nil : effectiveTripName,
-            event.vehicleNumber,
-            mode == .rail ? agency?.agencyName : nil
+            event.vehicleNumber
         ]
         .compactMap { value -> String? in
             guard let value, !value.isEmpty else { return nil }
             return value
         }
+        let hasAgency = mode == .rail && resolvedAgencyName != nil
 
-        if layout == .regular, mode == .rail, routeLabel != nil || !values.isEmpty {
+        if layout == .regular, mode == .rail, showsRouteBadge || !values.isEmpty || hasAgency {
             HStack(spacing: 5) {
-                if routeLabel != nil {
+                if showsRouteBadge {
                     Button {
                         openRoute()
                     } label: {
@@ -141,6 +171,8 @@ struct StationDepartureRow: View {
                     .accessibilityLabel("Open route")
                 }
 
+                agencyMetadata
+
                 if !values.isEmpty {
                     Text(values.joined(separator: "  •  "))
                         .font(.caption)
@@ -148,15 +180,65 @@ struct StationDepartureRow: View {
                         .lineLimit(1)
                 }
             }
-        } else if !values.isEmpty {
-            Text(values.joined(separator: "  •  "))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+        } else if !values.isEmpty || hasAgency {
+            HStack(spacing: 5) {
+                agencyMetadata
+
+                if !values.isEmpty {
+                    Text(values.joined(separator: "  •  "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
         }
     }
 
-    private var destinationText: String {
+    @ViewBuilder
+    private var agencyMetadata: some View {
+        if mode == .rail, let resolvedAgencyName {
+            if event.chateau == NationalRailUtils.chateauID {
+                NationalRailAgencyLabel(
+                    agencyID: routeInfo?.agencyId,
+                    agencyName: agency?.agencyName
+                )
+            } else {
+                Text(resolvedAgencyName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private var resolvedAgencyName: String? {
+        if event.chateau == NationalRailUtils.chateauID {
+            return NationalRailUtils.resolvedAgencyName(
+                agencyID: routeInfo?.agencyId,
+                agencyName: agency?.agencyName
+            )
+        }
+        guard let value = agency?.agencyName.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else { return nil }
+        return value
+    }
+
+    private var destinationLabel: Text {
+        var value = AttributedString(destinationText)
+        value.font = mode == .rail
+            ? .system(size: 14, weight: .medium)
+            : .subheadline.weight(.semibold)
+
+        if mode == .rail, let trainNumberText {
+            var trainNumber = AttributedString(" \(trainNumberText)")
+            trainNumber.font = .system(size: 14, weight: .regular)
+            value.append(trainNumber)
+        }
+
+        return Text(value)
+    }
+
+    private var destinationComponents: [String] {
         var components: [String] = []
 
         for candidate in [event.finalStationName, event.headsign] {
@@ -168,16 +250,24 @@ struct StationDepartureRow: View {
             components.append(value)
         }
 
-        if mode == .rail,
-           let tripName = effectiveTripName,
-           !tripName.isEmpty,
-           !components.contains(where: { $0.caseInsensitiveCompare(tripName) == .orderedSame }) {
-            components.append(tripName)
-        }
+        return components
+    }
 
-        return components.isEmpty
+    private var destinationText: String {
+        destinationComponents.isEmpty
             ? L10n.string("Departure")
-            : components.joined(separator: " ")
+            : destinationComponents.joined(separator: " ")
+    }
+
+    private var trainNumberText: String? {
+        guard mode == .rail,
+              let tripName = effectiveTripName,
+              !destinationComponents.contains(where: {
+                  $0.caseInsensitiveCompare(tripName) == .orderedSame
+              }) else {
+            return nil
+        }
+        return tripName
     }
 
     private var effectiveTripName: String? {
@@ -357,22 +447,40 @@ private struct StopRouteBadge: View {
     let layout: StopDepartureLayout
     var compact = false
 
+    @ViewBuilder
     var body: some View {
-        Text(label)
-            .font(.system(size: layout == .swiss ? 12 : 10, weight: .bold))
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
-            .foregroundStyle(StopHexColor.color(textColorHex, fallback: .white))
-            .padding(.horizontal, 4)
-            .padding(.vertical, 1)
-            .background(
-                StopHexColor.color(colorHex, fallback: fallbackColor),
-                in: routeShape
-            )
-            .frame(
-                width: compact ? nil : (layout == .swiss ? 50 : 40),
-                alignment: layout == .swiss ? .leading : .center
-            )
+        if let mtaRouteID {
+            MTASubwayIcon(routeID: mtaRouteID, size: compact ? 16 : 20)
+                .frame(
+                    width: compact ? nil : (layout == .swiss ? 50 : 40),
+                    alignment: layout == .swiss ? .leading : .center
+                )
+        } else {
+            Text(label)
+                .font(.system(size: layout == .swiss ? 12 : 10, weight: .bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .foregroundStyle(StopHexColor.color(textColorHex, fallback: .white))
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(
+                    StopHexColor.color(colorHex, fallback: fallbackColor),
+                    in: routeShape
+                )
+                .frame(
+                    width: compact ? nil : (layout == .swiss ? 50 : 40),
+                    alignment: layout == .swiss ? .leading : .center
+                )
+        }
+    }
+
+    private var mtaRouteID: String? {
+        guard chateauID == MTASubwayUtils.chateauID,
+              let shortName,
+              MTASubwayUtils.isSubwayRouteID(shortName) else {
+            return nil
+        }
+        return shortName
     }
 
     private var label: String {
