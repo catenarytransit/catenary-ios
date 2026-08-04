@@ -81,6 +81,7 @@ where LabelContent == Label<Text, Image>,
     }
 }
 
+@available(iOS, introduced: 14.0, obsoleted: 17.0)
 private struct LegacyOnChangeModifier<Value: Equatable>: ViewModifier {
     let value: Value
     let action: (Value, Value) -> Void
@@ -102,6 +103,27 @@ private struct LegacyOnChangeModifier<Value: Equatable>: ViewModifier {
     }
 }
 
+private struct LegacyGeometryChangeModifier<Value: Equatable>: ViewModifier {
+    let transform: (GeometryProxy) -> Value
+    let action: (Value, Value) -> Void
+
+    func body(content: Content) -> some View {
+        content.background(
+            GeometryReader { proxy in
+                let value = transform(proxy)
+
+                Color.clear
+                    .onAppear {
+                        action(value, value)
+                    }
+                    .catenaryOnChange(of: value) { oldValue, newValue in
+                        action(oldValue, newValue)
+                    }
+            }
+        )
+    }
+}
+
 extension View {
     @ViewBuilder
     func catenaryOnChange<Value: Equatable>(
@@ -114,6 +136,28 @@ extension View {
             }
         } else {
             modifier(LegacyOnChangeModifier(value: value, action: action))
+        }
+    }
+
+    @ViewBuilder
+    func catenaryOnGeometryChange<Value: Equatable>(
+        for type: Value.Type,
+        of transform: @escaping (GeometryProxy) -> Value,
+        action: @escaping (Value, Value) -> Void
+    ) -> some View {
+        if #available(iOS 18.0, *) {
+            onGeometryChange(
+                for: type,
+                of: transform,
+                action: action
+            )
+        } else {
+            modifier(
+                LegacyGeometryChangeModifier(
+                    transform: transform,
+                    action: action
+                )
+            )
         }
     }
 
