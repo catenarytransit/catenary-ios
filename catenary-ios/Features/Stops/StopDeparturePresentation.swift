@@ -168,11 +168,16 @@ enum StopDeparturePresentation {
         }
     }()
 
-    static func layout(for coordinate: CLLocationCoordinate2D?) -> StopDepartureLayout {
+    static func layout(
+        for coordinate: CLLocationCoordinate2D?,
+        chateauID: String? = nil
+    ) -> StopDepartureLayout {
+        if chateauID == "schweiz" { return .swiss }
         guard let coordinate else { return .regular }
 
         let cacheKey = String(
-            format: "%.5f|%.5f",
+            format: "%@|%.5f|%.5f",
+            chateauID ?? "",
             coordinate.latitude,
             coordinate.longitude
         ) as NSString

@@ -196,22 +196,40 @@ struct StationDeparturesScreen: View {
                     Section {
                         ForEach(section.events) { event in
                             let routeInfo = model.routes[event.chateau]?[event.routeId]
+                            let agency = routeInfo?.agencyId.flatMap {
+                                model.agencies[event.chateau]?[$0]
+                            }
                             let trainDisplayName = StopDeparturePresentation.dbFernverkehrDisplayName(
                                 event: event,
                                 routeInfo: routeInfo
                             )
-                            StationDepartureRow(
-                                event: event,
-                                routeInfo: routeInfo,
-                                agency: routeInfo?.agencyId.flatMap {
-                                    model.agencies[event.chateau]?[$0]
-                                },
-                                timezoneID: event.timezone ?? timezoneID,
-                                now: now,
-                                layout: departureLayout,
-                                trainDisplayName: trainDisplayName
+                            let mode = StopTransitMode.from(
+                                routeType: routeInfo?.routeType ?? event.routeType
                             )
-                            .id(event.id)
+
+                            if mode == .rail {
+                                StationTrainDepartureRow(
+                                    event: event,
+                                    routeInfo: routeInfo,
+                                    agency: agency,
+                                    timezoneID: event.timezone ?? timezoneID,
+                                    now: now,
+                                    layout: departureLayout,
+                                    trainDisplayName: trainDisplayName
+                                )
+                                .id(event.id)
+                            } else {
+                                StationDepartureRow(
+                                    event: event,
+                                    routeInfo: routeInfo,
+                                    agency: agency,
+                                    timezoneID: event.timezone ?? timezoneID,
+                                    now: now,
+                                    layout: departureLayout,
+                                    trainDisplayName: trainDisplayName
+                                )
+                                .id(event.id)
+                            }
 
                             Divider().padding(.leading, 60)
                         }
@@ -314,7 +332,10 @@ struct StationDeparturesScreen: View {
     }
 
     private var departureLayout: StopDepartureLayout {
-        StopDeparturePresentation.layout(for: model.stationCoordinate ?? destinationCoordinate)
+        StopDeparturePresentation.layout(
+            for: model.stationCoordinate ?? destinationCoordinate,
+            chateauID: model.primaryChateauID
+        )
     }
 
     private var availableModes: [StopTransitMode] {

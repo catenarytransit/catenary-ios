@@ -575,7 +575,11 @@ private struct NearbyStationCard: View {
                 NearbyStationDepartureRow(
                     departure: departure,
                     routeInfo: routeMap[departure.chateauId]?[departure.routeId],
-                    timezoneID: group.timezone
+                    timezoneID: group.timezone,
+                    stationCoordinate: CLLocationCoordinate2D(
+                        latitude: group.lat,
+                        longitude: group.lon
+                    )
                 )
                 if departure.id != visibleDepartures.last?.id {
                     Divider().padding(.leading, 42)
@@ -614,87 +618,85 @@ private struct NearbyStationDepartureRow: View {
     let departure: NearbyStationDeparture
     let routeInfo: NearbyRouteInfo?
     let timezoneID: String?
-
-    @EnvironmentObject private var viewObject: viewObject
+    let stationCoordinate: CLLocationCoordinate2D
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            NearbyStationDepartureTimeView(
-                departure: departure,
-                timezoneID: timezoneID
-            )
+        StationTrainDepartureRowCompact(
+            event: stopEvent,
+            routeInfo: convertedRouteInfo,
+            agency: convertedAgency,
+            timezoneID: timezoneID,
+            now: Date(),
+            layout: StopDeparturePresentation.layout(
+                for: stationCoordinate,
+                chateauID: departure.chateauId
+            ),
+            trainDisplayName: departure.tripShortName,
+            showAgencyName: true
+        )
+    }
 
-            Button {
-                viewObject.push(.route(chateauID: departure.chateauId, routeID: departure.routeId))
-            } label: {
-                TransitRouteBadge(
-                    shortName: routeInfo?.shortName,
-                    longName: routeInfo?.longName,
-                    colorHex: routeInfo?.color,
-                    textColorHex: routeInfo?.textColor
-                )
-                .frame(width: 42)
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                openTrip()
-            } label: {
-                HStack(alignment: .center, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(departure.finalStationName ?? departure.headsign)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(departure.cancelled == true ? .red : .primary)
-                            .strikethrough(departure.cancelled == true)
-                            .lineLimit(1)
-
-                        if let tripShortName = departure.tripShortName, !tripShortName.isEmpty {
-                            Text(tripShortName)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    if let platformText {
-                        Text(platformText)
-                            .font(.subheadline.weight(.bold))
-                            .monospacedDigit()
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(
-                                Color.secondary.opacity(0.12),
-                                in: RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            )
-                    }
-                }
-            }
-            .buttonStyle(.plain)
+    private var effectiveRealtimeDeparture: Int64? {
+        if let realtimeDeparture = departure.realtimeDeparture { return realtimeDeparture }
+        if let scheduledDeparture = departure.scheduledDeparture,
+           let realtimeArrival = departure.realtimeArrival,
+           realtimeArrival > scheduledDeparture {
+            return realtimeArrival
         }
-        .contentShape(Rectangle())
+        return nil
     }
 
-    private var platformText: String? {
-        guard let raw = departure.platform?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !raw.isEmpty else { return nil }
-        let value = raw
-            .replacingOccurrences(of: "Track", with: "", options: .caseInsensitive)
-            .replacingOccurrences(of: "Platform", with: "", options: .caseInsensitive)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? raw : value
+    private var stopEvent: StopEvent {
+        StopEvent(
+            chateau: departure.chateauId,
+            tripId: departure.tripId,
+            routeId: departure.routeId,
+            serviceDate: departure.serviceDate,
+            headsign: departure.headsign,
+            stopId: departure.stopId,
+            scheduledDeparture: departure.scheduledDeparture,
+            realtimeDeparture: effectiveRealtimeDeparture,
+            scheduledArrival: departure.scheduledArrival,
+            realtimeArrival: departure.realtimeArrival,
+            tripShortName: departure.tripShortName,
+            lastStop: departure.lastStop,
+            platformStringRealtime: departure.platform,
+            vehicleNumber: nil,
+            delaySeconds: nil,
+            tripCancelled: departure.cancelled,
+            stopCancelled: false,
+            tripDeleted: false,
+            routeType: routeInfo?.routeType,
+            timezone: timezoneID,
+            distanceM: nil,
+            finalStationName: departure.finalStationName
+        )
     }
 
-    private func openTrip() {
-        viewObject.push(.singleTrip(
-            chateauID: departure.chateauId,
-            tripID: departure.tripId,
-            routeID: departure.routeId,
-            startTime: nil,
-            startDate: departure.serviceDate,
-            vehicleID: nil,
-            routeType: routeInfo?.routeType
-        ))
+    private var convertedRouteInfo: StopRouteInfo? {
+        guard let routeInfo else { return nil }
+        return StopRouteInfo(
+            color: routeInfo.color,
+            textColor: routeInfo.textColor,
+            shortName: routeInfo.shortName,
+            longName: routeInfo.longName,
+            shapesList: nil,
+            routeType: routeInfo.routeType,
+            agencyId: nil
+        )
+    }
+
+    private var convertedAgency: StopAgencyInfo? {
+        guard let agencyName = routeInfo?.agencyName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !agencyName.isEmpty else { return nil }
+        return StopAgencyInfo(
+            agencyName: agencyName,
+            agencyUrl: nil,
+            agencyTimezone: timezoneID,
+            agencyLang: nil,
+            agencyPhone: nil,
+            agencyFareUrl: nil
+        )
     }
 }
 
@@ -797,18 +799,35 @@ private struct NearbyRouteCard: View {
                     viewObject.push(.route(chateauID: group.chateauId, routeID: group.routeId))
                 } label: {
                     HStack(spacing: 8) {
-                        TransitRouteBadge(
-                            shortName: group.shortName,
-                            longName: group.longName,
-                            colorHex: group.color,
-                            textColorHex: group.textColor
-                        )
+                        if group.chateauId == NationalRailUtils.chateauID,
+                           routeDisplayName == nil {
+                            NationalRailAgencyLabel(
+                                agencyID: nil,
+                                agencyName: group.agencyName
+                            )
+                        } else {
+                            TransitRouteBadge(
+                                shortName: group.shortName,
+                                longName: group.longName,
+                                colorHex: group.color,
+                                textColorHex: group.textColor,
+                                chateauID: group.chateauId
+                            )
+                        }
+
                         VStack(alignment: .leading, spacing: 1) {
-                            if let longName = group.longName, longName != group.shortName {
-                                Text(longName).font(.subheadline.weight(.medium)).lineLimit(1)
+                            if let routeDisplayName, routeDisplayName != group.shortName {
+                                Text(routeDisplayName)
+                                    .font(.subheadline.weight(.medium))
+                                    .lineLimit(1)
                             }
-                            if let agencyName = group.agencyName {
-                                Text(agencyName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            if let resolvedAgencyName,
+                               resolvedAgencyName != routeDisplayName,
+                               !(group.chateauId == NationalRailUtils.chateauID && routeDisplayName == nil) {
+                                Text(resolvedAgencyName)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
                             }
                         }
                     }
@@ -881,6 +900,28 @@ private struct NearbyRouteCard: View {
         .padding(12)
         .background(Color(uiColor: .secondarySystemBackground), in: .rect(cornerRadius: 12))
         .overlay { RoundedRectangle(cornerRadius: 12).stroke(.quaternary) }
+    }
+
+    private var resolvedAgencyName: String? {
+        if group.chateauId == NationalRailUtils.chateauID {
+            return NationalRailUtils.resolvedAgencyName(
+                agencyID: nil,
+                agencyName: group.agencyName
+            )
+        }
+        guard let value = group.agencyName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else { return nil }
+        return value
+    }
+
+    private var routeDisplayName: String? {
+        for value in [group.longName, group.shortName] {
+            if let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !value.isEmpty {
+                return value
+            }
+        }
+        return nil
     }
 
     private func localSort(_ lhs: NearbyLocalDeparture, _ rhs: NearbyLocalDeparture) -> Bool {
@@ -967,7 +1008,9 @@ private struct NearbyLocalDeparturePill: View {
                     DelayDiff(
                         diff: realtimeTime - scheduledTime,
                         showSeconds: showSeconds,
-                        fontSizeOfPolarity: 10,
+                        fontSizeOfPolarity: 12,
+                        valueFontSize: 12,
+                        unitFontSize: 12,
                         useSymbolSign: true,
                         hideMinUnits: !showSeconds
                     )

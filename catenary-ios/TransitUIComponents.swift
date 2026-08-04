@@ -82,28 +82,61 @@ struct TransitRouteBadge: View {
     let longName: String?
     let colorHex: String?
     let textColorHex: String?
+    let chateauID: String?
 
+    init(
+        shortName: String?,
+        longName: String?,
+        colorHex: String?,
+        textColorHex: String?,
+        chateauID: String? = nil
+    ) {
+        self.shortName = shortName
+        self.longName = longName
+        self.colorHex = colorHex
+        self.textColorHex = textColorHex
+        self.chateauID = chateauID
+    }
+
+    @ViewBuilder
     var body: some View {
-        Text(displayName)
-            .font(.caption.weight(.bold))
-            .lineLimit(1)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 4)
-            .foregroundStyle(Color.transitHex(textColorHex, fallback: .white))
-            .background(Color.transitHex(colorHex, fallback: .secondary), in: .rect(cornerRadius: 6))
-            .accessibilityLabel(Text(verbatim: L10n.format(
-                "route.accessibility",
-                defaultValue: "Route %@",
-                displayName
-            )))
+        if let mtaRouteID {
+            MTASubwayIcon(routeID: mtaRouteID, size: 24)
+        } else {
+            Text(displayName)
+                .font(.caption.weight(.bold))
+                .lineLimit(1)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .foregroundStyle(Color.transitHex(textColorHex, fallback: .white))
+                .background(Color.transitHex(colorHex, fallback: .secondary), in: .rect(cornerRadius: 6))
+                .accessibilityLabel(Text(verbatim: L10n.format(
+                    "route.accessibility",
+                    defaultValue: "Route %@",
+                    displayName
+                )))
+        }
+    }
+
+    private var mtaRouteID: String? {
+        guard chateauID == MTASubwayUtils.chateauID,
+              let candidate = nonBlank(shortName),
+              MTASubwayUtils.isSubwayRouteID(candidate) else {
+            return nil
+        }
+        return candidate
     }
 
     private var displayName: String {
-        let candidate = shortName?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let candidate, !candidate.isEmpty { return candidate }
-        let longCandidate = longName?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let longCandidate, !longCandidate.isEmpty { return longCandidate }
-        return L10n.string("Route")
+        nonBlank(shortName)
+            ?? nonBlank(longName)
+            ?? L10n.string("Route")
+    }
+
+    private func nonBlank(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else { return nil }
+        return value
     }
 }
 

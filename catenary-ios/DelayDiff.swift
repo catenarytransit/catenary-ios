@@ -14,6 +14,8 @@ struct DelayDiff: View {
     let diff: Int64
     var showSeconds: Bool = false
     var fontSizeOfPolarity: CGFloat = 12
+    var valueFontSize: CGFloat = 14
+    var unitFontSize: CGFloat = 10
     var useSymbolSign: Bool = false
     var hideMinUnits: Bool = true
     var locale: Locale = .current
@@ -109,12 +111,12 @@ struct DelayDiff: View {
 
     private func value<T: BinaryInteger>(_ value: T) -> some View {
         Text(verbatim: String(value))
-            .font(.system(size: 14))
+            .font(.system(size: valueFontSize))
     }
 
     private func unit(_ value: String) -> some View {
         Text(verbatim: value)
-            .font(.system(size: 10))
+            .font(.system(size: unitFontSize))
     }
 }
 

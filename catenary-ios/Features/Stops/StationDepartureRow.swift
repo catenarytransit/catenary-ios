@@ -112,15 +112,15 @@ struct StationDepartureRow: View {
     private var metadataLine: some View {
         let values = [
             mode == .rail ? nil : effectiveTripName,
-            event.vehicleNumber,
-            mode == .rail ? agency?.agencyName : nil
+            event.vehicleNumber
         ]
         .compactMap { value -> String? in
             guard let value, !value.isEmpty else { return nil }
             return value
         }
+        let hasAgency = mode == .rail && resolvedAgencyName != nil
 
-        if layout == .regular, mode == .rail, routeLabel != nil || !values.isEmpty {
+        if layout == .regular, mode == .rail, routeLabel != nil || !values.isEmpty || hasAgency {
             HStack(spacing: 5) {
                 if routeLabel != nil {
                     Button {
@@ -141,6 +141,8 @@ struct StationDepartureRow: View {
                     .accessibilityLabel("Open route")
                 }
 
+                agencyMetadata
+
                 if !values.isEmpty {
                     Text(values.joined(separator: "  •  "))
                         .font(.caption)
@@ -148,12 +150,47 @@ struct StationDepartureRow: View {
                         .lineLimit(1)
                 }
             }
-        } else if !values.isEmpty {
-            Text(values.joined(separator: "  •  "))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+        } else if !values.isEmpty || hasAgency {
+            HStack(spacing: 5) {
+                agencyMetadata
+
+                if !values.isEmpty {
+                    Text(values.joined(separator: "  •  "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
         }
+    }
+
+    @ViewBuilder
+    private var agencyMetadata: some View {
+        if mode == .rail, let resolvedAgencyName {
+            if event.chateau == NationalRailUtils.chateauID {
+                NationalRailAgencyLabel(
+                    agencyID: routeInfo?.agencyId,
+                    agencyName: agency?.agencyName
+                )
+            } else {
+                Text(resolvedAgencyName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private var resolvedAgencyName: String? {
+        if event.chateau == NationalRailUtils.chateauID {
+            return NationalRailUtils.resolvedAgencyName(
+                agencyID: routeInfo?.agencyId,
+                agencyName: agency?.agencyName
+            )
+        }
+        guard let value = agency?.agencyName.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else { return nil }
+        return value
     }
 
     private var destinationText: String {
@@ -357,22 +394,40 @@ private struct StopRouteBadge: View {
     let layout: StopDepartureLayout
     var compact = false
 
+    @ViewBuilder
     var body: some View {
-        Text(label)
-            .font(.system(size: layout == .swiss ? 12 : 10, weight: .bold))
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
-            .foregroundStyle(StopHexColor.color(textColorHex, fallback: .white))
-            .padding(.horizontal, 4)
-            .padding(.vertical, 1)
-            .background(
-                StopHexColor.color(colorHex, fallback: fallbackColor),
-                in: routeShape
-            )
-            .frame(
-                width: compact ? nil : (layout == .swiss ? 50 : 40),
-                alignment: layout == .swiss ? .leading : .center
-            )
+        if let mtaRouteID {
+            MTASubwayIcon(routeID: mtaRouteID, size: compact ? 16 : 20)
+                .frame(
+                    width: compact ? nil : (layout == .swiss ? 50 : 40),
+                    alignment: layout == .swiss ? .leading : .center
+                )
+        } else {
+            Text(label)
+                .font(.system(size: layout == .swiss ? 12 : 10, weight: .bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .foregroundStyle(StopHexColor.color(textColorHex, fallback: .white))
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(
+                    StopHexColor.color(colorHex, fallback: fallbackColor),
+                    in: routeShape
+                )
+                .frame(
+                    width: compact ? nil : (layout == .swiss ? 50 : 40),
+                    alignment: layout == .swiss ? .leading : .center
+                )
+        }
+    }
+
+    private var mtaRouteID: String? {
+        guard chateauID == MTASubwayUtils.chateauID,
+              let shortName,
+              MTASubwayUtils.isSubwayRouteID(shortName) else {
+            return nil
+        }
+        return shortName
     }
 
     private var label: String {
