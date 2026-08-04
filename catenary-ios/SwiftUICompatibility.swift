@@ -81,7 +81,7 @@ where LabelContent == Label<Text, Image>,
     }
 }
 
-@available(iOS, introduced: 14.0, obsoleted: 17.0)
+@available(iOS, introduced: 14.0, deprecated: 17.0)
 private struct LegacyOnChangeModifier<Value: Equatable>: ViewModifier {
     let value: Value
     let action: (Value, Value) -> Void
