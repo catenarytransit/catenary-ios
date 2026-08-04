@@ -271,24 +271,18 @@ final class RealtimeTrajectories: ObservableObject {
     private var subscriptionRefreshTask: Task<Void, Never>?
     private var interpolationTask: Task<Void, Never>?
     private var positionPublishTask: Task<Void, Never>?
-    private var snapshotCommitTask: Task<Void, Never>?
     private var bufferCancellable: AnyCancellable?
     private var isRunning = false
     private var subscriptionGeneration: UInt64 = 0
     private var renderGeneration: UInt64 = 0
 
     private var accumulators: [String: ChunkAccumulator] = [:]
-    /// Completed chateau snapshots for the newest subscription are staged here
-    /// while the old rendered snapshot remains visible.
-    private var stagedTrajectoriesByChateau: [String: [PreparedTrajectory]] = [:]
-    private var pendingSnapshotClientReference: String?
     private var trajectoriesByChateau: [String: [PreparedTrajectory]] = [:]
     private var latestSnapshotTimestampByChateau: [String: UInt64] = [:]
     private let interpolationWorker = TrajectoryInterpolationWorker()
 
     private let subscriptionDebounce: Duration = .milliseconds(125)
     private let subscriptionRefreshInterval: Duration = .seconds(15)
-    private let snapshotCommitDelay: Duration = .milliseconds(400)
     private static let clientReferencePrefix = "trajectories_layer"
 
     func updateViewport(bounds: MLNCoordinateBounds, zoom: Double) {
@@ -339,8 +333,6 @@ final class RealtimeTrajectories: ObservableObject {
         interpolationTask = nil
         positionPublishTask?.cancel()
         positionPublishTask = nil
-        snapshotCommitTask?.cancel()
-        snapshotCommitTask = nil
         bufferCancellable?.cancel()
         bufferCancellable = nil
         activeSubscription = nil
@@ -391,7 +383,6 @@ final class RealtimeTrajectories: ObservableObject {
                 activeSubscription = nil
                 SpruceWebSocket.shared.unsubscribeTrajectories()
             }
-            clear()
             return
         }
 
@@ -417,12 +408,8 @@ final class RealtimeTrajectories: ObservableObject {
             clientReference: "\(Self.clientReferencePrefix)-\(subscriptionGeneration)"
         )
 
-        snapshotCommitTask?.cancel()
-        snapshotCommitTask = nil
         activeSubscription = subscription
         accumulators.removeAll(keepingCapacity: true)
-        stagedTrajectoriesByChateau.removeAll(keepingCapacity: true)
-        pendingSnapshotClientReference = subscription.clientReference
 
         // Keep the previous completed snapshot visible until each chateau's new
         // chunk set is complete. A unique reference prevents late chunks from a
@@ -454,7 +441,7 @@ final class RealtimeTrajectories: ObservableObject {
                 message.content,
                 fallbackChateau: message.chateau
             )
-            stageCompletedSnapshot(
+            commitCompletedSnapshot(
                 trajectories,
                 chateau: message.chateau,
                 timestamp: message.timestamp,
@@ -504,7 +491,7 @@ final class RealtimeTrajectories: ObservableObject {
             fallbackChateau: message.chateau
         )
         accumulators.removeValue(forKey: message.chateau)
-        stageCompletedSnapshot(
+        commitCompletedSnapshot(
             trajectories,
             chateau: message.chateau,
             timestamp: message.timestamp,
@@ -512,7 +499,10 @@ final class RealtimeTrajectories: ObservableObject {
         )
     }
 
-    private func stageCompletedSnapshot(
+    /// Commit only after every chunk for this chateau has been assembled.
+    /// The previous completed snapshot remains visible during transfer, then
+    /// one dictionary mutation and one source publication replace it.
+    private func commitCompletedSnapshot(
         _ trajectories: [PreparedTrajectory],
         chateau: String,
         timestamp: UInt64,
@@ -520,39 +510,12 @@ final class RealtimeTrajectories: ObservableObject {
     ) {
         guard activeSubscription?.clientReference == clientReference else { return }
         latestSnapshotTimestampByChateau[chateau] = timestamp
-        stagedTrajectoriesByChateau[chateau] = trajectories
-        pendingSnapshotClientReference = clientReference
-        scheduleSnapshotCommit(for: clientReference)
-    }
-
-    /// Apply every completed chateau received during the Spruce burst in one
-    /// main-actor transaction. Empty chateau snapshots remove old data, while
-    /// chateaus that have not responded yet keep their previous positions.
-    private func scheduleSnapshotCommit(for clientReference: String) {
-        snapshotCommitTask?.cancel()
-        snapshotCommitTask = Task { [weak self] in
-            try? await Task.sleep(for: self?.snapshotCommitDelay ?? .milliseconds(400))
-            if Task.isCancelled { return }
-            guard let self else { return }
-            self.snapshotCommitTask = nil
-
-            guard self.activeSubscription?.clientReference == clientReference,
-                  self.pendingSnapshotClientReference == clientReference else { return }
-
-            let staged = self.stagedTrajectoriesByChateau
-            self.stagedTrajectoriesByChateau.removeAll(keepingCapacity: true)
-            self.pendingSnapshotClientReference = nil
-
-            for (chateau, trajectories) in staged {
-                if trajectories.isEmpty {
-                    self.trajectoriesByChateau.removeValue(forKey: chateau)
-                } else {
-                    self.trajectoriesByChateau[chateau] = trajectories
-                }
-            }
-
-            self.schedulePositionPublish()
+        if trajectories.isEmpty {
+            trajectoriesByChateau.removeValue(forKey: chateau)
+        } else {
+            trajectoriesByChateau[chateau] = trajectories
         }
+        schedulePositionPublish()
     }
 
     private func interpolationLoop() async {
@@ -592,11 +555,7 @@ final class RealtimeTrajectories: ObservableObject {
     }
 
     private func clear() {
-        snapshotCommitTask?.cancel()
-        snapshotCommitTask = nil
         accumulators.removeAll(keepingCapacity: true)
-        stagedTrajectoriesByChateau.removeAll(keepingCapacity: true)
-        pendingSnapshotClientReference = nil
         trajectoriesByChateau.removeAll(keepingCapacity: true)
         latestSnapshotTimestampByChateau.removeAll(keepingCapacity: true)
         renderGeneration &+= 1

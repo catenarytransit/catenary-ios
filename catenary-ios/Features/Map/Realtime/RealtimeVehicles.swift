@@ -175,7 +175,6 @@ final class RealtimeVehicles: ObservableObject {
     private var currentZoom: Double = 5
     private var layerSettings = AllLayerSettings()
     private var activeSubscription: MapSubscription?
-    private var displayedSubscription: MapSubscription?
 
     private var routesByChateau: [String: [String: RouteCacheEntry]] = [:]
     private var knownRouteAgencies: [String: Set<String>] = [:]
@@ -187,12 +186,19 @@ final class RealtimeVehicles: ObservableObject {
         let chateau: String
     }
 
-    /// Accumulator: chateau → category → vehicleID → vehicle.
-    /// The Spruce server sends one `map_update` per (chateau, category) pair,
-    /// and most are *incremental* (`replaces_all: false` carries only the
-    /// changed tiles). Keep this cache separate from the currently displayed
-    /// viewport so a new subscription cannot blank the old snapshot.
-    private var byChateau: [String: [String: [String: RealtimeVehicle]]] = [:]
+    private struct VehicleTileKey: Hashable {
+        let x: UInt32
+        let y: UInt32
+    }
+
+    private typealias VehicleTile = [String: RealtimeVehicle]
+    private typealias CategoryVehicleTiles = [VehicleTileKey: VehicleTile]
+
+    /// Persistent tile cache: chateau → category → tile → vehicleID → vehicle.
+    /// A delta replaces one complete tile, matching the Kotlin implementation.
+    /// Keeping the old tiles until a real payload replaces them prevents camera
+    /// changes and nil/no-op messages from publishing an empty map source.
+    private var byChateau: [String: [String: CategoryVehicleTiles]] = [:]
     private var lastUpdatedByChateau: [String: [String: UInt64]] = [:]
 
     private struct MapSubscription: Equatable {
@@ -213,13 +219,6 @@ final class RealtimeVehicles: ObservableObject {
     private var rebuildPublishTask: Task<Void, Never>?
     private var rebuildIsDirty = false
     private let rebuildThrottle: Duration = .milliseconds(250)
-
-    /// Spruce emits a viewport replacement as a burst of per-chateau messages.
-    /// Stage those messages and switch the rendered viewport once, rather than
-    /// publishing partial/empty intermediate source contents.
-    private var snapshotCommitTask: Task<Void, Never>?
-    private var pendingSnapshotSubscription: MapSubscription?
-    private let snapshotCommitDelay: Duration = .milliseconds(400)
 
     func updateViewport(bounds: MLNCoordinateBounds, zoom: Double) {
         self.bounds = bounds
@@ -257,38 +256,33 @@ final class RealtimeVehicles: ObservableObject {
         sendDebounceTask = nil
         rebuildPublishTask?.cancel()
         rebuildPublishTask = nil
-        snapshotCommitTask?.cancel()
-        snapshotCommitTask = nil
-        pendingSnapshotSubscription = nil
         activeSubscription = nil
-        displayedSubscription = nil
         SpruceWebSocket.shared.unsubscribeMap()
         clearVehicles()
     }
 
-    /// Merge a `map_update` payload into `byChateau`, respecting `replaces_all`,
-    /// then atomically commit the completed burst to the rendered source.
+    /// Merge one complete WebSocket response and publish once afterwards.
+    /// There is no map-batch completion marker in the Spruce protocol, so an
+    /// arbitrary quiet-window timer cannot safely decide when a viewport is
+    /// complete. Each response is instead treated as the atomic transaction.
     private func apply(_ resp: BulkRealtimeResponseV2) {
-        var changedActiveSnapshot = false
+        var changed = false
         for (chateauID, chateauResp) in resp.chateaus {
             guard let cats = chateauResp.categories else { continue }
-            changedActiveSnapshot = applyCategory(chateauID, "metro", cats.metro)
-                || changedActiveSnapshot
-            changedActiveSnapshot = applyCategory(chateauID, "bus", cats.bus)
-                || changedActiveSnapshot
-            changedActiveSnapshot = applyCategory(chateauID, "rail", cats.rail)
-                || changedActiveSnapshot
-            changedActiveSnapshot = applyCategory(chateauID, "other", cats.other)
-                || changedActiveSnapshot
+            changed = applyCategory(chateauID, "metro", cats.metro) || changed
+            changed = applyCategory(chateauID, "bus", cats.bus) || changed
+            changed = applyCategory(chateauID, "rail", cats.rail) || changed
+            changed = applyCategory(chateauID, "other", cats.other) || changed
         }
 
-        if changedActiveSnapshot, let activeSubscription {
-            scheduleSnapshotCommit(for: activeSubscription)
+        if changed {
+            rebuildVehicles()
         }
     }
 
-    /// Apply one category's payload. Returns whether it belongs to the active
-    /// viewport and changed the staged snapshot.
+    /// Apply one category without exposing an intermediate empty state.
+    /// `vehicle_positions == nil` is a no-op, even with `replaces_all == true`.
+    /// An explicitly present empty dictionary is the only empty replacement.
     private func applyCategory(_ chateauID: String, _ category: String, _ payload: EachCategoryPayloadV2?) -> Bool {
         guard let payload,
               let activeSubscription,
@@ -299,12 +293,18 @@ final class RealtimeVehicles: ObservableObject {
            payload.last_updated_time_ms < previousTimestamp {
             return false
         }
-        lastUpdatedByChateau[chateauID, default: [:]][category] = payload.last_updated_time_ms
+
+        guard let xs = payload.vehicle_positions else {
+            // Match ProcessRealtimeData.kt: a missing positions field carries
+            // metadata only and must never erase the last rendered snapshot.
+            lastUpdatedByChateau[chateauID, default: [:]][category] = payload.last_updated_time_ms
+            return false
+        }
 
         // A response built for an older fast-pan viewport can still arrive after
         // the latest subscribe_map_v2. Never let its out-of-bounds tile set wipe
         // the currently displayed snapshot.
-        let replacementMatchesActiveBounds = payload.vehicle_positions?.allSatisfy { xKey, yMap in
+        let replacementMatchesActiveBounds = xs.allSatisfy { xKey, yMap in
             guard let x = UInt32(xKey) else { return false }
             return yMap.keys.allSatisfy { yKey in
                 guard let y = UInt32(yKey) else { return false }
@@ -315,16 +315,16 @@ final class RealtimeVehicles: ObservableObject {
                     boundsInput: activeSubscription.boundsInput
                 )
             }
-        } ?? true
-
-        var appliedToActiveSnapshot = false
-        if payload.replaces_all && replacementMatchesActiveBounds {
-            byChateau[chateauID, default: [:]][category] = [:]
-            appliedToActiveSnapshot = true
+        }
+        if payload.replaces_all && !replacementMatchesActiveBounds {
+            return false
         }
 
-        guard let xs = payload.vehicle_positions else { return appliedToActiveSnapshot }
+        let previousTiles = byChateau[chateauID]?[category] ?? [:]
+        var nextTiles: CategoryVehicleTiles = payload.replaces_all ? [:] : previousTiles
+        var acceptedTile = false
         var hasMissingRoutes = false
+
         for (xKey, ys) in xs {
             guard let x = UInt32(xKey) else { continue }
             for (yKey, vehicleMap) in ys {
@@ -336,7 +336,9 @@ final class RealtimeVehicles: ObservableObject {
                         boundsInput: activeSubscription.boundsInput
                       ) else { continue }
 
-                appliedToActiveSnapshot = true
+                acceptedTile = true
+                let tileKey = VehicleTileKey(x: x, y: y)
+                var tileVehicles: VehicleTile = [:]
 
                 for (id, v) in vehicleMap {
                     guard let pos = v.position else { continue }
@@ -344,7 +346,7 @@ final class RealtimeVehicles: ObservableObject {
                        routesByChateau[chateauID]?[routeID] == nil {
                         hasMissingRoutes = true
                     }
-                    byChateau[chateauID, default: [:]][category, default: [:]][id] = RealtimeVehicle(
+                    tileVehicles[id] = RealtimeVehicle(
                         id: "\(chateauID)|\(id)",
                         chateauID: chateauID,
                         coordinate: CLLocationCoordinate2D(
@@ -369,12 +371,41 @@ final class RealtimeVehicles: ObservableObject {
                         routeLongName: nil
                     )
                 }
+
+                // A delta is a complete replacement for this tile, not an
+                // append-only list. Removing the old tile first also removes
+                // vehicles that disappeared or moved to another tile.
+                if tileVehicles.isEmpty {
+                    nextTiles.removeValue(forKey: tileKey)
+                } else {
+                    nextTiles[tileKey] = tileVehicles
+                }
             }
         }
+
+        guard acceptedTile || xs.isEmpty else {
+            return false
+        }
+
+        lastUpdatedByChateau[chateauID, default: [:]][category] = payload.last_updated_time_ms
+
         if hasMissingRoutes {
             requestRoutes(for: chateauID, agencyIDs: payload.list_of_agency_ids ?? [])
         }
-        return appliedToActiveSnapshot
+
+        guard nextTiles != previousTiles else { return false }
+        var categoryMap = byChateau[chateauID] ?? [:]
+        if nextTiles.isEmpty {
+            categoryMap.removeValue(forKey: category)
+        } else {
+            categoryMap[category] = nextTiles
+        }
+        if categoryMap.isEmpty {
+            byChateau.removeValue(forKey: chateauID)
+        } else {
+            byChateau[chateauID] = categoryMap
+        }
+        return true
     }
 
     private func requestRoutes(for chateauID: String, agencyIDs: [String]) {
@@ -451,9 +482,6 @@ final class RealtimeVehicles: ObservableObject {
     /// `MLNShapeSource.shape` rebuild.
     private func rebuildVehicles() {
         rebuildIsDirty = true
-        guard snapshotCommitTask == nil,
-              activeSubscription == displayedSubscription else { return }
-
         if rebuildPublishTask == nil {
             rebuildPublishTask = Task { [weak self] in
                 try? await Task.sleep(for: self?.rebuildThrottle ?? .milliseconds(250))
@@ -465,57 +493,30 @@ final class RealtimeVehicles: ObservableObject {
     private func publishVehicles() {
         rebuildPublishTask = nil
         guard rebuildIsDirty else { return }
-        guard snapshotCommitTask == nil,
-              activeSubscription == displayedSubscription else { return }
         rebuildIsDirty = false
-        var out: [RealtimeVehicle] = []
-        if let displayedSubscription {
-            let requestedCategories = Set(displayedSubscription.categories)
-            for chateauMap in byChateau.values {
-                for (category, catMap) in chateauMap
-                where requestedCategories.contains(category) {
-                    for vehicle in catMap.values
-                    where Self.isInsideActiveBounds(
-                        vehicle.coordinate,
-                        category: category,
-                        boundsInput: displayedSubscription.boundsInput
-                    ) {
+
+        // Do not filter the rendered cache to a newly requested viewport.
+        // MapLibre already clips off-screen features. Retaining the last tile
+        // contents means a pan cannot create a synthetic empty frame while the
+        // replacement WebSocket response is still in flight.
+        var vehiclesByID: [String: RealtimeVehicle] = [:]
+        for categoryMap in byChateau.values {
+            for tileMap in categoryMap.values {
+                for vehicleMap in tileMap.values {
+                    for vehicle in vehicleMap.values {
                         let route = vehicle.routeId.flatMap {
                             routesByChateau[vehicle.chateauID]?[$0]
                         }
-                        out.append(vehicle.applying(route: route))
+                        vehiclesByID[vehicle.id] = vehicle.applying(route: route)
                     }
                 }
             }
         }
-        out.sort { $0.id < $1.id }
+
+        let out = vehiclesByID.values.sorted { $0.id < $1.id }
         guard out != vehicles else { return }
         vehicles = out
         onVehiclesChanged?(out)
-    }
-
-    /// Preserve the previous MapLibre source contents while Spruce sends the
-    /// next viewport as multiple messages. Every accepted message updates the
-    /// backing cache, but the source changes once for the whole burst.
-    private func scheduleSnapshotCommit(for subscription: MapSubscription) {
-        pendingSnapshotSubscription = subscription
-        snapshotCommitTask?.cancel()
-        snapshotCommitTask = Task { [weak self] in
-            try? await Task.sleep(for: self?.snapshotCommitDelay ?? .milliseconds(400))
-            if Task.isCancelled { return }
-            guard let self else { return }
-            self.snapshotCommitTask = nil
-
-            guard self.pendingSnapshotSubscription == subscription,
-                  self.activeSubscription == subscription else { return }
-
-            self.pendingSnapshotSubscription = nil
-            self.displayedSubscription = subscription
-            self.rebuildPublishTask?.cancel()
-            self.rebuildPublishTask = nil
-            self.rebuildIsDirty = true
-            self.publishVehicles()
-        }
     }
 
     /// Coalesce rapid setter calls into a single WebSocket message.
@@ -545,13 +546,8 @@ final class RealtimeVehicles: ObservableObject {
         if layerSettings.localrail.visiblerealtimedots    && currentZoom >= 4 { categories.append("metro") }
         if layerSettings.other.visiblerealtimedots        && currentZoom >= 3 { categories.append("other") }
         guard !categories.isEmpty else {
-            snapshotCommitTask?.cancel()
-            snapshotCommitTask = nil
-            pendingSnapshotSubscription = nil
             activeSubscription = nil
-            displayedSubscription = nil
             SpruceWebSocket.shared.unsubscribeMap()
-            clearVehicles()
             return
         }
 
@@ -576,43 +572,12 @@ final class RealtimeVehicles: ObservableObject {
         )
         guard subscription != activeSubscription else { return }
 
-        snapshotCommitTask?.cancel()
-        snapshotCommitTask = nil
-        pendingSnapshotSubscription = nil
         activeSubscription = subscription
-
-        // Spruce sends only newly entered tiles for ordinary viewport changes.
-        // Do not republish against the new bounds yet. `displayedSubscription`
-        // intentionally remains on the previous viewport until an accepted
-        // response burst is committed.
-        discardInactiveCategories(keeping: Set(categories))
 
         SpruceWebSocket.shared.updateMap(
             categories: categories,
             boundsInput: boundsInput
         )
-    }
-
-    private func discardInactiveCategories(keeping categories: Set<String>) {
-        for chateauID in Array(byChateau.keys) {
-            guard var categoryMap = byChateau[chateauID] else { continue }
-            categoryMap = categoryMap.filter { categories.contains($0.key) }
-            if categoryMap.isEmpty {
-                byChateau.removeValue(forKey: chateauID)
-            } else {
-                byChateau[chateauID] = categoryMap
-            }
-        }
-
-        for chateauID in Array(lastUpdatedByChateau.keys) {
-            guard var categoryMap = lastUpdatedByChateau[chateauID] else { continue }
-            categoryMap = categoryMap.filter { categories.contains($0.key) }
-            if categoryMap.isEmpty {
-                lastUpdatedByChateau.removeValue(forKey: chateauID)
-            } else {
-                lastUpdatedByChateau[chateauID] = categoryMap
-            }
-        }
     }
 
     private func clearVehicles() {

@@ -112,7 +112,7 @@ struct OverlayRoot: View {
                 
                 NavigationStack {
                     LayerSelectorSheet(tabPage: $currentPage)
-                        .presentationDetents([.height(430), .medium])
+                        .presentationDetents([.height(380), .medium])
                         .presentationBackgroundInteraction(PresentationBackgroundInteraction.disabled)
                         
                         .interactiveDismissDisabled(false)
@@ -147,7 +147,6 @@ struct layerSettingButton: View {
     var imageName: String
     var label: LocalizedStringKey
     var sfsymbol: Bool = false
-    var accentColor: Color = .catenaryBlue
     
     var body: some View {
         VStack {
@@ -170,7 +169,10 @@ struct layerSettingButton: View {
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .stroke(specificLayerSetting ? accentColor : .clear, lineWidth: 3)
+                            .stroke(
+                                specificLayerSetting ? Color.primary.opacity(0.65) : .clear,
+                                lineWidth: 2
+                            )
                     )
                     .animation(nil, value: specificLayerSetting)
                     .aspectRatio(1, contentMode: .fit)
@@ -187,6 +189,49 @@ struct layerSettingButton: View {
                 
 //                .minimumScaleFactor(0.3)
         }
+    }
+}
+
+struct vehicleLabelSettingButton: View {
+    @Binding var specificLayerSetting: Bool
+    var imageName: String
+    var label: LocalizedStringKey
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Button {
+                specificLayerSetting.toggle()
+            } label: {
+                Image(systemName: imageName)
+                    .font(.system(size: 19, weight: .semibold))
+                    .frame(width: 42, height: 42)
+                    .foregroundStyle(Color.primary)
+                    .background(
+                        Circle()
+                            .fill(
+                                specificLayerSetting
+                                    ? Color.primary.opacity(0.14)
+                                    : Color(uiColor: .secondarySystemBackground)
+                            )
+                    )
+                    .overlay {
+                        Circle()
+                            .stroke(
+                                Color.primary.opacity(specificLayerSetting ? 0.55 : 0.12),
+                                lineWidth: specificLayerSetting ? 1.5 : 1
+                            )
+                    }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(label)
+            .accessibilityAddTraits(specificLayerSetting ? .isSelected : [])
+
+            Text(label)
+                .font(.caption2)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -207,55 +252,90 @@ extension View {
 struct layerTabView: View {
     @Environment(\.colorScheme) var colorScheme: ColorScheme
     @Binding var layerSettings: LayerCategorySettings
-    var accentColor: Color = .catenaryBlue
-
-    private let labelColumns = [
-        GridItem(.adaptive(minimum: 135), spacing: 12, alignment: .leading)
-    ]
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 layerSettingButton(specificLayerSetting: $layerSettings.shapes,
-                                   imageName: "routesicon", label: "Routes",
-                                   accentColor: accentColor)
+                                   imageName: "routesicon", label: "Routes")
                 layerSettingButton(specificLayerSetting: $layerSettings.labelshapes,
-                                   imageName: "labelsicon", label: "Labels",
-                                   accentColor: accentColor)
+                                   imageName: "labelsicon", label: "Labels")
                 layerSettingButton(specificLayerSetting: $layerSettings.stops,
-                                   imageName: "stopsicon", label: "Stops",
-                                   accentColor: accentColor)
+                                   imageName: "stopsicon", label: "Stops")
                 layerSettingButton(specificLayerSetting: $layerSettings.labelstops,
                                    imageName: "\(colorScheme == .dark ? "dark" : "light")-stop-name",
-                                   label: "Names",
-                                   accentColor: accentColor)
+                                   label: "Names")
                 layerSettingButton(specificLayerSetting: $layerSettings.visiblerealtimedots,
-                                   imageName: "vehiclesicon", label: "Vehicles",
-                                   accentColor: accentColor)
+                                   imageName: "vehiclesicon", label: "Vehicles")
             }
             .padding(.horizontal)
 
             VStack(alignment: .leading, spacing: 8) {
+
                 Text("Vehicle labels")
                     .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .center)
 
-                LazyVGrid(columns: labelColumns, alignment: .leading, spacing: 8) {
-                    Toggle("Route", isOn: $layerSettings.labelrealtimedots.route)
-                    Toggle("Trip", isOn: $layerSettings.labelrealtimedots.trip)
-                    Toggle("Vehicle", isOn: $layerSettings.labelrealtimedots.vehicle)
-                    Toggle("Headsign", isOn: $layerSettings.labelrealtimedots.headsign)
-                    Toggle("Speed", isOn: $layerSettings.labelrealtimedots.speed)
-                    Toggle("Occupancy", isOn: $layerSettings.labelrealtimedots.occupancy)
-                    Toggle("Delay", isOn: $layerSettings.labelrealtimedots.delay)
+                HStack(alignment: .top, spacing: 6) {
+                    vehicleLabelSettingButton(
+                        specificLayerSetting: $layerSettings.labelrealtimedots.route,
+                        imageName: "point.topleft.down.curvedto.point.bottomright.up",
+                        label: "Route"
+                    )
+                    vehicleLabelSettingButton(
+                        specificLayerSetting: $layerSettings.labelrealtimedots.trip,
+                        imageName: "arrow.triangle.branch",
+                        label: "Trip"
+                    )
+                    vehicleLabelSettingButton(
+                        specificLayerSetting: $layerSettings.labelrealtimedots.vehicle,
+                        imageName: "tram.fill",
+                        label: "Vehicle"
+                    )
+                    vehicleLabelSettingButton(
+                        specificLayerSetting: $layerSettings.labelrealtimedots.headsign,
+                        imageName: "flag.checkered",
+                        label: "Headsign"
+                    )
+                    vehicleLabelSettingButton(
+                        specificLayerSetting: $layerSettings.labelrealtimedots.speed,
+                        imageName: "speedometer",
+                        label: "Speed"
+                    )
+                    vehicleLabelSettingButton(
+                        specificLayerSetting: $layerSettings.labelrealtimedots.occupancy,
+                        imageName: "person.2.fill",
+                        label: "Occupancy"
+                    )
+                    vehicleLabelSettingButton(
+                        specificLayerSetting: $layerSettings.labelrealtimedots.delay,
+                        imageName: "stopwatch.fill",
+                        label: "Delay"
+                    )
                 }
-                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity)
 
-                Toggle("Label interpolated trajectories", isOn: $layerSettings.labeltrajectories)
+                Button {
+                    layerSettings.labeltrajectories.toggle()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: layerSettings.labeltrajectories
+                              ? "checkmark.square.fill"
+                              : "square")
+                            .font(.title3)
+                        Text("Label interpolated trajectories")
+                            .font(.subheadline)
+                    }
+                    .foregroundStyle(Color.primary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(layerSettings.labeltrajectories ? .isSelected : [])
             }
-            .font(.subheadline)
             .padding(.horizontal)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.top, 6)
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 }
 
@@ -264,23 +344,22 @@ struct LayerSelectorSheet: View {
     @EnvironmentObject var viewobject: viewObject
     @Environment(\.colorScheme) var colorScheme: ColorScheme
     @Binding var tabPage: String
-    var accentColor: Color = .catenaryBlue
     
     var body: some View {
             
         TabView(selection: $tabPage) {
             
             Tab("Rail", systemImage: "tram.fill.tunnel", value: "Rail") {
-                layerTabView(layerSettings: $viewobject.allLayerSettings.intercityrail, accentColor: .railCategory)
+                layerTabView(layerSettings: $viewobject.allLayerSettings.intercityrail)
             }
             Tab("Metro/Tram", systemImage: "lightrail.fill", value: "Metro/Tram") {
-                layerTabView(layerSettings: $viewobject.allLayerSettings.localrail, accentColor: .metroCategory)
+                layerTabView(layerSettings: $viewobject.allLayerSettings.localrail)
             }
             Tab("Bus", systemImage: "bus.fill", value: "Bus") {
-                layerTabView(layerSettings: $viewobject.allLayerSettings.bus, accentColor: .busCategory)
+                layerTabView(layerSettings: $viewobject.allLayerSettings.bus)
             }
             Tab("Other", systemImage: "ferry.fill", value: "Other") {
-                layerTabView(layerSettings: $viewobject.allLayerSettings.other, accentColor: .otherCategory)
+                layerTabView(layerSettings: $viewobject.allLayerSettings.other)
             }
             Tab("More", systemImage: "ellipsis", value: "More") { }
         }
