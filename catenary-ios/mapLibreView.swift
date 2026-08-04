@@ -397,7 +397,13 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
     private var userLocationCoordinate: CLLocationCoordinate2D?
     private var realtimeFeatureCache: [String: MLNPointFeature] = [:]
     private var trajectoryFeatureCache: [String: MLNPointFeature] = [:]
-    private var dynamicSourceRestoreGeneration: UInt64 = 0
+    private weak var persistentStyle: MLNStyle?
+    private weak var realtimeSource: MLNShapeSource?
+    private weak var trajectorySource: MLNShapeSource?
+    private var persistentLayerDefinitions: [StyleLayerDefinition] = []
+
+    private static let realtimeSourceIdentifier = "realtime-vehicles"
+    private static let trajectorySourceIdentifier = "trajectory-vehicles"
 
     private let selectableLayerIDs: Set<String> = [
         LayersPerCategory.IntercityRail.Livedots,
@@ -459,6 +465,7 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
     func install(on mapView: MLNMapView, navigator: viewObject) {
         self.navigator = navigator
         if self.mapView !== mapView {
+            persistentStyle = nil
             if let recognizer, let oldMap = self.mapView {
                 oldMap.removeGestureRecognizer(recognizer)
             }
@@ -470,9 +477,6 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
             mapView.addGestureRecognizer(recognizer)
             self.recognizer = recognizer
         }
-
-        restoreDynamicSources()
-        scheduleDeferredDynamicSourceRestore(on: mapView)
     }
 
     func gestureRecognizer(
@@ -588,6 +592,7 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         trajectoryFeatureCache.removeAll(keepingCapacity: true)
         rebuildRealtimeSource()
         rebuildTrajectorySource()
+        reconcilePersistentLayersIfPossible()
     }
 
     func updateRealtimeVehicles(_ vehicles: [RealtimeVehicle]) {
@@ -650,33 +655,175 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         source.shape = MLNShapeCollectionFeature(shapes: shapes)
     }
 
-    /// MapLibreSwiftUI may re-apply the empty ShapeSource builder after a
-    /// representable update while retaining the same MLNShapeSource instance.
-    /// Source identity therefore cannot tell us whether its contents survived.
-    /// Re-publish the persistent caches unconditionally, both now and on the
-    /// next run-loop turn after the DSL update has completed.
-    private func restoreDynamicSources() {
-        publishRealtimeSource()
-        publishTrajectorySource()
-        publishUserLocationSource()
+    /// Install every application-owned style layer once for the lifetime of a
+    /// loaded MLNStyle. The MapLibreSwiftUI coordinator deliberately removes
+    /// and recreates every layer supplied through MapView's content builder on
+    /// each representable update. Keeping the builder empty and materializing
+    /// its definitions here prevents camera and SwiftUI state changes from
+    /// touching the native source/layer objects.
+    func installPersistentMapContent(
+        style: MLNStyle,
+        layerDefinitions: [StyleLayerDefinition]
+    ) {
+        persistentStyle = style
+        persistentLayerDefinitions = layerDefinitions
+
+        realtimeSource = ensurePersistentShapeSource(
+            identifier: Self.realtimeSourceIdentifier,
+            in: style
+        )
+        trajectorySource = ensurePersistentShapeSource(
+            identifier: Self.trajectorySourceIdentifier,
+            in: style
+        )
+
+        reconcilePersistentLayers(in: style)
+        publishPersistentSources()
     }
 
-    private func scheduleDeferredDynamicSourceRestore(on mapView: MLNMapView) {
-        dynamicSourceRestoreGeneration &+= 1
-        let generation = dynamicSourceRestoreGeneration
-        DispatchQueue.main.async { [weak self, weak mapView] in
-            guard let self,
-                  let mapView,
-                  self.mapView === mapView,
-                  self.dynamicSourceRestoreGeneration == generation else { return }
-            self.restoreDynamicSources()
+    /// Refresh paint/layout properties in place. This creates configured
+    /// throwaway layer objects from the existing DSL definitions, then copies
+    /// their properties onto the already-installed native layers. No source or
+    /// layer is removed, so settings changes cannot create a blank render pass.
+    func updatePersistentLayerDefinitions(_ definitions: [StyleLayerDefinition]) {
+        persistentLayerDefinitions = definitions
+        reconcilePersistentLayersIfPossible()
+    }
+
+    private func ensurePersistentShapeSource(
+        identifier: String,
+        in style: MLNStyle
+    ) -> MLNShapeSource? {
+        if let existing = style.source(withIdentifier: identifier) {
+            guard let source = existing as? MLNShapeSource else {
+                assertionFailure("Expected MLNShapeSource for \(identifier)")
+                return nil
+            }
+            return source
+        }
+
+        let features: [MLNShape & MLNFeature] = []
+        let source = MLNShapeSource(
+            identifier: identifier,
+            features: features,
+            options: [.synchronousUpdate: true]
+        )
+        style.addSource(source)
+        return source
+    }
+
+    private func reconcilePersistentLayersIfPossible() {
+        guard let style = persistentStyle else { return }
+        reconcilePersistentLayers(in: style)
+    }
+
+    private func reconcilePersistentLayers(in style: MLNStyle) {
+        for definition in persistentLayerDefinitions {
+            let configuredLayer = definition
+                .makeStyleLayer(style: style)
+                .makeMLNStyleLayer()
+
+            configuredLayer.isVisible = definition.isVisible
+            if let minimumZoomLevel = definition.minimumZoomLevel {
+                configuredLayer.minimumZoomLevel = minimumZoomLevel
+            }
+            if let maximumZoomLevel = definition.maximumZoomLevel {
+                configuredLayer.maximumZoomLevel = maximumZoomLevel
+            }
+
+            if let installedLayer = style.layer(withIdentifier: definition.identifier) {
+                copyPersistentLayerProperties(from: configuredLayer, to: installedLayer)
+            } else {
+                insertPersistentLayer(
+                    configuredLayer,
+                    definition: definition,
+                    into: style
+                )
+            }
         }
     }
 
-    func restoreDynamicSourcesAfterMapUpdate() {
-        guard let mapView else { return }
-        restoreDynamicSources()
-        scheduleDeferredDynamicSourceRestore(on: mapView)
+    private func copyPersistentLayerProperties(
+        from source: MLNStyleLayer,
+        to destination: MLNStyleLayer
+    ) {
+        destination.isVisible = source.isVisible
+        destination.minimumZoomLevel = source.minimumZoomLevel
+        destination.maximumZoomLevel = source.maximumZoomLevel
+
+        if let source = source as? MLNCircleStyleLayer,
+           let destination = destination as? MLNCircleStyleLayer {
+            destination.circleRadius = source.circleRadius
+            destination.circleColor = source.circleColor
+            destination.circleStrokeWidth = source.circleStrokeWidth
+            destination.circleStrokeColor = source.circleStrokeColor
+            destination.circleBlur = source.circleBlur
+            destination.circleOpacity = source.circleOpacity
+            destination.circleStrokeOpacity = source.circleStrokeOpacity
+            destination.predicate = source.predicate
+            return
+        }
+
+        if let source = source as? MLNSymbolStyleLayer,
+           let destination = destination as? MLNSymbolStyleLayer {
+            destination.iconImageName = source.iconImageName
+            destination.iconRotation = source.iconRotation
+            destination.iconAllowsOverlap = source.iconAllowsOverlap
+            destination.iconColor = source.iconColor
+            destination.iconOffset = source.iconOffset
+            destination.iconAnchor = source.iconAnchor
+            destination.text = source.text
+            destination.textColor = source.textColor
+            destination.textFontSize = source.textFontSize
+            destination.maximumTextWidth = source.maximumTextWidth
+            destination.textAnchor = source.textAnchor
+            destination.textOffset = source.textOffset
+            destination.textFontNames = source.textFontNames
+            destination.textAllowsOverlap = source.textAllowsOverlap
+            destination.textHaloColor = source.textHaloColor
+            destination.textHaloWidth = source.textHaloWidth
+            destination.textHaloBlur = source.textHaloBlur
+            destination.symbolPlacement = source.symbolPlacement
+            destination.symbolSpacing = source.symbolSpacing
+            destination.predicate = source.predicate
+        }
+    }
+
+    private func insertPersistentLayer(
+        _ layer: MLNStyleLayer,
+        definition: StyleLayerDefinition,
+        into style: MLNStyle
+    ) {
+        switch definition.insertionPosition {
+        case let .above(.layer(layerId: identifier)):
+            if let reference = style.layer(withIdentifier: identifier) {
+                style.insertLayer(layer, above: reference)
+            } else {
+                style.addLayer(layer)
+            }
+        case .above(.all):
+            style.addLayer(layer)
+        case let .below(.layer(layerId: identifier)):
+            if let reference = style.layer(withIdentifier: identifier) {
+                style.insertLayer(layer, below: reference)
+            } else {
+                style.addLayer(layer)
+            }
+        case .below(.all):
+            style.insertLayer(layer, at: 0)
+        case .below(.symbols):
+            if let firstSymbol = style.layers.first(where: { $0 is MLNSymbolStyleLayer }) {
+                style.insertLayer(layer, below: firstSymbol)
+            } else {
+                style.addLayer(layer)
+            }
+        }
+    }
+
+    private func publishPersistentSources() {
+        publishRealtimeSource()
+        publishTrajectorySource()
+        publishUserLocationSource()
     }
 
     private func rebuildRealtimeSource() {
@@ -691,9 +838,12 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
     }
 
     private func publishRealtimeSource() {
-        guard let source = mapView?.style?.source(
-            withIdentifier: "realtime-vehicles"
-        ) as? MLNShapeSource else { return }
+        let source = realtimeSource
+            ?? (mapView?.style?.source(
+                withIdentifier: Self.realtimeSourceIdentifier
+            ) as? MLNShapeSource)
+        guard let source else { return }
+        realtimeSource = source
         let features: [MLNShape & MLNFeature] = realtimeVehicles.compactMap {
             realtimeFeatureCache[$0.id]
         }
@@ -712,9 +862,12 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
     }
 
     private func publishTrajectorySource() {
-        guard let source = mapView?.style?.source(
-            withIdentifier: "trajectory-vehicles"
-        ) as? MLNShapeSource else { return }
+        let source = trajectorySource
+            ?? (mapView?.style?.source(
+                withIdentifier: Self.trajectorySourceIdentifier
+            ) as? MLNShapeSource)
+        guard let source else { return }
+        trajectorySource = source
         let features: [MLNShape & MLNFeature] = trajectoryVehicles.compactMap {
             trajectoryFeatureCache[$0.id]
         }
@@ -2150,21 +2303,27 @@ struct mapLibreView: View, Equatable {
             .textHaloWidth(1)
     }
 
-    var body: some View {
-        MapView(styleURL: styleURL, camera: $camera) {
-            shapeLayer
-            stationFeaturesLayer
-            stopsLayer
-            wildfireMapLayers(
+    private var persistentMapLayerDefinitions: [StyleLayerDefinition] {
+        shapeLayer.layers
+            + stationFeaturesLayer.layers
+            + stopsLayer.layers
+            + wildfireMapLayers(
                 fireFeatures: wildfireVM.fireFeatures,
                 darkMode: colorScheme == .dark
-            )
-            realtimeLayer
-            trajectoryLayer
-            userLocationLayer
-            nearbyPinLayer
-            selectedStopLayer
-        }
+            ).layers
+            + realtimeLayer.layers
+            + trajectoryLayer.layers
+            + userLocationLayer.layers
+            + nearbyPinLayer.layers
+            + selectedStopLayer.layers
+    }
+
+    var body: some View {
+        // Keep the SwiftUI DSL builder empty. Its coordinator removes and
+        // recreates every managed source and layer during each representable
+        // update. The definitions above are instead installed once through the
+        // native MLNStyle API in onMapStyleLoaded.
+        MapView(styleURL: styleURL, camera: $camera) {}
 
         .unsafeMapViewControllerModifier { map in
             map.mapView.logoView.isHidden = true
@@ -2178,6 +2337,9 @@ struct mapLibreView: View, Equatable {
                 coordinate: nearbyPinCoordinate
             )
             featureTapCoordinator.install(on: map.mapView, navigator: viewobject)
+            featureTapCoordinator.updatePersistentLayerDefinitions(
+                persistentMapLayerDefinitions
+            )
             featureTapCoordinator.updateUserLocation(locationManager.lastKnownLocation)
 
             let sourceCoordinator = featureTapCoordinator
@@ -2190,6 +2352,12 @@ struct mapLibreView: View, Equatable {
             wildfireVM.onFeaturesChanged = { [weak sourceCoordinator] features in
                 sourceCoordinator?.updateWildfireFeatures(features)
             }
+        }
+        .onMapStyleLoaded { style in
+            featureTapCoordinator.installPersistentMapContent(
+                style: style,
+                layerDefinitions: persistentMapLayerDefinitions
+            )
         }
         .onMapViewProxyUpdate(updateMode: .onFinish, onViewProxyChanged: { proxy in
             Task { @MainActor in
@@ -2209,7 +2377,6 @@ struct mapLibreView: View, Equatable {
                     bounds: proxy.visibleCoordinateBounds,
                     zoom: proxy.zoomLevel
                 )
-                featureTapCoordinator.restoreDynamicSourcesAfterMapUpdate()
             }
         })
         .task {
@@ -2226,6 +2393,9 @@ struct mapLibreView: View, Equatable {
         }
         .onChange(of: layerSettings) { _, settings in
             featureTapCoordinator.updateLayerSettings(settings)
+            featureTapCoordinator.updatePersistentLayerDefinitions(
+                persistentMapLayerDefinitions
+            )
             realtimeVM.updateLayerSettings(settings)
             trajectoryVM.updateLayerSettings(settings)
         }
