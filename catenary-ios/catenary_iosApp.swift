@@ -361,7 +361,7 @@ struct LayerSelectorSheet: View {
             Tab("Other", systemImage: "ferry.fill", value: "Other") {
                 layerTabView(layerSettings: $viewobject.allLayerSettings.other)
             }
-            Tab("More", systemImage: "ellipsis", value: "More") { }
+//            Tab("More", systemImage: "ellipsis", value: "More") { }
         }
         .ignoresSafeArea(edges: .bottom)
         .symbolRenderingMode(.monochrome)
