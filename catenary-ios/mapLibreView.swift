@@ -397,8 +397,7 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
     private var userLocationCoordinate: CLLocationCoordinate2D?
     private var realtimeFeatureCache: [String: MLNPointFeature] = [:]
     private var trajectoryFeatureCache: [String: MLNPointFeature] = [:]
-    private weak var publishedRealtimeSource: MLNShapeSource?
-    private weak var publishedTrajectorySource: MLNShapeSource?
+    private var dynamicSourceRestoreGeneration: UInt64 = 0
 
     private let selectableLayerIDs: Set<String> = [
         LayersPerCategory.IntercityRail.Livedots,
@@ -459,22 +458,21 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
 
     func install(on mapView: MLNMapView, navigator: viewObject) {
         self.navigator = navigator
-        if self.mapView === mapView {
-            refreshDynamicSourcesIfNeeded()
-            return
+        if self.mapView !== mapView {
+            if let recognizer, let oldMap = self.mapView {
+                oldMap.removeGestureRecognizer(recognizer)
+            }
+
+            self.mapView = mapView
+            let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+            recognizer.cancelsTouchesInView = false
+            recognizer.delegate = self
+            mapView.addGestureRecognizer(recognizer)
+            self.recognizer = recognizer
         }
 
-        if let recognizer, let oldMap = self.mapView {
-            oldMap.removeGestureRecognizer(recognizer)
-        }
-
-        self.mapView = mapView
-        let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
-        recognizer.cancelsTouchesInView = false
-        recognizer.delegate = self
-        mapView.addGestureRecognizer(recognizer)
-        self.recognizer = recognizer
-        refreshDynamicSourcesIfNeeded()
+        restoreDynamicSources()
+        scheduleDeferredDynamicSourceRestore(on: mapView)
     }
 
     func gestureRecognizer(
@@ -652,21 +650,33 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         source.shape = MLNShapeCollectionFeature(shapes: shapes)
     }
 
-    private func refreshDynamicSourcesIfNeeded() {
-        let realtimeSource = mapView?.style?.source(
-            withIdentifier: "realtime-vehicles"
-        ) as? MLNShapeSource
-        if publishedRealtimeSource !== realtimeSource {
-            publishRealtimeSource()
-        }
-
-        let trajectorySource = mapView?.style?.source(
-            withIdentifier: "trajectory-vehicles"
-        ) as? MLNShapeSource
-        if publishedTrajectorySource !== trajectorySource {
-            publishTrajectorySource()
-        }
+    /// MapLibreSwiftUI may re-apply the empty ShapeSource builder after a
+    /// representable update while retaining the same MLNShapeSource instance.
+    /// Source identity therefore cannot tell us whether its contents survived.
+    /// Re-publish the persistent caches unconditionally, both now and on the
+    /// next run-loop turn after the DSL update has completed.
+    private func restoreDynamicSources() {
+        publishRealtimeSource()
+        publishTrajectorySource()
         publishUserLocationSource()
+    }
+
+    private func scheduleDeferredDynamicSourceRestore(on mapView: MLNMapView) {
+        dynamicSourceRestoreGeneration &+= 1
+        let generation = dynamicSourceRestoreGeneration
+        DispatchQueue.main.async { [weak self, weak mapView] in
+            guard let self,
+                  let mapView,
+                  self.mapView === mapView,
+                  self.dynamicSourceRestoreGeneration == generation else { return }
+            self.restoreDynamicSources()
+        }
+    }
+
+    func restoreDynamicSourcesAfterMapUpdate() {
+        guard let mapView else { return }
+        restoreDynamicSources()
+        scheduleDeferredDynamicSourceRestore(on: mapView)
     }
 
     private func rebuildRealtimeSource() {
@@ -687,7 +697,6 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         let features: [MLNShape & MLNFeature] = realtimeVehicles.compactMap {
             realtimeFeatureCache[$0.id]
         }
-        publishedRealtimeSource = source
         source.shape = MLNShapeCollectionFeature(shapes: features)
     }
 
@@ -709,7 +718,6 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         let features: [MLNShape & MLNFeature] = trajectoryVehicles.compactMap {
             trajectoryFeatureCache[$0.id]
         }
-        publishedTrajectorySource = source
         source.shape = MLNShapeCollectionFeature(shapes: features)
     }
 
@@ -2201,6 +2209,7 @@ struct mapLibreView: View, Equatable {
                     bounds: proxy.visibleCoordinateBounds,
                     zoom: proxy.zoomLevel
                 )
+                featureTapCoordinator.restoreDynamicSourcesAfterMapUpdate()
             }
         })
         .task {
