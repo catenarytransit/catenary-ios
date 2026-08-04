@@ -17448,6 +17448,9 @@
         }
       }
     },
+    "Platform %@" : {
+
+    },
     "platform.value" : {
       "extractionState" : "manual",
       "localizations" : {

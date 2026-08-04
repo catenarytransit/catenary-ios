@@ -25,6 +25,131 @@ final class FloatingWindow: UIWindow {
     }
 }
 
+private struct NativeSheetLeadingAnchor: UIViewControllerRepresentable {
+    @Binding var sheetWidth: CGFloat
+
+    func makeUIViewController(context: Context) -> NativeSheetLeadingAnchorController {
+        let controller = NativeSheetLeadingAnchorController()
+        configure(controller)
+        return controller
+    }
+
+    func updateUIViewController(
+        _ uiViewController: NativeSheetLeadingAnchorController,
+        context: Context
+    ) {
+        configure(uiViewController)
+        uiViewController.scheduleUpdate()
+    }
+
+    private func configure(_ controller: NativeSheetLeadingAnchorController) {
+        let widthBinding = $sheetWidth
+        controller.onSheetWidthChange = { width in
+            guard abs(widthBinding.wrappedValue - width) > 0.5 else { return }
+            widthBinding.wrappedValue = width
+        }
+    }
+}
+
+private final class NativeSheetLeadingAnchorController: UIViewController {
+    var onSheetWidthChange: ((CGFloat) -> Void)?
+    private var delayedUpdate: DispatchWorkItem?
+
+    override func loadView() {
+        let view = UIView(frame: .zero)
+        view.backgroundColor = .clear
+        view.isUserInteractionEnabled = false
+        self.view = view
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        scheduleUpdate()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        scheduleUpdate()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        scheduleUpdate()
+    }
+
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        scheduleUpdate()
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        scheduleUpdate()
+    }
+
+    deinit {
+        delayedUpdate?.cancel()
+    }
+
+    func scheduleUpdate() {
+        applySheetPosition()
+
+        delayedUpdate?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.applySheetPosition()
+        }
+        delayedUpdate = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: workItem)
+    }
+
+    private func applySheetPosition() {
+        guard let sheetController = containingPresentedController,
+              let presentationController = sheetController.presentationController,
+              let containerView = presentationController.containerView,
+              let sheetView = presentationController.presentedView else {
+            return
+        }
+
+        let shouldUseLeadingAnchor = traitCollection.userInterfaceIdiom == .pad
+            && containerView.bounds.width >= 600
+
+        var transform = sheetView.transform
+        guard shouldUseLeadingAnchor else {
+            if abs(transform.tx) > 0.5 {
+                transform.tx = 0
+                sheetView.transform = transform
+            }
+            return
+        }
+
+        guard sheetView.bounds.width > 0 else { return }
+        onSheetWidthChange?(sheetView.bounds.width)
+
+        let windowLeadingInset = view.window?.safeAreaInsets.left ?? 0
+        let leadingMargin = max(containerView.safeAreaInsets.left, windowLeadingInset) + 16
+        let naturalLeadingEdge = sheetView.center.x - (sheetView.bounds.width / 2)
+        let translationX = leadingMargin - naturalLeadingEdge
+
+        guard abs(transform.tx - translationX) > 0.5 else { return }
+        transform.tx = translationX
+        sheetView.transform = transform
+    }
+
+    private var containingPresentedController: UIViewController? {
+        var controller: UIViewController? = self
+
+        while let current = controller {
+            if current.presentingViewController != nil,
+               current.presentationController?.presentedViewController === current {
+                return current
+            }
+            controller = current.parent
+        }
+
+        return nil
+    }
+}
+
 struct MainUIView: View {
     let searchViewModel: SearchViewModel
 
@@ -41,8 +166,9 @@ struct MainUIView: View {
     @State private var mapCameraRevision: UInt64 = 0
     @State private var searchFocusRequest = 0
     @State private var isSearchSheetTransitioning = false
-    
-    
+    @State private var nativeSheetWidth: CGFloat = 0
+
+
     var body: some View {
         ZStack {
             baseMapView
@@ -67,7 +193,6 @@ struct MainUIView: View {
                 .sheet(isPresented: $isSheetPresented) {
                     bottomDrawerSheet
                 }
-                
                 .catenaryOnChange(of: viewobject.showLayerSelector) { last, current in
                     withAnimation(.catenaryBouncy) {
                         if current {
@@ -89,10 +214,11 @@ struct MainUIView: View {
                     if isSheetPresented {
                         floatingToolBar()
                             .padding(.trailing, 15)
+                            .padding(.bottom, usesTabletLayout ? 15 : 0)
                             .transition(.move(edge: .trailing))
                     }
                 }
-                .overlay(alignment: .top) {
+                .overlay(alignment: usesTabletLayout ? .topLeading : .top) {
                     if isSheetPresented,
                        viewobject.currentStackItem == nil,
                        viewobject.presDetent != .large {
@@ -100,6 +226,7 @@ struct MainUIView: View {
                             onSearch: beginSearch,
                             onSettingsClick: { viewobject.push(.settings) }
                         )
+                        .frame(width: usesTabletLayout ? tabletPaneWidth : nil)
                         .padding()
                         .ignoresSafeArea(.container, edges: .bottom)
                         .transition(.opacity)
@@ -170,6 +297,9 @@ struct MainUIView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea(.container, edges: .bottom)
         .interactiveDismissDisabled()
+        .background(
+            NativeSheetLeadingAnchor(sheetWidth: $nativeSheetWidth)
+        )
         .onGeometryChange(for: CGFloat.self) { proxy in
             max(proxy.size.height, 0)
         } action: { _, newValue in
@@ -204,9 +334,29 @@ struct MainUIView: View {
         viewobject.useInitialUserLocationIfNeeded(coordinate)
     }
 
+    private var usesTabletLayout: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad && mapViewportSize.width >= 600
+    }
+
+    private var tabletPaneWidth: CGFloat {
+        let availableWidth = max(mapViewportSize.width - 32, 0)
+        let fallbackWidth = min(600, max(mapViewportSize.width * 0.5, 320))
+        let preferredWidth = nativeSheetWidth > 0 ? nativeSheetWidth : fallbackWidth
+        return min(preferredWidth, availableWidth)
+    }
+
     private var mapContentInset: UIEdgeInsets {
         guard isSheetPresented, mapViewportSize.height > 0 else { return .zero }
         guard viewobject.presDetent == .large else { return .zero }
+
+        if usesTabletLayout {
+            return UIEdgeInsets(
+                top: 0,
+                left: tabletPaneWidth + 16,
+                bottom: 0,
+                right: 0
+            )
+        }
 
         return UIEdgeInsets(
             top: 0,
@@ -215,7 +365,7 @@ struct MainUIView: View {
             right: 0
         )
     }
-    
+
     @ViewBuilder
     func floatingToolBar() -> some View {
         Group {
@@ -234,7 +384,7 @@ struct MainUIView: View {
                     .foregroundStyle(Color.primary)
                 }
                 VStack {
-                    
+
                     Button {
                         //                locationManager.checkLocationAuthorization()
                         //                    viewobject.camera.setDirection(0)
@@ -250,20 +400,20 @@ struct MainUIView: View {
                         Image(systemName: "location\(viewobject.centered ? ".fill" : "")")
                     }
                     .padding(.top)
-                    
+
                 }
                 .padding(.all, 10)
                 .background(.regularMaterial, in: Capsule())
-                
+
             }
             .font(.title3)
-            .offset(y: -min(liveSheetHeight, 350))
+            .offset(y: usesTabletLayout ? 0 : -min(liveSheetHeight, 350))
             .opacity(locationOpacity)
         }
-        
+
     }
-    
-    
+
+
 }
 
 
