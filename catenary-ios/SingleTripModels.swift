@@ -441,9 +441,12 @@ struct SingleTripStopState: Identifiable, Equatable {
     var isCancelled: Bool { raw.scheduleRelationship == 1 }
 
     var platform: String? {
-        let realtime = raw.realtimePlatformString?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if realtime?.isEmpty == false { return realtime }
-        let code = raw.code?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return code?.isEmpty == false ? code : nil
+        guard let realtime = raw.realtimePlatformString else { return nil }
+        let platform = realtime
+            .replacingOccurrences(of: "track", with: "", options: .caseInsensitive)
+            .replacingOccurrences(of: "platform", with: "", options: .caseInsensitive)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return platform.isEmpty ? nil : platform
     }
 }
