@@ -488,7 +488,7 @@ private struct SingleTripStopRow: View {
                        let realtimeTimeText,
                        scheduledTimeText != realtimeTimeText {
                         Text(scheduledTimeText)
-                            .font(.caption2.monospacedDigit())
+                            .font(.subheadline.monospacedDigit())
                             .foregroundStyle(.secondary)
                     }
 
@@ -518,22 +518,24 @@ private struct SingleTripStopRow: View {
                     .frame(width: timelineColumnWidth)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(stop.displayName)
-                        .font(.body.weight(isCurrent ? .bold : .regular))
-                        .foregroundStyle(stop.isCancelled ? .secondary : .primary)
-                        .strikethrough(stop.isCancelled)
-                        .multilineTextAlignment(.leading)
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        Text(stop.displayName)
+                            .font(.body.weight(isCurrent ? .bold : .regular))
+                            .foregroundStyle(stop.isCancelled ? .secondary : .primary)
+                            .strikethrough(stop.isCancelled)
+                            .multilineTextAlignment(.leading)
 
-                    HStack(spacing: 8) {
-                        if let platform = stop.platform {
-                            Label(platform, systemImage: "rectangle.inset.filled")
-                        }
-                        if stop.raw.replacedStop == true {
-                            Label("Replacement stop", systemImage: "arrow.triangle.2.circlepath")
-                        }
+                        Image(systemName: "chevron.forward")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+
+                    if stop.raw.replacedStop == true {
+                        Label("Replacement stop", systemImage: "arrow.triangle.2.circlepath")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
 
                     if stop.isCancelled {
                         Text("Stop cancelled")
@@ -547,10 +549,17 @@ private struct SingleTripStopRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                Image(systemName: "chevron.forward")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .padding(.top, 4)
+                if let platform = stop.platform {
+                    Text(platform)
+                        .font(.body)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(width: 40, alignment: .trailing)
+                        .accessibilityLabel("Platform \(platform)")
+                } else {
+                    Spacer()
+                        .frame(width: 40)
+                }
             }
             .frame(minHeight: 58, alignment: .top)
             .overlay(alignment: .topLeading) {
