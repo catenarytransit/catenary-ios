@@ -271,21 +271,6 @@ struct layerTabView: View {
             .padding(.horizontal)
 
             VStack(alignment: .leading, spacing: 12) {
-                Button {
-                    layerSettings.labeltrajectories.toggle()
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: layerSettings.labeltrajectories
-                              ? "checkmark.square.fill"
-                              : "square")
-                            .font(.title3)
-                        Text("Label interpolated trajectories")
-                            .font(.subheadline)
-                    }
-                    .foregroundStyle(Color.primary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(layerSettings.labeltrajectories ? .isSelected : [])
 
                 Text("Vehicle labels")
                     .font(.subheadline.weight(.semibold))
@@ -329,6 +314,22 @@ struct layerTabView: View {
                     )
                 }
                 .frame(maxWidth: .infinity)
+
+                Button {
+                    layerSettings.labeltrajectories.toggle()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: layerSettings.labeltrajectories
+                              ? "checkmark.square.fill"
+                              : "square")
+                            .font(.title3)
+                        Text("Label interpolated trajectories")
+                            .font(.subheadline)
+                    }
+                    .foregroundStyle(Color.primary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(layerSettings.labeltrajectories ? .isSelected : [])
             }
             .padding(.horizontal)
             .frame(maxWidth: .infinity, alignment: .leading)
