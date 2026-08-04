@@ -112,7 +112,7 @@ struct OverlayRoot: View {
                 
                 NavigationStack {
                     LayerSelectorSheet(tabPage: $currentPage)
-                        .presentationDetents([.height(380), .medium])
+                        .presentationDetents([.height(380)])
                         .presentationBackgroundInteraction(PresentationBackgroundInteraction.disabled)
                         
                         .interactiveDismissDisabled(false)
