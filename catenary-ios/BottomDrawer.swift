@@ -23,6 +23,7 @@ struct BottomDrawer: View {
     @EnvironmentObject var viewObject: viewObject
     @FocusState private var isFocused: Bool
     @State private var isSearchActive = false
+    private let searchFocusDelayNanoseconds: UInt64 = 350_000_000
 
     var body: some View {
         Group {
@@ -94,6 +95,14 @@ struct BottomDrawer: View {
                   selectedDetent == .large,
                   viewObject.currentStackItem == nil else { return }
 
+            do {
+                try await Task.sleep(nanoseconds: searchFocusDelayNanoseconds)
+            } catch {
+                return
+            }
+
+            guard selectedDetent == .large,
+                  viewObject.currentStackItem == nil else { return }
             isSearchActive = true
             await Task.yield()
 
