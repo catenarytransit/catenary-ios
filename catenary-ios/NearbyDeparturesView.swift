@@ -264,7 +264,7 @@ struct NearbyDeparturesView: View {
 
                 content(origin: origin)
             } else {
-                ContentUnavailableView {
+                CatenaryUnavailableView {
                     Label("Waiting for location", systemImage: "location.slash")
                 } description: {
                     Text("Allow location access, or use the current map center to see nearby departures.")
@@ -288,13 +288,13 @@ struct NearbyDeparturesView: View {
                 lockFirstLocationIfNeeded()
             }
         }
-        .onChange(of: locationManager.lastKnownLocation?.latitude) { _, _ in
+        .catenaryOnChange(of: locationManager.lastKnownLocation?.latitude) { _, _ in
             lockFirstLocationIfNeeded()
         }
-        .onChange(of: locationManager.lastKnownLocation?.longitude) { _, _ in
+        .catenaryOnChange(of: locationManager.lastKnownLocation?.longitude) { _, _ in
             lockFirstLocationIfNeeded()
         }
-        .onChange(of: pinActive) { _, active in
+        .catenaryOnChange(of: pinActive) { _, active in
             guard fixedOrigin == nil else { return }
             if active, let pickedCoordinate {
                 lockedOrigin = pickedCoordinate
@@ -304,10 +304,10 @@ struct NearbyDeparturesView: View {
                 reloadNonce += 1
             }
         }
-        .onChange(of: pickedCoordinate?.latitude) { _, _ in
+        .catenaryOnChange(of: pickedCoordinate?.latitude) { _, _ in
             updateFromDraggedPin()
         }
-        .onChange(of: pickedCoordinate?.longitude) { _, _ in
+        .catenaryOnChange(of: pickedCoordinate?.longitude) { _, _ in
             updateFromDraggedPin()
         }
         .task(id: requestKey) {
@@ -372,10 +372,10 @@ struct NearbyDeparturesView: View {
     @ViewBuilder
     private func content(origin: CLLocationCoordinate2D) -> some View {
         if let errorMessage = model.errorMessage, !model.hasLoaded {
-            ContentUnavailableView("Unable to load departures", systemImage: "wifi.exclamationmark", description: Text(errorMessage))
+            CatenaryUnavailableView("Unable to load departures", systemImage: "wifi.exclamationmark", description: Text(errorMessage))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if listItems.isEmpty && model.hasLoaded && !model.isLoading {
-            ContentUnavailableView("No nearby departures", systemImage: "clock.badge.xmark")
+            CatenaryUnavailableView("No nearby departures", systemImage: "clock.badge.xmark")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {

@@ -89,7 +89,7 @@ struct CatenarySearchBar: View {
         }
         .frame(height: 48)
         .catenarySearchBarSurface()
-        .onChange(of: viewModel.query) { _, query in
+        .catenaryOnChange(of: viewModel.query) { _, query in
             onQueryChange(query)
         }
     }

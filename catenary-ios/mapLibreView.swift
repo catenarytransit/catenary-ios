@@ -2393,7 +2393,7 @@ struct mapLibreView: View, Equatable {
         .task {
             await wildfireVM.run()
         }
-        .onChange(of: layerSettings) { _, settings in
+        .catenaryOnChange(of: layerSettings) { _, settings in
             featureTapCoordinator.updateLayerSettings(settings)
             featureTapCoordinator.updatePersistentLayerDefinitions(
                 persistentMapLayerDefinitions
@@ -2401,7 +2401,7 @@ struct mapLibreView: View, Equatable {
             realtimeVM.updateLayerSettings(settings)
             trajectoryVM.updateLayerSettings(settings)
         }
-        .onChange(of: selectedStopContext) { _, context in
+        .catenaryOnChange(of: selectedStopContext) { _, context in
             featureTapCoordinator.updateSelectedStop(context)
         }
         .onDisappear {

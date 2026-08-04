@@ -69,7 +69,7 @@ struct StationDeparturesScreen: View {
                 }
 
                 if let errorMessage = model.errorMessage, model.events.isEmpty {
-                    ContentUnavailableView(
+                    CatenaryUnavailableView(
                         "Unable to load departures",
                         systemImage: "wifi.exclamationmark",
                         description: Text(errorMessage)
@@ -102,19 +102,19 @@ struct StationDeparturesScreen: View {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
         }
-        .onChange(of: model.events) { _, _ in
+        .catenaryOnChange(of: model.events) { _, _ in
             synchronizeFilters()
         }
-        .onChange(of: model.primary) { _, _ in
+        .catenaryOnChange(of: model.primary) { _, _ in
             updateMapContext()
         }
-        .onChange(of: model.stops) { _, _ in
+        .catenaryOnChange(of: model.stops) { _, _ in
             updateMapContext()
         }
-        .onChange(of: model.primaryChateauID) { _, _ in
+        .catenaryOnChange(of: model.primaryChateauID) { _, _ in
             synchronizeTrainCategories()
         }
-        .onChange(of: model.redirectToOSMStationID) { _, stationID in
+        .catenaryOnChange(of: model.redirectToOSMStationID) { _, stationID in
             guard let stationID else { return }
             replaceWithOSMStation(
                 id: stationID,
@@ -185,7 +185,7 @@ struct StationDeparturesScreen: View {
                 .foregroundStyle(.tint)
 
                 if daySections.isEmpty, !model.isLoading {
-                    ContentUnavailableView(
+                    CatenaryUnavailableView(
                         "No departures in this time range",
                         systemImage: "clock.badge.xmark"
                     )

@@ -346,9 +346,23 @@ struct LayerSelectorSheet: View {
     @Binding var tabPage: String
     
     var body: some View {
-            
+        tabs
+            .ignoresSafeArea(edges: .bottom)
+            .symbolRenderingMode(.monochrome)
+    }
+
+    @ViewBuilder
+    private var tabs: some View {
+        if #available(iOS 18.0, *) {
+            modernTabs
+        } else {
+            legacyTabs
+        }
+    }
+
+    @available(iOS 18.0, *)
+    private var modernTabs: some View {
         TabView(selection: $tabPage) {
-            
             Tab("Rail", systemImage: "tram.fill.tunnel", value: "Rail") {
                 layerTabView(layerSettings: $viewobject.allLayerSettings.intercityrail)
             }
@@ -363,10 +377,34 @@ struct LayerSelectorSheet: View {
             }
 //            Tab("More", systemImage: "ellipsis", value: "More") { }
         }
-        .ignoresSafeArea(edges: .bottom)
-        .symbolRenderingMode(.monochrome)
-    
+    }
 
+    private var legacyTabs: some View {
+        TabView(selection: $tabPage) {
+            layerTabView(layerSettings: $viewobject.allLayerSettings.intercityrail)
+                .tabItem {
+                    Label("Rail", systemImage: "tram.fill.tunnel")
+                }
+                .tag("Rail")
+
+            layerTabView(layerSettings: $viewobject.allLayerSettings.localrail)
+                .tabItem {
+                    Label("Metro/Tram", systemImage: "lightrail.fill")
+                }
+                .tag("Metro/Tram")
+
+            layerTabView(layerSettings: $viewobject.allLayerSettings.bus)
+                .tabItem {
+                    Label("Bus", systemImage: "bus.fill")
+                }
+                .tag("Bus")
+
+            layerTabView(layerSettings: $viewobject.allLayerSettings.other)
+                .tabItem {
+                    Label("Other", systemImage: "ferry.fill")
+                }
+                .tag("Other")
+        }
     }
 }
 

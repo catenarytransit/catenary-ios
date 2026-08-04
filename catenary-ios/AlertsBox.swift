@@ -262,7 +262,7 @@ struct ServiceAlertsScreen: View {
                             .frame(width: 32, height: 32)
                     }
                     .buttonStyle(.bordered)
-                    .buttonBorderShape(.circle)
+                    .catenaryCircularButtonBorderShape()
                     .accessibilityLabel("Close service alerts")
                 }
             }

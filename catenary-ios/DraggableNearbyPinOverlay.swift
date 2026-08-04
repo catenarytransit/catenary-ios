@@ -209,7 +209,7 @@ struct DraggableNearbyPinOverlay: View {
             }
         }
         .ignoresSafeArea()
-        .onChange(of: dragTranslation) { oldValue, newValue in
+        .catenaryOnChange(of: dragTranslation) { oldValue, newValue in
             // DragGesture can be cancelled without invoking onEnded.
             if isDragging, oldValue != .zero, newValue == .zero {
                 dragOrigin = nil

@@ -289,7 +289,7 @@ struct StopScreenView: View {
             }
 
             if let error = model.errorMessage, model.events.isEmpty {
-                ContentUnavailableView("Unable to load departures", systemImage: "wifi.exclamationmark", description: Text(error))
+                CatenaryUnavailableView("Unable to load departures", systemImage: "wifi.exclamationmark", description: Text(error))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 departuresList
@@ -311,10 +311,10 @@ struct StopScreenView: View {
                 centerMapIfNeeded()
             }
         }
-        .onChange(of: model.primary) { _, _ in
+        .catenaryOnChange(of: model.primary) { _, _ in
             centerMapIfNeeded()
         }
-        .onChange(of: model.redirectToOSMStationID) { _, stationID in
+        .catenaryOnChange(of: model.redirectToOSMStationID) { _, stationID in
             guard let stationID else { return }
             viewObject.replaceTop(with: .osmStation(
                 osmStationID: String(stationID),
@@ -385,7 +385,7 @@ struct StopScreenView: View {
                 }
 
                 if groupedDays.isEmpty && !model.isLoading {
-                    ContentUnavailableView("No departures in this time range", systemImage: "clock.badge.xmark")
+                    CatenaryUnavailableView("No departures in this time range", systemImage: "clock.badge.xmark")
                         .padding(.vertical, 28)
                 }
 
