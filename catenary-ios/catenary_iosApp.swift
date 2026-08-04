@@ -112,7 +112,7 @@ struct OverlayRoot: View {
                 
                 NavigationStack {
                     LayerSelectorSheet(tabPage: $currentPage)
-                        .presentationDetents([.height(380), .medium])
+                        .presentationDetents([.height(380)])
                         .presentationBackgroundInteraction(PresentationBackgroundInteraction.disabled)
                         
                         .interactiveDismissDisabled(false)
@@ -361,7 +361,7 @@ struct LayerSelectorSheet: View {
             Tab("Other", systemImage: "ferry.fill", value: "Other") {
                 layerTabView(layerSettings: $viewobject.allLayerSettings.other)
             }
-            Tab("More", systemImage: "ellipsis", value: "More") { }
+//            Tab("More", systemImage: "ellipsis", value: "More") { }
         }
         .ignoresSafeArea(edges: .bottom)
         .symbolRenderingMode(.monochrome)
