@@ -238,6 +238,8 @@ struct StationDeparturesScreen: View {
                             .font(.headline)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.vertical, 8)
+                            .background(Color(uiColor: .systemBackground))
+                            .zIndex(1)
                     }
                 }
 

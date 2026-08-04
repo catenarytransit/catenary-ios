@@ -56,7 +56,7 @@ struct StationTrainDepartureRowCompact: View {
                 HStack(alignment: .center, spacing: 6) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(destinationText)
-                            .font(.subheadline.weight(.medium))
+                            .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(event.isCancelled ? .red : .primary)
                             .strikethrough(event.isCancelled)
                             .lineLimit(1)
@@ -67,7 +67,7 @@ struct StationTrainDepartureRowCompact: View {
 
                     if let platformText {
                         Text(platformText)
-                            .font(.subheadline.weight(.semibold))
+                            .font(.system(size: 11, weight: .regular))
                             .monospacedDigit()
                             .frame(minWidth: 22, alignment: .trailing)
                     }
@@ -171,10 +171,7 @@ struct StationTrainDepartureRowCompact: View {
     }
 
     private var showsRouteBadge: Bool {
-        guard routeLabel != nil else { return false }
-        guard event.chateau == NationalRailUtils.chateauID else { return true }
-        guard let agencyID = routeInfo?.agencyId?.uppercased() else { return false }
-        return ["TW", "ME", "LO", "XR", "HX"].contains(agencyID)
+        routeLabel != nil && event.chateau != NationalRailUtils.chateauID
     }
 
     private var platformText: String? {

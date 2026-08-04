@@ -35,8 +35,12 @@ struct StationDepartureRow: View {
         .from(routeType: routeInfo?.routeType ?? event.routeType)
     }
 
+    private var showsRouteBadge: Bool {
+        routeLabel != nil && event.chateau != NationalRailUtils.chateauID
+    }
+
     private var showsLeadingRoute: Bool {
-        layout != .regular || mode != .rail
+        showsRouteBadge && (layout != .regular || mode != .rail)
     }
 
     var body: some View {
@@ -59,8 +63,7 @@ struct StationDepartureRow: View {
             Button(action: openTrip) {
                 HStack(alignment: .center, spacing: 8) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(destinationText)
-                            .font(mode == .rail ? .headline : .subheadline.weight(.semibold))
+                        destinationLabel
                             .foregroundStyle(event.isCancelled ? .red : .primary)
                             .strikethrough(event.isCancelled)
                             .lineLimit(2)
@@ -73,7 +76,11 @@ struct StationDepartureRow: View {
 
                     if let platformText {
                         Text(platformText)
-                            .font(.body.weight(.semibold))
+                            .font(
+                                mode == .rail
+                                    ? .system(size: 14, weight: .regular)
+                                    : .body.weight(.semibold)
+                            )
                             .monospacedDigit()
                             .frame(minWidth: 24, alignment: .trailing)
                     }
@@ -89,7 +96,7 @@ struct StationDepartureRow: View {
 
     @ViewBuilder
     private var leadingRouteButton: some View {
-        if routeLabel != nil {
+        if showsRouteBadge {
             Button {
                 openRoute()
             } label: {
@@ -120,9 +127,9 @@ struct StationDepartureRow: View {
         }
         let hasAgency = mode == .rail && resolvedAgencyName != nil
 
-        if layout == .regular, mode == .rail, routeLabel != nil || !values.isEmpty || hasAgency {
+        if layout == .regular, mode == .rail, showsRouteBadge || !values.isEmpty || hasAgency {
             HStack(spacing: 5) {
-                if routeLabel != nil {
+                if showsRouteBadge {
                     Button {
                         openRoute()
                     } label: {
@@ -193,7 +200,22 @@ struct StationDepartureRow: View {
         return value
     }
 
-    private var destinationText: String {
+    private var destinationLabel: Text {
+        var value = AttributedString(destinationText)
+        value.font = mode == .rail
+            ? .system(size: 14, weight: .medium)
+            : .subheadline.weight(.semibold)
+
+        if mode == .rail, let trainNumberText {
+            var trainNumber = AttributedString(" \(trainNumberText)")
+            trainNumber.font = .system(size: 14, weight: .regular)
+            value.append(trainNumber)
+        }
+
+        return Text(value)
+    }
+
+    private var destinationComponents: [String] {
         var components: [String] = []
 
         for candidate in [event.finalStationName, event.headsign] {
@@ -205,16 +227,24 @@ struct StationDepartureRow: View {
             components.append(value)
         }
 
-        if mode == .rail,
-           let tripName = effectiveTripName,
-           !tripName.isEmpty,
-           !components.contains(where: { $0.caseInsensitiveCompare(tripName) == .orderedSame }) {
-            components.append(tripName)
-        }
+        return components
+    }
 
-        return components.isEmpty
+    private var destinationText: String {
+        destinationComponents.isEmpty
             ? L10n.string("Departure")
-            : components.joined(separator: " ")
+            : destinationComponents.joined(separator: " ")
+    }
+
+    private var trainNumberText: String? {
+        guard mode == .rail,
+              let tripName = effectiveTripName,
+              !destinationComponents.contains(where: {
+                  $0.caseInsensitiveCompare(tripName) == .orderedSame
+              }) else {
+            return nil
+        }
+        return tripName
     }
 
     private var effectiveTripName: String? {
