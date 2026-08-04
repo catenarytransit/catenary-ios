@@ -2353,12 +2353,6 @@ struct mapLibreView: View, Equatable {
                 sourceCoordinator?.updateWildfireFeatures(features)
             }
         }
-        .onMapStyleLoaded { style in
-            featureTapCoordinator.installPersistentMapContent(
-                style: style,
-                layerDefinitions: persistentMapLayerDefinitions
-            )
-        }
         .onMapViewProxyUpdate(updateMode: .onFinish, onViewProxyChanged: { proxy in
             Task { @MainActor in
                 nearbyPinMapCoordinator.refreshScreenPoint()
@@ -2379,6 +2373,12 @@ struct mapLibreView: View, Equatable {
                 )
             }
         })
+        .onMapStyleLoaded { style in
+            featureTapCoordinator.installPersistentMapContent(
+                style: style,
+                layerDefinitions: persistentMapLayerDefinitions
+            )
+        }
         .task {
             featureTapCoordinator.updateLayerSettings(layerSettings)
             realtimeVM.updateLayerSettings(layerSettings)
