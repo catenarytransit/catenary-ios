@@ -25,6 +25,131 @@ final class FloatingWindow: UIWindow {
     }
 }
 
+private struct NativeSheetLeadingAnchor: UIViewControllerRepresentable {
+    @Binding var sheetWidth: CGFloat
+
+    func makeUIViewController(context: Context) -> NativeSheetLeadingAnchorController {
+        let controller = NativeSheetLeadingAnchorController()
+        configure(controller)
+        return controller
+    }
+
+    func updateUIViewController(
+        _ uiViewController: NativeSheetLeadingAnchorController,
+        context: Context
+    ) {
+        configure(uiViewController)
+        uiViewController.scheduleUpdate()
+    }
+
+    private func configure(_ controller: NativeSheetLeadingAnchorController) {
+        let widthBinding = $sheetWidth
+        controller.onSheetWidthChange = { width in
+            guard abs(widthBinding.wrappedValue - width) > 0.5 else { return }
+            widthBinding.wrappedValue = width
+        }
+    }
+}
+
+private final class NativeSheetLeadingAnchorController: UIViewController {
+    var onSheetWidthChange: ((CGFloat) -> Void)?
+    private var delayedUpdate: DispatchWorkItem?
+
+    override func loadView() {
+        let view = UIView(frame: .zero)
+        view.backgroundColor = .clear
+        view.isUserInteractionEnabled = false
+        self.view = view
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        scheduleUpdate()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        scheduleUpdate()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        scheduleUpdate()
+    }
+
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        scheduleUpdate()
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        scheduleUpdate()
+    }
+
+    deinit {
+        delayedUpdate?.cancel()
+    }
+
+    func scheduleUpdate() {
+        applySheetPosition()
+
+        delayedUpdate?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.applySheetPosition()
+        }
+        delayedUpdate = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: workItem)
+    }
+
+    private func applySheetPosition() {
+        guard let sheetController = containingPresentedController,
+              let presentationController = sheetController.presentationController,
+              let containerView = presentationController.containerView,
+              let sheetView = presentationController.presentedView else {
+            return
+        }
+
+        let shouldUseLeadingAnchor = traitCollection.userInterfaceIdiom == .pad
+            && containerView.bounds.width >= 600
+
+        var transform = sheetView.transform
+        guard shouldUseLeadingAnchor else {
+            if abs(transform.tx) > 0.5 {
+                transform.tx = 0
+                sheetView.transform = transform
+            }
+            return
+        }
+
+        guard sheetView.bounds.width > 0 else { return }
+        onSheetWidthChange?(sheetView.bounds.width)
+
+        let windowLeadingInset = view.window?.safeAreaInsets.left ?? 0
+        let leadingMargin = max(containerView.safeAreaInsets.left, windowLeadingInset) + 16
+        let naturalLeadingEdge = sheetView.center.x - (sheetView.bounds.width / 2)
+        let translationX = leadingMargin - naturalLeadingEdge
+
+        guard abs(transform.tx - translationX) > 0.5 else { return }
+        transform.tx = translationX
+        sheetView.transform = transform
+    }
+
+    private var containingPresentedController: UIViewController? {
+        var controller: UIViewController? = self
+
+        while let current = controller {
+            if current.presentingViewController != nil,
+               current.presentationController?.presentedViewController === current {
+                return current
+            }
+            controller = current.parent
+        }
+
+        return nil
+    }
+}
+
 struct MainUIView: View {
     let searchViewModel: SearchViewModel
 
@@ -41,24 +166,16 @@ struct MainUIView: View {
     @State private var mapCameraRevision: UInt64 = 0
     @State private var searchFocusRequest = 0
     @State private var isSearchSheetTransitioning = false
-    
-    
+    @State private var nativeSheetWidth: CGFloat = 0
+    @GestureState private var drawerDragOffset: CGFloat = 0
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+
     var body: some View {
         ZStack {
-            mapLibreView(
-                locationManager: locationManager,
-                nearbyPinMapCoordinator: nearbyPinMapCoordinator,
-                nearbyPinActive: nearbyPinActive,
-                nearbyPinCoordinate: nearbyPinCoordinate,
-                contentInset: mapContentInset,
-                camera: $viewobject.camera,
-                cameraRevision: mapCameraRevision,
-                layerSettings: viewobject.allLayerSettings,
-                selectedStopContext: viewobject.selectedStopContext,
-                viewobject: viewobject
-            )
-                .equatable()
-                .onChange(of: viewobject.camera) { _, camera in
+            baseMapView
+                .catenaryOnChange(of: viewobject.camera) { _, camera in
                     guard camera.lastReasonForChange == nil
                             || camera.lastReasonForChange == .programmatic else {
                         return
@@ -69,60 +186,32 @@ struct MainUIView: View {
                     viewobject.openDeepLink(url)
                     isSheetPresented = true
                 }
-                .onChange(of: viewobject.catenaryStack) { _, stack in
+                .catenaryOnChange(of: viewobject.catenaryStack) { _, stack in
                     guard !stack.isEmpty else { return }
                     isSheetPresented = true
                     if viewobject.presDetent != .large {
                         viewobject.presDetent = .large
                     }
                 }
-                .sheet(isPresented: $isSheetPresented) {
-                    BottomDrawer(
-                        selectedDetent: $viewobject.presDetent,
-                        sheetHeight: liveSheetHeight,
-                        locationManager: locationManager,
-                        searchViewModel: searchViewModel,
-                        focusRequest: searchFocusRequest,
-                        nearbyPinActive: $nearbyPinActive,
-                        nearbyPinCoordinate: $nearbyPinCoordinate
-                    )
-                        .ignoresSafeArea(.keyboard)
-                        .presentationDetents([.height(80), .height(350), .large], selection: $viewobject.presDetent)
-                        
-                        .presentationBackgroundInteraction(.enabled)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        
-                        .ignoresSafeArea(.container, edges: .bottom)
-                        .interactiveDismissDisabled()
-                        .onGeometryChange(for: CGFloat.self) { proxy in
-                            max(proxy.size.height, 0)
-                        } action: { _, newValue in
-                            guard !isSearchSheetTransitioning else { return }
-
-                            let maximumHeight = viewobject.largeDetentHeight > 0
-                                ? viewobject.largeDetentHeight
-                                : newValue
-                            let boundedHeight = min(newValue, maximumHeight)
-                            if abs(liveSheetHeight - boundedHeight) > 0.5 {
-                                liveSheetHeight = boundedHeight
-                            }
-
-
-                            let progress = max(min((newValue - 400) / 50, 1), 0)
-                            let toolbarOpacity = 1 - progress
-                            if abs(locationOpacity - toolbarOpacity) > 0.005 {
-                                locationOpacity = toolbarOpacity
-                            }
-                        }
+                .sheet(isPresented: nativeSheetPresentationBinding) {
+                    bottomDrawerSheet
                 }
-                
-                .onChange(of: viewobject.showLayerSelector) { last, current in
-                    withAnimation(.bouncy) {
+                .catenaryOnChange(of: viewobject.showLayerSelector) { last, current in
+                    withAnimation(.catenaryBouncy) {
                         if current {
                             isSheetPresented = false
                         } else {
                             isSheetPresented = true
                         }
+                    }
+                }
+                .overlay(alignment: .bottomLeading) {
+                    if usesCustomDrawer, isSheetPresented {
+                        leadingDrawer
+                            .padding(.horizontal, drawerOuterPadding)
+                            .padding(.top, drawerOuterPadding)
+                            .padding(.bottom, drawerBottomPadding)
+                            .transition(.move(edge: .leading).combined(with: .opacity))
                     }
                 }
                 .overlay {
@@ -137,10 +226,11 @@ struct MainUIView: View {
                     if isSheetPresented {
                         floatingToolBar()
                             .padding(.trailing, 15)
+                            .padding(.bottom, usesLeadingPaneLayout ? 15 : 0)
                             .transition(.move(edge: .trailing))
                     }
                 }
-                .overlay(alignment: .top) {
+                .overlay(alignment: usesLeadingPaneLayout ? .topLeading : .top) {
                     if isSheetPresented,
                        viewobject.currentStackItem == nil,
                        viewobject.presDetent != .large {
@@ -148,17 +238,30 @@ struct MainUIView: View {
                             onSearch: beginSearch,
                             onSettingsClick: { viewobject.push(.settings) }
                         )
-                        .padding()
+                        .frame(width: usesLeadingPaneLayout ? leadingPaneWidth : nil)
+                        .padding(drawerOuterPadding)
                         .ignoresSafeArea(.container, edges: .bottom)
                         .transition(.opacity)
                     }
                 }
 
         }
-        .onGeometryChange(for: CGSize.self) { proxy in
+        .catenaryOnGeometryChange(for: CGSize.self) { proxy in
             proxy.size
         } action: { _, newSize in
             mapViewportSize = newSize
+
+            // A medium-height drawer is not useful on a short landscape phone.
+            // Preserve roughly the same amount of visible content by promoting
+            // the portrait medium detent to the expanded side drawer.
+            if usesLandscapePhoneDrawer, viewobject.presDetent == .height(350) {
+                viewobject.presDetent = .large
+            }
+
+            if usesCustomDrawer, viewobject.presDetent == .large {
+                liveSheetHeight = drawerMaximumHeight
+                locationOpacity = usesLandscapePhoneDrawer ? 1 : 0
+            }
         }
         .task(id: searchFocusRequest) {
             guard searchFocusRequest > 0 else { return }
@@ -166,8 +269,19 @@ struct MainUIView: View {
             try? await Task.sleep(nanoseconds: 450_000_000)
             isSearchSheetTransitioning = false
         }
-        .onChange(of: viewobject.presDetent) { _, detent in
-            guard detent != .large else { return }
+        .catenaryOnChange(of: viewobject.presDetent) { _, detent in
+            if usesLandscapePhoneDrawer, detent == .height(350) {
+                viewobject.presDetent = .large
+                return
+            }
+
+            if detent == .large {
+                if usesCustomDrawer {
+                    locationOpacity = usesLandscapePhoneDrawer ? 1 : 0
+                    liveSheetHeight = drawerMaximumHeight
+                }
+                return
+            }
 
             isSearchSheetTransitioning = false
             locationOpacity = 1
@@ -177,19 +291,173 @@ struct MainUIView: View {
             locationManager.checkLocationAuthorization()
             useInitialUserLocationIfNeeded()
         }
-        .onChange(of: locationManager.lastKnownLocation?.latitude) { _, _ in
+        .catenaryOnChange(of: locationManager.lastKnownLocation?.latitude) { _, _ in
             useInitialUserLocationIfNeeded()
         }
-        .onChange(of: locationManager.lastKnownLocation?.longitude) { _, _ in
+        .catenaryOnChange(of: locationManager.lastKnownLocation?.longitude) { _, _ in
             useInitialUserLocationIfNeeded()
         }
     }
     @EnvironmentObject var viewobject: viewObject
 
+    private var baseMapView: some View {
+        mapLibreView(
+            locationManager: locationManager,
+            nearbyPinMapCoordinator: nearbyPinMapCoordinator,
+            nearbyPinActive: nearbyPinActive,
+            nearbyPinCoordinate: nearbyPinCoordinate,
+            contentInset: mapContentInset,
+            camera: $viewobject.camera,
+            cameraRevision: mapCameraRevision,
+            layerSettings: viewobject.allLayerSettings,
+            selectedStopContext: viewobject.selectedStopContext,
+            viewobject: viewobject
+        )
+        .equatable()
+    }
+
+    private var bottomDrawerSheet: some View {
+        drawerContent(sheetHeight: liveSheetHeight)
+            .presentationDetents([.height(80), .height(350), .large], selection: $viewobject.presDetent)
+            .presentationDragIndicator(.visible)
+            .presentationBackgroundInteraction(.enabled)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea(.container, edges: .bottom)
+            .interactiveDismissDisabled()
+            .background(
+                NativeSheetLeadingAnchor(sheetWidth: $nativeSheetWidth)
+            )
+            .catenaryOnGeometryChange(for: CGFloat.self) { proxy in
+                max(proxy.size.height, 0)
+            } action: { _, newValue in
+                guard !isSearchSheetTransitioning else { return }
+
+                let maximumHeight = viewobject.largeDetentHeight > 0
+                    ? viewobject.largeDetentHeight
+                    : newValue
+                let boundedHeight = min(newValue, maximumHeight)
+                if abs(liveSheetHeight - boundedHeight) > 0.5 {
+                    liveSheetHeight = boundedHeight
+                }
+
+                let progress = max(min((newValue - 400) / 50, 1), 0)
+                let toolbarOpacity = 1 - progress
+                if abs(locationOpacity - toolbarOpacity) > 0.005 {
+                    locationOpacity = toolbarOpacity
+                }
+            }
+    }
+
+    private func drawerContent(sheetHeight: CGFloat) -> some View {
+        BottomDrawer(
+            selectedDetent: $viewobject.presDetent,
+            sheetHeight: sheetHeight,
+            locationManager: locationManager,
+            searchViewModel: searchViewModel,
+            focusRequest: searchFocusRequest,
+            nearbyPinActive: $nearbyPinActive,
+            nearbyPinCoordinate: $nearbyPinCoordinate
+        )
+        .ignoresSafeArea(.keyboard)
+    }
+
+    private var leadingDrawer: some View {
+        drawerContent(sheetHeight: drawerVisibleHeight)
+            .frame(width: leadingPaneWidth, height: drawerVisibleHeight)
+            .background(drawerMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: drawerCornerRadius, style: .continuous))
+            .overlay(alignment: .top) {
+                drawerDragHandle
+            }
+            .shadow(radius: 12, y: 4)
+    }
+
+    private var drawerDragHandle: some View {
+        Capsule()
+            .fill(Color.secondary.opacity(0.45))
+            .frame(width: 36, height: 5)
+            .frame(width: 96, height: 28)
+            .contentShape(Rectangle())
+            .gesture(drawerDragGesture)
+            .accessibilityLabel(Text("Resize drawer"))
+    }
+
+    private var isLandscapeDrawerCollapsed: Bool {
+        usesLandscapePhoneDrawer && viewobject.presDetent == .height(80)
+    }
+
+    private var drawerMaterial: Material {
+        isLandscapeDrawerCollapsed ? .thinMaterial : .regularMaterial
+    }
+
+    private var drawerCornerRadius: CGFloat {
+        isLandscapeDrawerCollapsed ? 40 : 18
+    }
+
+    private var drawerDragGesture: some Gesture {
+        DragGesture(minimumDistance: 5)
+            .updating($drawerDragOffset) { value, state, _ in
+                state = value.translation.height
+            }
+            .onEnded { value in
+                settleDrawer(predictedTranslation: value.predictedEndTranslation.height)
+            }
+    }
+
+    private var drawerMaximumHeight: CGFloat {
+        let viewportHeight = mapViewportSize.height > 0
+            ? mapViewportSize.height
+            : UIScreen.main.bounds.height
+        let availableHeight = viewportHeight - drawerOuterPadding - drawerBottomPadding
+        return max(availableHeight, 80)
+    }
+
+    private var drawerBaseHeight: CGFloat {
+        if viewobject.presDetent == .height(80) {
+            return 80
+        }
+
+        // Landscape phones intentionally expose only collapsed and expanded.
+        // Treat any stale/programmatic medium detent as expanded.
+        if usesLandscapePhoneDrawer {
+            return drawerMaximumHeight
+        }
+
+        if viewobject.presDetent == .large {
+            return drawerMaximumHeight
+        }
+        return min(350, drawerMaximumHeight)
+    }
+
+    private var drawerVisibleHeight: CGFloat {
+        min(
+            max(drawerBaseHeight - drawerDragOffset, 80),
+            drawerMaximumHeight
+        )
+    }
+
+    private func settleDrawer(predictedTranslation: CGFloat) {
+        let threshold: CGFloat = 44
+        guard abs(predictedTranslation) >= threshold else { return }
+
+        let nextDetent: PresentationDetent
+        if usesLandscapePhoneDrawer {
+            nextDetent = predictedTranslation < 0 ? .large : .height(80)
+        } else if predictedTranslation < 0 {
+            nextDetent = viewobject.presDetent == .height(80) ? .height(350) : .large
+        } else {
+            nextDetent = viewobject.presDetent == .large ? .height(350) : .height(80)
+        }
+
+        withAnimation(.catenaryBouncy) {
+            viewobject.presDetent = nextDetent
+        }
+    }
+
     private func beginSearch() {
         guard viewobject.currentStackItem == nil else { return }
         isSearchSheetTransitioning = true
-        locationOpacity = 0
+        locationOpacity = usesLandscapePhoneDrawer ? 1 : 0
         viewobject.presDetent = .large
         searchFocusRequest &+= 1
     }
@@ -199,9 +467,103 @@ struct MainUIView: View {
         viewobject.useInitialUserLocationIfNeeded(coordinate)
     }
 
+    private var nativeSheetPresentationBinding: Binding<Bool> {
+        Binding(
+            get: {
+                isSheetPresented && !usesCustomDrawer
+            },
+            set: { presented in
+                guard !usesCustomDrawer else { return }
+                isSheetPresented = presented
+            }
+        )
+    }
+
+    private var usesLegacyTabletDrawer: Bool {
+        guard UIDevice.current.userInterfaceIdiom == .pad,
+              horizontalSizeClass == .regular else {
+            return false
+        }
+
+        if #available(iOS 17.0, *) {
+            return false
+        }
+        return true
+    }
+
+    private var usesLandscapePhoneDrawer: Bool {
+        guard UIDevice.current.userInterfaceIdiom == .phone else { return false }
+
+        if mapViewportSize.width > 0, mapViewportSize.height > 0 {
+            return mapViewportSize.width > mapViewportSize.height
+        }
+        return verticalSizeClass == .compact
+    }
+
+    private var usesCustomDrawer: Bool {
+        usesLegacyTabletDrawer || usesLandscapePhoneDrawer
+    }
+
+    private var usesTabletLayout: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad && mapViewportSize.width >= 600
+    }
+
+    private var usesLeadingPaneLayout: Bool {
+        usesCustomDrawer || usesTabletLayout
+    }
+
+    private var drawerOuterPadding: CGFloat {
+        usesLandscapePhoneDrawer ? 8 : 16
+    }
+
+    private var drawerBottomPadding: CGFloat {
+        if usesLandscapePhoneDrawer, viewobject.presDetent == .large {
+            return 0
+        }
+        return drawerOuterPadding
+    }
+
+    private var leadingPaneWidth: CGFloat {
+        if usesLandscapePhoneDrawer {
+            return landscapePhoneDrawerWidth
+        }
+        if usesLegacyTabletDrawer {
+            return min(tabletPaneWidth, 440)
+        }
+        return tabletPaneWidth
+    }
+
+    private var landscapePhoneDrawerWidth: CGFloat {
+        let viewportWidth = mapViewportSize.width > 0
+            ? mapViewportSize.width
+            : UIScreen.main.bounds.width
+
+        // The left padding plus the panel width ends at the screen midpoint.
+        return max((viewportWidth / 2) - drawerOuterPadding, 0)
+    }
+
+    private var tabletPaneWidth: CGFloat {
+        let viewportWidth = mapViewportSize.width > 0
+            ? mapViewportSize.width
+            : UIScreen.main.bounds.width
+        let availableWidth = max(viewportWidth - 32, 0)
+        let fallbackWidth = min(600, max(viewportWidth * 0.5, 320))
+        let preferredWidth = nativeSheetWidth > 0 ? nativeSheetWidth : fallbackWidth
+        return min(preferredWidth, availableWidth)
+    }
+
     private var mapContentInset: UIEdgeInsets {
         guard isSheetPresented, mapViewportSize.height > 0 else { return .zero }
         guard viewobject.presDetent == .large else { return .zero }
+
+        if usesLeadingPaneLayout {
+            return UIEdgeInsets(
+                top: 0,
+                left: leadingPaneWidth + drawerOuterPadding,
+                bottom: 0,
+                right: 0
+            )
+        }
 
         return UIEdgeInsets(
             top: 0,
@@ -210,7 +572,7 @@ struct MainUIView: View {
             right: 0
         )
     }
-    
+
     @ViewBuilder
     func floatingToolBar() -> some View {
         Group {
@@ -229,7 +591,7 @@ struct MainUIView: View {
                     .foregroundStyle(Color.primary)
                 }
                 VStack {
-                    
+
                     Button {
                         //                locationManager.checkLocationAuthorization()
                         //                    viewobject.camera.setDirection(0)
@@ -245,20 +607,20 @@ struct MainUIView: View {
                         Image(systemName: "location\(viewobject.centered ? ".fill" : "")")
                     }
                     .padding(.top)
-                    
+
                 }
                 .padding(.all, 10)
                 .background(.regularMaterial, in: Capsule())
-                
+
             }
             .font(.title3)
-            .offset(y: -min(liveSheetHeight, 350))
+            .offset(y: usesLeadingPaneLayout ? 0 : -min(liveSheetHeight, 350))
             .opacity(locationOpacity)
         }
-        
+
     }
-    
-    
+
+
 }
 
 

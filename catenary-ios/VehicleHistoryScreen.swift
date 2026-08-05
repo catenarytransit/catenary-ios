@@ -29,7 +29,7 @@ struct VehicleHistoryScreen: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 44)
                 } else if let errorMessage = model.errorMessage {
-                    ContentUnavailableView {
+                    CatenaryUnavailableView {
                         Label {
                             Text(
                                 verbatim: L10n.string(
@@ -53,7 +53,7 @@ struct VehicleHistoryScreen: View {
                     }
                     .frame(maxWidth: .infinity)
                 } else if sections.isEmpty {
-                    ContentUnavailableView {
+                    CatenaryUnavailableView {
                         Label {
                             Text(
                                 verbatim: L10n.string(
@@ -108,7 +108,7 @@ struct VehicleHistoryScreen: View {
                         .frame(width: 24, height: 24)
                 }
                 .buttonStyle(.bordered)
-                .buttonBorderShape(.circle)
+                .catenaryCircularButtonBorderShape()
                 .accessibilityLabel(
                     newestFirst
                         ? L10n.string(

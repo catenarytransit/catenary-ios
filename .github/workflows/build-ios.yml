@@ -17,14 +17,28 @@ concurrency:
 
 jobs:
   build:
-    name: Build SwiftUI app
+    name: Build for iOS ${{ matrix.deployment_target }}
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 45
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Compiles the legacy branches below iOS 17 and iOS 18.
+          - deployment_target: "16.0"
+            build_name: legacy
+
+          # Compiles the modern code paths with the current runner SDK.
+          - deployment_target: "26.0"
+            build_name: current
 
     env:
       PROJECT: catenary-ios.xcodeproj
       SCHEME: catenary-ios
-      DERIVED_DATA: ${{ github.workspace }}/DerivedData
+      DERIVED_DATA: ${{ github.workspace }}/DerivedData-${{ matrix.build_name }}
+      SOURCE_PACKAGES: ${{ github.workspace }}/SourcePackages-${{ matrix.build_name }}
+      BUILD_LOG: ${{ github.workspace }}/xcodebuild-${{ matrix.build_name }}.log
 
     steps:
       - name: Check out repository
@@ -37,28 +51,98 @@ jobs:
         run: |
           xcodebuild -version
           xcodebuild -showsdks
+          echo "Deployment target: iOS ${{ matrix.deployment_target }}"
+
+      - name: Clear Xcode and SwiftPM state
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          rm -rf "$DERIVED_DATA"
+          rm -rf "$SOURCE_PACKAGES"
+          rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
+          rm -rf "$HOME/Library/Caches/org.swift.swiftpm"
+          rm -rf "$HOME/Library/org.swift.swiftpm"
+          rm -rf "$HOME/.swiftpm"
+          rm -rf /tmp/org.swift.swiftpm
+
+          mkdir -p "$DERIVED_DATA"
+          mkdir -p "$SOURCE_PACKAGES"
 
       - name: Resolve Swift packages
+        shell: bash
         run: |
+          set -euxo pipefail
+
           xcodebuild \
             -resolvePackageDependencies \
             -project "$PROJECT" \
-            -scheme "$SCHEME"
+            -scheme "$SCHEME" \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES"
 
       - name: Build app
+        shell: bash
         run: |
           set -o pipefail
 
+          build_app() {
+            rm -f "$BUILD_LOG"
+
+            xcodebuild \
+              -project "$PROJECT" \
+              -scheme "$SCHEME" \
+              -configuration Debug \
+              -sdk iphonesimulator \
+              -destination "generic/platform=iOS Simulator" \
+              -derivedDataPath "$DERIVED_DATA" \
+              -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
+              -skipPackagePluginValidation \
+              -skipMacroValidation \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY="" \
+              COMPILER_INDEX_STORE_ENABLE=NO \
+              IPHONEOS_DEPLOYMENT_TARGET="${{ matrix.deployment_target }}" \
+              build 2>&1 | tee "$BUILD_LOG"
+          }
+
+          if build_app; then
+            exit 0
+          fi
+
+          if ! grep -Eqi \
+            'DecodingError\.dataCorrupted|Data was corrupted|unexpected end of file' \
+            "$BUILD_LOG"; then
+            echo "Build failed for a non-cache-related reason; not retrying."
+            exit 1
+          fi
+
+          echo "Detected corrupted Xcode/SwiftPM state. Clearing it and retrying once."
+
+          rm -rf "$DERIVED_DATA"
+          rm -rf "$SOURCE_PACKAGES"
+          rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
+          rm -rf "$HOME/Library/Caches/org.swift.swiftpm"
+          rm -rf "$HOME/Library/org.swift.swiftpm"
+          rm -rf "$HOME/.swiftpm"
+          rm -rf /tmp/org.swift.swiftpm
+
+          mkdir -p "$DERIVED_DATA"
+          mkdir -p "$SOURCE_PACKAGES"
+
           xcodebuild \
+            -resolvePackageDependencies \
             -project "$PROJECT" \
             -scheme "$SCHEME" \
-            -configuration Debug \
-            -destination "generic/platform=iOS Simulator" \
-            -derivedDataPath "$DERIVED_DATA" \
-            -skipPackagePluginValidation \
-            -skipMacroValidation \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            build
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES"
+
+          build_app
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-${{ matrix.build_name }}
+          path: ${{ env.BUILD_LOG }}
+          if-no-files-found: ignore
+          retention-days: 7

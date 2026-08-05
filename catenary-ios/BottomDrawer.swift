@@ -110,17 +110,17 @@ struct BottomDrawer: View {
                   viewObject.currentStackItem == nil else { return }
             isFocused = true
         }
-        .onChange(of: selectedDetent) { _, detent in
+        .catenaryOnChange(of: selectedDetent) { _, detent in
             if detent != .large, isSearchActive {
                 finishSearch()
             }
         }
-        .onChange(of: isFocused) { _, focused in
+        .catenaryOnChange(of: isFocused) { _, focused in
             if focused {
                 isSearchActive = true
             }
         }
-        .onChange(of: viewObject.catenaryStack) { _, stack in
+        .catenaryOnChange(of: viewObject.catenaryStack) { _, stack in
             if !stack.isEmpty {
                 finishSearch()
             }
@@ -192,7 +192,7 @@ private struct StackNavigationControls: View {
                     .frame(width: 40, height: 40)
             }
             .buttonStyle(.bordered)
-            .buttonBorderShape(.circle)
+            .catenaryCircularButtonBorderShape()
             .disabled(!canGoBack)
 
             Button(action: onHome) {
@@ -200,7 +200,7 @@ private struct StackNavigationControls: View {
                     .frame(width: 40, height: 40)
             }
             .buttonStyle(.bordered)
-            .buttonBorderShape(.circle)
+            .catenaryCircularButtonBorderShape()
 
             Spacer()
         }

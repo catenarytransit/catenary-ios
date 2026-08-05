@@ -133,7 +133,7 @@ struct RouteScreen: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 32)
                 } else if let errorMessage = model.errorMessage {
-                    ContentUnavailableView {
+                    CatenaryUnavailableView {
                         Label("Unable to load route", systemImage: "wifi.exclamationmark")
                     } description: {
                         Text(errorMessage)

@@ -27,7 +27,7 @@ struct SingleTripScreen: View {
                 } else if let tripData = model.tripData {
                     tripContent(tripData, proxy: proxy)
                 } else {
-                    ContentUnavailableView(
+                    CatenaryUnavailableView(
                         "Trip unavailable",
                         systemImage: "tram.fill",
                         description: Text("Ramonda did not return information for this trip.")
@@ -40,10 +40,10 @@ struct SingleTripScreen: View {
             .onDisappear {
                 model.stop()
             }
-            .onChange(of: model.currentAtStopIndex) { _, _ in
+            .catenaryOnChange(of: model.currentAtStopIndex) { _, _ in
                 scrollToCurrentStopIfNeeded(proxy)
             }
-            .onChange(of: model.lastInactiveStopIndex) { _, _ in
+            .catenaryOnChange(of: model.lastInactiveStopIndex) { _, _ in
                 scrollToCurrentStopIfNeeded(proxy)
             }
         }
@@ -64,7 +64,7 @@ struct SingleTripScreen: View {
     }
 
     private func errorView(_ message: String) -> some View {
-        ContentUnavailableView {
+        CatenaryUnavailableView {
             Label("Unable to load trip", systemImage: "exclamationmark.triangle.fill")
         } description: {
             Text(message)
@@ -189,7 +189,7 @@ struct SingleTripScreen: View {
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.circle)
+                .catenaryCircularButtonBorderShape()
                 .padding()
                 .accessibilityLabel("Scroll to current stop")
             }
