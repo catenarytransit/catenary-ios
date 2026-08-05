@@ -226,7 +226,7 @@ struct MainUIView: View {
                     if isSheetPresented {
                         floatingToolBar()
                             .padding(.trailing, 15)
-                            .padding(.bottom, usesLeadingPaneLayout ? 15 : 0)
+                            .padding(.bottom, floatingToolbarBottomPadding)
                             .transition(.move(edge: .trailing))
                     }
                 }
@@ -279,12 +279,22 @@ struct MainUIView: View {
                 if usesCustomDrawer {
                     locationOpacity = usesLandscapePhoneDrawer ? 1 : 0
                     liveSheetHeight = drawerMaximumHeight
+                } else if usesPortraitPhoneDrawer {
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        locationOpacity = 0
+                    }
                 }
                 return
             }
 
             isSearchSheetTransitioning = false
-            locationOpacity = 1
+            if usesPortraitPhoneDrawer {
+                withAnimation(.easeOut(duration: 0.18)) {
+                    locationOpacity = 1
+                }
+            } else {
+                locationOpacity = 1
+            }
             liveSheetHeight = detent == .height(80) ? 80 : 350
         }
         .task {
@@ -340,10 +350,15 @@ struct MainUIView: View {
                     liveSheetHeight = boundedHeight
                 }
 
-                let progress = max(min((newValue - 400) / 50, 1), 0)
-                let toolbarOpacity = 1 - progress
-                if abs(locationOpacity - toolbarOpacity) > 0.005 {
-                    locationOpacity = toolbarOpacity
+                // Match Android's anchored FAB behavior on portrait phones: keep
+                // the toolbar visible while the sheet is moving and hide it only
+                // after the sheet settles at the expanded detent.
+                if !usesPortraitPhoneDrawer {
+                    let progress = max(min((newValue - 400) / 50, 1), 0)
+                    let toolbarOpacity = 1 - progress
+                    if abs(locationOpacity - toolbarOpacity) > 0.005 {
+                        locationOpacity = toolbarOpacity
+                    }
                 }
             }
     }
@@ -504,12 +519,26 @@ struct MainUIView: View {
         usesLegacyTabletDrawer || usesLandscapePhoneDrawer
     }
 
+    private var usesPortraitPhoneDrawer: Bool {
+        UIDevice.current.userInterfaceIdiom == .phone && !usesLandscapePhoneDrawer
+    }
+
     private var usesTabletLayout: Bool {
         UIDevice.current.userInterfaceIdiom == .pad && mapViewportSize.width >= 600
     }
 
     private var usesLeadingPaneLayout: Bool {
         usesCustomDrawer || usesTabletLayout
+    }
+
+    private var floatingToolbarBottomPadding: CGFloat {
+        if usesPortraitPhoneDrawer { return 16 }
+        return usesLeadingPaneLayout ? 15 : 0
+    }
+
+    private var floatingToolbarYOffset: CGFloat {
+        if usesPortraitPhoneDrawer { return -liveSheetHeight }
+        return usesLeadingPaneLayout ? 0 : -min(liveSheetHeight, 350)
     }
 
     private var drawerOuterPadding: CGFloat {
@@ -614,7 +643,10 @@ struct MainUIView: View {
 
             }
             .font(.title3)
-            .offset(y: usesLeadingPaneLayout ? 0 : -min(liveSheetHeight, 350))
+            .offset(y: floatingToolbarYOffset)
+            // The native sheet already reports intermediate heights. Avoid adding
+            // another animation layer so the toolbar stays locked to its top edge.
+            .animation(nil, value: liveSheetHeight)
             .opacity(locationOpacity)
         }
 
