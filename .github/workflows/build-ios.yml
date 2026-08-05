@@ -69,6 +69,12 @@ jobs:
           mkdir -p "$DERIVED_DATA"
           mkdir -p "$SOURCE_PACKAGES"
 
+          # Xcode 26 can select incompatible SwiftSyntax prebuilts for macro
+          # targets in command-line simulator builds. Force source builds.
+          defaults write com.apple.dt.Xcode IDEPackageEnablePrebuilts -bool NO
+          mkdir -p "$HOME/.swiftpm/cache/prebuilts"
+          touch "$HOME/.swiftpm/cache/prebuilts/noprebuilts"
+
       - name: Resolve Swift packages
         shell: bash
         run: |
@@ -92,7 +98,6 @@ jobs:
               -project "$PROJECT" \
               -scheme "$SCHEME" \
               -configuration Debug \
-              -sdk iphonesimulator \
               -destination "generic/platform=iOS Simulator" \
               -derivedDataPath "$DERIVED_DATA" \
               -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
@@ -129,6 +134,10 @@ jobs:
 
           mkdir -p "$DERIVED_DATA"
           mkdir -p "$SOURCE_PACKAGES"
+
+          defaults write com.apple.dt.Xcode IDEPackageEnablePrebuilts -bool NO
+          mkdir -p "$HOME/.swiftpm/cache/prebuilts"
+          touch "$HOME/.swiftpm/cache/prebuilts/noprebuilts"
 
           xcodebuild \
             -resolvePackageDependencies \
