@@ -208,7 +208,9 @@ struct MainUIView: View {
                 .overlay(alignment: .bottomLeading) {
                     if usesCustomDrawer, isSheetPresented {
                         leadingDrawer
-                            .padding(drawerOuterPadding)
+                            .padding(.horizontal, drawerOuterPadding)
+                            .padding(.top, drawerOuterPadding)
+                            .padding(.bottom, drawerBottomPadding)
                             .transition(.move(edge: .leading).combined(with: .opacity))
                     }
                 }
@@ -257,7 +259,7 @@ struct MainUIView: View {
             }
 
             if usesCustomDrawer, viewobject.presDetent == .large {
-                liveSheetHeight = max(newSize.height - (drawerOuterPadding * 2), 80)
+                liveSheetHeight = drawerMaximumHeight
                 locationOpacity = usesLandscapePhoneDrawer ? 1 : 0
             }
         }
@@ -362,8 +364,8 @@ struct MainUIView: View {
     private var leadingDrawer: some View {
         drawerContent(sheetHeight: drawerVisibleHeight)
             .frame(width: leadingPaneWidth, height: drawerVisibleHeight)
-            .background(.regularMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(drawerMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: drawerCornerRadius, style: .continuous))
             .overlay(alignment: .top) {
                 drawerDragHandle
             }
@@ -380,6 +382,18 @@ struct MainUIView: View {
             .accessibilityLabel(Text("Resize drawer"))
     }
 
+    private var isLandscapeDrawerCollapsed: Bool {
+        usesLandscapePhoneDrawer && viewobject.presDetent == .height(80)
+    }
+
+    private var drawerMaterial: Material {
+        isLandscapeDrawerCollapsed ? .thinMaterial : .regularMaterial
+    }
+
+    private var drawerCornerRadius: CGFloat {
+        isLandscapeDrawerCollapsed ? 40 : 18
+    }
+
     private var drawerDragGesture: some Gesture {
         DragGesture(minimumDistance: 5)
             .updating($drawerDragOffset) { value, state, _ in
@@ -394,7 +408,8 @@ struct MainUIView: View {
         let viewportHeight = mapViewportSize.height > 0
             ? mapViewportSize.height
             : UIScreen.main.bounds.height
-        return max(viewportHeight - (drawerOuterPadding * 2), 80)
+        let availableHeight = viewportHeight - drawerOuterPadding - drawerBottomPadding
+        return max(availableHeight, 80)
     }
 
     private var drawerBaseHeight: CGFloat {
@@ -499,6 +514,13 @@ struct MainUIView: View {
 
     private var drawerOuterPadding: CGFloat {
         usesLandscapePhoneDrawer ? 8 : 16
+    }
+
+    private var drawerBottomPadding: CGFloat {
+        if usesLandscapePhoneDrawer, viewobject.presDetent == .large {
+            return 0
+        }
+        return drawerOuterPadding
     }
 
     private var leadingPaneWidth: CGFloat {
