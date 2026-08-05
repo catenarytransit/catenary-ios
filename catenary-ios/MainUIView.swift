@@ -167,6 +167,8 @@ struct MainUIView: View {
     @State private var searchFocusRequest = 0
     @State private var isSearchSheetTransitioning = false
     @State private var nativeSheetWidth: CGFloat = 0
+    @GestureState private var legacyDrawerDragOffset: CGFloat = 0
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
 
     var body: some View {
@@ -190,7 +192,7 @@ struct MainUIView: View {
                         viewobject.presDetent = .large
                     }
                 }
-                .sheet(isPresented: $isSheetPresented) {
+                .sheet(isPresented: nativeSheetPresentationBinding) {
                     bottomDrawerSheet
                 }
                 .catenaryOnChange(of: viewobject.showLayerSelector) { last, current in
@@ -200,6 +202,13 @@ struct MainUIView: View {
                         } else {
                             isSheetPresented = true
                         }
+                    }
+                }
+                .overlay(alignment: .bottomLeading) {
+                    if usesLegacyTabletDrawer, isSheetPresented {
+                        legacyTabletDrawer
+                            .padding(16)
+                            .transition(.move(edge: .leading).combined(with: .opacity))
                     }
                 }
                 .overlay {
@@ -214,11 +223,11 @@ struct MainUIView: View {
                     if isSheetPresented {
                         floatingToolBar()
                             .padding(.trailing, 15)
-                            .padding(.bottom, usesTabletLayout ? 15 : 0)
+                            .padding(.bottom, usesLeadingTabletLayout ? 15 : 0)
                             .transition(.move(edge: .trailing))
                     }
                 }
-                .overlay(alignment: usesTabletLayout ? .topLeading : .top) {
+                .overlay(alignment: usesLeadingTabletLayout ? .topLeading : .top) {
                     if isSheetPresented,
                        viewobject.currentStackItem == nil,
                        viewobject.presDetent != .large {
@@ -226,7 +235,7 @@ struct MainUIView: View {
                             onSearch: beginSearch,
                             onSettingsClick: { viewobject.push(.settings) }
                         )
-                        .frame(width: usesTabletLayout ? tabletPaneWidth : nil)
+                        .frame(width: usesLeadingTabletLayout ? tabletPaneWidth : nil)
                         .padding()
                         .ignoresSafeArea(.container, edges: .bottom)
                         .transition(.opacity)
@@ -238,6 +247,9 @@ struct MainUIView: View {
             proxy.size
         } action: { _, newSize in
             mapViewportSize = newSize
+            if usesLegacyTabletDrawer, viewobject.presDetent == .large {
+                liveSheetHeight = max(newSize.height - 32, 80)
+            }
         }
         .task(id: searchFocusRequest) {
             guard searchFocusRequest > 0 else { return }
@@ -246,7 +258,13 @@ struct MainUIView: View {
             isSearchSheetTransitioning = false
         }
         .catenaryOnChange(of: viewobject.presDetent) { _, detent in
-            guard detent != .large else { return }
+            if detent == .large {
+                if usesLegacyTabletDrawer {
+                    locationOpacity = 0
+                    liveSheetHeight = legacyDrawerMaximumHeight
+                }
+                return
+            }
 
             isSearchSheetTransitioning = false
             locationOpacity = 1
@@ -282,9 +300,40 @@ struct MainUIView: View {
     }
 
     private var bottomDrawerSheet: some View {
+        drawerContent(sheetHeight: liveSheetHeight)
+            .presentationDetents([.height(80), .height(350), .large], selection: $viewobject.presDetent)
+            .presentationBackgroundInteraction(.enabled)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea(.container, edges: .bottom)
+            .interactiveDismissDisabled()
+            .background(
+                NativeSheetLeadingAnchor(sheetWidth: $nativeSheetWidth)
+            )
+            .catenaryOnGeometryChange(for: CGFloat.self) { proxy in
+                max(proxy.size.height, 0)
+            } action: { _, newValue in
+                guard !isSearchSheetTransitioning else { return }
+
+                let maximumHeight = viewobject.largeDetentHeight > 0
+                    ? viewobject.largeDetentHeight
+                    : newValue
+                let boundedHeight = min(newValue, maximumHeight)
+                if abs(liveSheetHeight - boundedHeight) > 0.5 {
+                    liveSheetHeight = boundedHeight
+                }
+
+                let progress = max(min((newValue - 400) / 50, 1), 0)
+                let toolbarOpacity = 1 - progress
+                if abs(locationOpacity - toolbarOpacity) > 0.005 {
+                    locationOpacity = toolbarOpacity
+                }
+            }
+    }
+
+    private func drawerContent(sheetHeight: CGFloat) -> some View {
         BottomDrawer(
             selectedDetent: $viewobject.presDetent,
-            sheetHeight: liveSheetHeight,
+            sheetHeight: sheetHeight,
             locationManager: locationManager,
             searchViewModel: searchViewModel,
             focusRequest: searchFocusRequest,
@@ -292,32 +341,76 @@ struct MainUIView: View {
             nearbyPinCoordinate: $nearbyPinCoordinate
         )
         .ignoresSafeArea(.keyboard)
-        .presentationDetents([.height(80), .height(350), .large], selection: $viewobject.presDetent)
-        .presentationBackgroundInteraction(.enabled)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .ignoresSafeArea(.container, edges: .bottom)
-        .interactiveDismissDisabled()
-        .background(
-            NativeSheetLeadingAnchor(sheetWidth: $nativeSheetWidth)
+    }
+
+    private var legacyTabletDrawer: some View {
+        drawerContent(sheetHeight: legacyDrawerVisibleHeight)
+            .frame(width: tabletPaneWidth, height: legacyDrawerVisibleHeight)
+            .background(.regularMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(alignment: .top) {
+                legacyDrawerDragHandle
+            }
+            .shadow(radius: 12, y: 4)
+    }
+
+    private var legacyDrawerDragHandle: some View {
+        Capsule()
+            .fill(Color.secondary.opacity(0.45))
+            .frame(width: 36, height: 5)
+            .frame(width: 96, height: 28)
+            .contentShape(Rectangle())
+            .gesture(legacyDrawerDragGesture)
+            .accessibilityLabel(Text("Resize drawer"))
+    }
+
+    private var legacyDrawerDragGesture: some Gesture {
+        DragGesture(minimumDistance: 5)
+            .updating($legacyDrawerDragOffset) { value, state, _ in
+                state = value.translation.height
+            }
+            .onEnded { value in
+                settleLegacyDrawer(predictedTranslation: value.predictedEndTranslation.height)
+            }
+    }
+
+    private var legacyDrawerMaximumHeight: CGFloat {
+        let viewportHeight = mapViewportSize.height > 0
+            ? mapViewportSize.height
+            : UIScreen.main.bounds.height
+        return max(viewportHeight - 32, 80)
+    }
+
+    private var legacyDrawerBaseHeight: CGFloat {
+        if viewobject.presDetent == .large {
+            return legacyDrawerMaximumHeight
+        }
+        if viewobject.presDetent == .height(80) {
+            return 80
+        }
+        return min(350, legacyDrawerMaximumHeight)
+    }
+
+    private var legacyDrawerVisibleHeight: CGFloat {
+        min(
+            max(legacyDrawerBaseHeight - legacyDrawerDragOffset, 80),
+            legacyDrawerMaximumHeight
         )
-        .catenaryOnGeometryChange(for: CGFloat.self) { proxy in
-            max(proxy.size.height, 0)
-        } action: { _, newValue in
-            guard !isSearchSheetTransitioning else { return }
+    }
 
-            let maximumHeight = viewobject.largeDetentHeight > 0
-                ? viewobject.largeDetentHeight
-                : newValue
-            let boundedHeight = min(newValue, maximumHeight)
-            if abs(liveSheetHeight - boundedHeight) > 0.5 {
-                liveSheetHeight = boundedHeight
-            }
+    private func settleLegacyDrawer(predictedTranslation: CGFloat) {
+        let threshold: CGFloat = 44
+        guard abs(predictedTranslation) >= threshold else { return }
 
-            let progress = max(min((newValue - 400) / 50, 1), 0)
-            let toolbarOpacity = 1 - progress
-            if abs(locationOpacity - toolbarOpacity) > 0.005 {
-                locationOpacity = toolbarOpacity
-            }
+        let nextDetent: PresentationDetent
+        if predictedTranslation < 0 {
+            nextDetent = viewobject.presDetent == .height(80) ? .height(350) : .large
+        } else {
+            nextDetent = viewobject.presDetent == .large ? .height(350) : .height(80)
+        }
+
+        withAnimation(.catenaryBouncy) {
+            viewobject.presDetent = nextDetent
         }
     }
 
@@ -334,13 +427,44 @@ struct MainUIView: View {
         viewobject.useInitialUserLocationIfNeeded(coordinate)
     }
 
+    private var nativeSheetPresentationBinding: Binding<Bool> {
+        Binding(
+            get: {
+                isSheetPresented && !usesLegacyTabletDrawer
+            },
+            set: { presented in
+                guard !usesLegacyTabletDrawer else { return }
+                isSheetPresented = presented
+            }
+        )
+    }
+
+    private var usesLegacyTabletDrawer: Bool {
+        guard UIDevice.current.userInterfaceIdiom == .pad,
+              horizontalSizeClass == .regular else {
+            return false
+        }
+
+        if #available(iOS 17.0, *) {
+            return false
+        }
+        return true
+    }
+
     private var usesTabletLayout: Bool {
         UIDevice.current.userInterfaceIdiom == .pad && mapViewportSize.width >= 600
     }
 
+    private var usesLeadingTabletLayout: Bool {
+        usesLegacyTabletDrawer || usesTabletLayout
+    }
+
     private var tabletPaneWidth: CGFloat {
-        let availableWidth = max(mapViewportSize.width - 32, 0)
-        let fallbackWidth = min(600, max(mapViewportSize.width * 0.5, 320))
+        let viewportWidth = mapViewportSize.width > 0
+            ? mapViewportSize.width
+            : UIScreen.main.bounds.width
+        let availableWidth = max(viewportWidth - 32, 0)
+        let fallbackWidth = min(600, max(viewportWidth * 0.5, 320))
         let preferredWidth = nativeSheetWidth > 0 ? nativeSheetWidth : fallbackWidth
         return min(preferredWidth, availableWidth)
     }
@@ -349,7 +473,7 @@ struct MainUIView: View {
         guard isSheetPresented, mapViewportSize.height > 0 else { return .zero }
         guard viewobject.presDetent == .large else { return .zero }
 
-        if usesTabletLayout {
+        if usesLeadingTabletLayout {
             return UIEdgeInsets(
                 top: 0,
                 left: tabletPaneWidth + 16,
@@ -407,7 +531,7 @@ struct MainUIView: View {
 
             }
             .font(.title3)
-            .offset(y: usesTabletLayout ? 0 : -min(liveSheetHeight, 350))
+            .offset(y: usesLeadingTabletLayout ? 0 : -min(liveSheetHeight, 350))
             .opacity(locationOpacity)
         }
 
