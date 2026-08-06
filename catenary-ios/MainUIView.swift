@@ -167,7 +167,7 @@ struct MainUIView: View {
     @State private var searchFocusRequest = 0
     @State private var isSearchSheetTransitioning = false
     @State private var nativeSheetWidth: CGFloat = 0
-    @GestureState private var drawerDragOffset: CGFloat = 0
+    @State private var drawerDragOffset: CGFloat = 0
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
@@ -338,7 +338,13 @@ struct MainUIView: View {
                 NativeSheetLeadingAnchor(sheetWidth: $nativeSheetWidth)
             )
             .catenaryOnGeometryChange(for: CGFloat.self) { proxy in
-                max(proxy.size.height, 0)
+                guard usesPortraitPhoneDrawer else {
+                    return max(proxy.size.height, 0)
+                }
+
+                // During an interactive native-sheet drag UIKit translates the
+                // sheet before its SwiftUI content receives a new size.
+                return max(UIScreen.main.bounds.maxY - proxy.frame(in: .global).minY, 0)
             } action: { _, newValue in
                 guard !isSearchSheetTransitioning else { return }
 
@@ -411,8 +417,8 @@ struct MainUIView: View {
 
     private var drawerDragGesture: some Gesture {
         DragGesture(minimumDistance: 5)
-            .updating($drawerDragOffset) { value, state, _ in
-                state = value.translation.height
+            .onChanged { value in
+                drawerDragOffset = value.translation.height
             }
             .onEnded { value in
                 settleDrawer(predictedTranslation: value.predictedEndTranslation.height)
@@ -423,7 +429,8 @@ struct MainUIView: View {
         let viewportHeight = mapViewportSize.height > 0
             ? mapViewportSize.height
             : UIScreen.main.bounds.height
-        let availableHeight = viewportHeight - drawerOuterPadding - drawerBottomPadding
+        let bottomPadding = usesLandscapePhoneDrawer ? 0 : drawerOuterPadding
+        let availableHeight = viewportHeight - drawerOuterPadding - bottomPadding
         return max(availableHeight, 80)
     }
 
@@ -453,10 +460,11 @@ struct MainUIView: View {
 
     private func settleDrawer(predictedTranslation: CGFloat) {
         let threshold: CGFloat = 44
-        guard abs(predictedTranslation) >= threshold else { return }
 
         let nextDetent: PresentationDetent
-        if usesLandscapePhoneDrawer {
+        if abs(predictedTranslation) < threshold {
+            nextDetent = viewobject.presDetent
+        } else if usesLandscapePhoneDrawer {
             nextDetent = predictedTranslation < 0 ? .large : .height(80)
         } else if predictedTranslation < 0 {
             nextDetent = viewobject.presDetent == .height(80) ? .height(350) : .large
@@ -466,6 +474,7 @@ struct MainUIView: View {
 
         withAnimation(.catenaryBouncy) {
             viewobject.presDetent = nextDetent
+            drawerDragOffset = 0
         }
     }
 
@@ -546,10 +555,14 @@ struct MainUIView: View {
     }
 
     private var drawerBottomPadding: CGFloat {
-        if usesLandscapePhoneDrawer, viewobject.presDetent == .large {
-            return 0
-        }
-        return drawerOuterPadding
+        guard usesLandscapePhoneDrawer else { return drawerOuterPadding }
+
+        let heightRange = max(drawerMaximumHeight - 80, 1)
+        let expansionProgress = min(
+            max((drawerVisibleHeight - 80) / heightRange, 0),
+            1
+        )
+        return drawerOuterPadding * (1 - expansionProgress)
     }
 
     private var leadingPaneWidth: CGFloat {
