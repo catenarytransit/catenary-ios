@@ -348,13 +348,7 @@ struct MainUIView: View {
                 NativeSheetLeadingAnchor(sheetWidth: $nativeSheetWidth)
             )
             .catenaryOnGeometryChange(for: CGFloat.self) { proxy in
-                guard usesPortraitPhoneDrawer else {
-                    return max(proxy.size.height, 0)
-                }
-
-                // During an interactive native-sheet drag UIKit translates the
-                // sheet before its SwiftUI content receives a new size.
-                return max(UIScreen.main.bounds.maxY - proxy.frame(in: .global).minY, 0)
+                max(proxy.size.height, 0)
             } action: { _, newValue in
                 guard !isSearchSheetTransitioning else { return }
 
