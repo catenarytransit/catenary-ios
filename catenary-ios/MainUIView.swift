@@ -150,6 +150,12 @@ private final class NativeSheetLeadingAnchorController: UIViewController {
     }
 }
 
+private struct MainViewGeometry: Equatable {
+    let size: CGSize
+    let topSafeAreaInset: CGFloat
+    let bottomSafeAreaInset: CGFloat
+}
+
 struct MainUIView: View {
     let searchViewModel: SearchViewModel
 
@@ -163,6 +169,9 @@ struct MainUIView: View {
     @State private var nearbyPinActive = false
     @State private var nearbyPinCoordinate: CLLocationCoordinate2D?
     @State private var mapViewportSize: CGSize = .zero
+    @State private var mapTopSafeAreaInset: CGFloat = 0
+    @State private var mapBottomSafeAreaInset: CGFloat = 0
+    @State private var floatingToolbarHeight: CGFloat = 0
     @State private var mapCameraRevision: UInt64 = 0
     @State private var searchFocusRequest = 0
     @State private var isSearchSheetTransitioning = false
@@ -231,6 +240,11 @@ struct MainUIView: View {
                 .overlay(alignment: .bottomTrailing) {
                     if isSheetPresented {
                         floatingToolBar()
+                            .catenaryOnGeometryChange(for: CGFloat.self) { proxy in
+                                proxy.size.height
+                            } action: { _, newHeight in
+                                floatingToolbarHeight = newHeight
+                            }
                             .padding(.trailing, 15)
                             .padding(.bottom, floatingToolbarBottomPadding)
                             .transition(.move(edge: .trailing))
@@ -253,10 +267,16 @@ struct MainUIView: View {
                 }
 
         }
-        .catenaryOnGeometryChange(for: CGSize.self) { proxy in
-            proxy.size
-        } action: { _, newSize in
-            mapViewportSize = newSize
+        .catenaryOnGeometryChange(for: MainViewGeometry.self) { proxy in
+            MainViewGeometry(
+                size: proxy.size,
+                topSafeAreaInset: proxy.safeAreaInsets.top,
+                bottomSafeAreaInset: proxy.safeAreaInsets.bottom
+            )
+        } action: { _, geometry in
+            mapViewportSize = geometry.size
+            mapTopSafeAreaInset = geometry.topSafeAreaInset
+            mapBottomSafeAreaInset = geometry.bottomSafeAreaInset
 
             // A medium-height drawer is not useful on a short landscape phone.
             // Preserve roughly the same amount of visible content by promoting
@@ -563,13 +583,37 @@ struct MainUIView: View {
     }
 
     private var floatingToolbarBottomPadding: CGFloat {
-        if usesPortraitPhoneDrawer { return 16 }
+        if usesPortraitPhoneDrawer { return 8 }
         return usesLeadingPaneLayout ? 15 : 0
     }
 
     private var floatingToolbarYOffset: CGFloat {
-        if usesPortraitPhoneDrawer { return -liveSheetHeight }
+        if usesPortraitPhoneDrawer {
+            // A fixed-height native sheet includes the home-indicator inset,
+            // while a bottom-aligned overlay starts above that inset. Remove it
+            // here so the explicit padding is the actual gap above the drawer.
+            return -max(liveSheetHeight - mapBottomSafeAreaInset, 0)
+        }
         return usesLeadingPaneLayout ? 0 : -min(liveSheetHeight, 350)
+    }
+
+    private var floatingToolbarOpacity: CGFloat {
+        guard usesPortraitPhoneDrawer,
+              mapViewportSize.height > 0,
+              floatingToolbarHeight > 0 else {
+            return locationOpacity
+        }
+
+        let toolbarTop = mapViewportSize.height
+            - liveSheetHeight
+            - floatingToolbarBottomPadding
+            - floatingToolbarHeight
+        let fadeDistance: CGFloat = 44
+        let clearanceOpacity = min(
+            max((toolbarTop - mapTopSafeAreaInset) / fadeDistance, 0),
+            1
+        )
+        return locationOpacity * clearanceOpacity
     }
 
     private var drawerOuterPadding: CGFloat {
@@ -687,7 +731,9 @@ struct MainUIView: View {
             // The native sheet already reports intermediate heights. Avoid adding
             // another animation layer so the toolbar stays locked to its top edge.
             .animation(nil, value: liveSheetHeight)
-            .opacity(locationOpacity)
+            .opacity(floatingToolbarOpacity)
+            .allowsHitTesting(floatingToolbarOpacity > 0.01)
+            .accessibilityHidden(floatingToolbarOpacity <= 0.01)
         }
 
     }
