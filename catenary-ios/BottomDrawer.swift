@@ -18,6 +18,7 @@ struct BottomDrawer: View {
     @ObservedObject var locationManager: LocationManager
     let searchViewModel: SearchViewModel
     let focusRequest: Int
+    let showsSearchBarWhenInactive: Bool
     @Binding var nearbyPinActive: Bool
     @Binding var nearbyPinCoordinate: CLLocationCoordinate2D?
     @EnvironmentObject var viewObject: viewObject
@@ -61,7 +62,8 @@ struct BottomDrawer: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack {
                 if viewObject.currentStackItem == nil {
-                    if selectedDetent == .large {
+                    if selectedDetent == .large,
+                       showsSearchBarWhenInactive || isSearchActive {
                         CatenarySearchBar(
                             viewModel: searchViewModel,
                             focus: $isFocused,
@@ -73,6 +75,9 @@ struct BottomDrawer: View {
                         .padding(.horizontal, 18)
                         .frame(height: 80)
                         .padding(.top, 12)
+                    } else if selectedDetent == .large {
+                        Spacer()
+                            .frame(height: 28)
                     } else if selectedDetent != .height(80) {
                         Spacer()
                             .frame(height: 0.5 * max(160 - (viewObject.largeDetentHeight - sheetHeight), 0))

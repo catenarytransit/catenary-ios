@@ -168,6 +168,7 @@ struct MainUIView: View {
     @State private var isSearchSheetTransitioning = false
     @State private var nativeSheetWidth: CGFloat = 0
     @State private var drawerDragOffset: CGFloat = 0
+    @State private var isLandscapeSearchRequested = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
@@ -188,6 +189,7 @@ struct MainUIView: View {
                 }
                 .catenaryOnChange(of: viewobject.catenaryStack) { _, stack in
                     guard !stack.isEmpty else { return }
+                    isLandscapeSearchRequested = false
                     isSheetPresented = true
                     if viewobject.presDetent != .large {
                         viewobject.presDetent = .large
@@ -211,6 +213,10 @@ struct MainUIView: View {
                             .padding(.horizontal, drawerOuterPadding)
                             .padding(.top, drawerOuterPadding)
                             .padding(.bottom, drawerBottomPadding)
+                            .ignoresSafeArea(
+                                .container,
+                                edges: usesLandscapePhoneDrawer ? .bottom : []
+                            )
                             .transition(.move(edge: .leading).combined(with: .opacity))
                     }
                 }
@@ -240,8 +246,9 @@ struct MainUIView: View {
                         )
                         .frame(width: usesLeadingPaneLayout ? leadingPaneWidth : nil)
                         .padding(drawerOuterPadding)
+                        .offset(y: landscapeSearchLauncherYOffset)
                         .ignoresSafeArea(.container, edges: .bottom)
-                        .transition(.opacity)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
 
@@ -288,6 +295,9 @@ struct MainUIView: View {
             }
 
             isSearchSheetTransitioning = false
+            if usesLandscapePhoneDrawer {
+                isLandscapeSearchRequested = false
+            }
             if usesPortraitPhoneDrawer {
                 withAnimation(.easeOut(duration: 0.18)) {
                     locationOpacity = 1
@@ -376,6 +386,7 @@ struct MainUIView: View {
             locationManager: locationManager,
             searchViewModel: searchViewModel,
             focusRequest: searchFocusRequest,
+            showsSearchBarWhenInactive: !usesLandscapePhoneDrawer || isLandscapeSearchRequested,
             nearbyPinActive: $nearbyPinActive,
             nearbyPinCoordinate: $nearbyPinCoordinate
         )
@@ -397,7 +408,7 @@ struct MainUIView: View {
         Capsule()
             .fill(Color.secondary.opacity(0.45))
             .frame(width: 36, height: 5)
-            .frame(width: 96, height: 28)
+            .frame(width: 112, height: usesLandscapePhoneDrawer ? 44 : 28)
             .contentShape(Rectangle())
             .gesture(drawerDragGesture)
             .accessibilityLabel(Text("Resize drawer"))
@@ -421,7 +432,10 @@ struct MainUIView: View {
                 drawerDragOffset = value.translation.height
             }
             .onEnded { value in
-                settleDrawer(predictedTranslation: value.predictedEndTranslation.height)
+                settleDrawer(
+                    translation: value.translation.height,
+                    predictedTranslation: value.predictedEndTranslation.height
+                )
             }
     }
 
@@ -458,15 +472,25 @@ struct MainUIView: View {
         )
     }
 
-    private func settleDrawer(predictedTranslation: CGFloat) {
-        let threshold: CGFloat = 44
+    private func settleDrawer(translation: CGFloat, predictedTranslation: CGFloat) {
+        let effectiveTranslation: CGFloat
+        let threshold: CGFloat
+        if usesLandscapePhoneDrawer {
+            // Slow, deliberate drags should count in landscape; relying only on
+            // release velocity made the collapsed drawer very difficult to open.
+            effectiveTranslation = translation
+            threshold = 20
+        } else {
+            effectiveTranslation = predictedTranslation
+            threshold = 44
+        }
 
         let nextDetent: PresentationDetent
-        if abs(predictedTranslation) < threshold {
+        if abs(effectiveTranslation) < threshold {
             nextDetent = viewobject.presDetent
         } else if usesLandscapePhoneDrawer {
-            nextDetent = predictedTranslation < 0 ? .large : .height(80)
-        } else if predictedTranslation < 0 {
+            nextDetent = effectiveTranslation < 0 ? .large : .height(80)
+        } else if effectiveTranslation < 0 {
             nextDetent = viewobject.presDetent == .height(80) ? .height(350) : .large
         } else {
             nextDetent = viewobject.presDetent == .large ? .height(350) : .height(80)
@@ -481,6 +505,7 @@ struct MainUIView: View {
     private func beginSearch() {
         guard viewobject.currentStackItem == nil else { return }
         isSearchSheetTransitioning = true
+        isLandscapeSearchRequested = usesLandscapePhoneDrawer
         locationOpacity = usesLandscapePhoneDrawer ? 1 : 0
         viewobject.presDetent = .large
         searchFocusRequest &+= 1
@@ -552,6 +577,11 @@ struct MainUIView: View {
 
     private var drawerOuterPadding: CGFloat {
         usesLandscapePhoneDrawer ? 8 : 16
+    }
+
+    private var landscapeSearchLauncherYOffset: CGFloat {
+        guard usesLandscapePhoneDrawer else { return 0 }
+        return min(drawerDragOffset, 0)
     }
 
     private var drawerBottomPadding: CGFloat {
