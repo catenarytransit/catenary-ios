@@ -427,7 +427,10 @@ struct MainUIView: View {
     }
 
     private var drawerDragGesture: some Gesture {
-        DragGesture(minimumDistance: 5)
+        // The handle moves while drawerVisibleHeight changes. Measuring in the
+        // root coordinate space prevents that relayout from feeding back into
+        // the gesture's reported translation and making the drawer jitter.
+        DragGesture(minimumDistance: 5, coordinateSpace: .global)
             .onChanged { value in
                 drawerDragOffset = value.translation.height
             }
