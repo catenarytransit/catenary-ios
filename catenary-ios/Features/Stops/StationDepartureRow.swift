@@ -416,7 +416,7 @@ private struct StopDepartureTimeView: View {
                 }
             }
         }
-        .frame(width: 70, alignment: .leading)
+        .frame(width: showSeconds ? 70 : 62, alignment: .leading)
     }
 
     private func clock(

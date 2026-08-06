@@ -2,9 +2,8 @@ import SwiftUI
 
 /// SwiftUI counterpart of Compose's overlapping-object selection screen.
 ///
-/// The selection destination is replaced rather than pushed. This keeps the
-/// chooser as an implementation detail: Back returns to the screen that was
-/// open before the map tap instead of returning to a stale chooser.
+/// The selected destination is pushed so the chooser remains in the stack.
+/// Back from the destination returns to the map selection screen.
 struct MapOverlappingSelectionScreen: View {
     let options: [MapSelectionOption]
 
@@ -116,7 +115,7 @@ struct MapOverlappingSelectionScreen: View {
         @ViewBuilder label: () -> Label
     ) -> some View {
         Button {
-            viewObject.replaceTop(with: option.destination)
+            viewObject.push(option.destination)
         } label: {
             label()
                 .contentShape(Rectangle())
