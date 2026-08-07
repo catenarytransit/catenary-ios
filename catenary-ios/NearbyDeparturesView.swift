@@ -304,7 +304,7 @@ struct NearbyDeparturesView: View {
             if usesCompactDrawerSummary {
                 compactSummary
                     .padding(.horizontal, 16)
-                    .padding(.top, 48)
+                    .padding(.top, 40)
                     .frame(maxWidth: .infinity, maxHeight: 120, alignment: .topLeading)
                     .opacity(1 - drawerExpansionProgress)
                     .allowsHitTesting(false)
@@ -640,7 +640,7 @@ private struct NearbyCompactSummary: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: 14, height: 14)
-                    .padding(.top, 40)
+                    .padding(.top, 20)
                     .accessibilityLabel(pinActive ? "Pinned location" : "Current location")
 
                 VStack(alignment: .leading, spacing: 0) {
@@ -822,7 +822,7 @@ private struct NearbyCompactRouteBadge: View {
             .lineLimit(1)
             .minimumScaleFactor(0.7)
             .padding(.horizontal, 2)
-            .frame(width: 18, height: 10)
+            .frame(width: 18, height: 9)
             .foregroundStyle(Color.transitHex(group.textColor, fallback: .white))
             .background(
                 Color.transitHex(group.color, fallback: .secondary),
