@@ -93,7 +93,18 @@ class viewObject: ObservableObject {
     @Published var currZoom: Double = 5.0
     @Published var visibleCoordinateBounds: MLNCoordinateBounds = MLNCoordinateBounds(sw: CLLocationCoordinate2D(latitude: 0, longitude: 0), ne: CLLocationCoordinate2D(latitude: 0, longitude: 0))
 
-    @Published var presDetent: PresentationDetent = .height(350)
+    @Published var presDetent: PresentationDetent = {
+#if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--ci-screenshot-drawer-expanded") {
+            return .large
+        }
+        if arguments.contains("--ci-screenshot-drawer-collapsed") {
+            return .height(80)
+        }
+#endif
+        return .height(350)
+    }()
     @Published var largeDetentHeight: CGFloat = 0
     @Published var currentRotation: CLLocationDirection = 0
 

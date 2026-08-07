@@ -1,0 +1,246 @@
+name: iOS Screenshots
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dev
+  pull_request:
+    branches:
+      - dev
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-screenshots-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    name: Latest iOS screenshots
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    env:
+      PROJECT: catenary-ios.xcodeproj
+      SCHEME: catenary-ios
+      BUNDLE_ID: org.catenarymaps.maps
+      DERIVED_DATA: ${{ github.workspace }}/DerivedData-screenshots
+      SOURCE_PACKAGES: ${{ github.workspace }}/SourcePackages-screenshots
+      BUILD_LOG: ${{ github.workspace }}/xcodebuild-screenshots.log
+      SCREENSHOT_DIR: ${{ github.workspace }}/screenshots
+      DOWNTOWN_LA: "34.0522,-118.2437"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Select Xcode
+        run: sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+
+      - name: Select latest available iOS simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          xcodebuild -version
+
+          runtime_line="$(
+            xcrun simctl list runtimes available -j | jq -r '
+              [
+                .runtimes[]
+                | select(.identifier | contains("SimRuntime.iOS-"))
+                | . + {versionParts: (.version | split(".") | map(tonumber))}
+              ]
+              | sort_by(.versionParts)
+              | last
+              | [.version, .identifier]
+              | @tsv
+            '
+          )"
+
+          ios_version="$(cut -f1 <<< "$runtime_line")"
+          runtime_id="$(cut -f2 <<< "$runtime_line")"
+
+          if [[ -z "$ios_version" || -z "$runtime_id" ]]; then
+            echo "No available iOS simulator runtime found."
+            exit 1
+          fi
+
+          device_type_id="$(
+            xcrun simctl list devicetypes -j | jq -r '
+              [
+                .devicetypes[]
+                | select(.name | test("^iPhone [0-9]+ Pro$"))
+                | . + {
+                    generation: (
+                      .name
+                      | capture("^iPhone (?<generation>[0-9]+) Pro$")
+                      | .generation
+                      | tonumber
+                    )
+                  }
+              ]
+              | sort_by(.generation)
+              | last
+              | .identifier // empty
+            '
+          )"
+
+          if [[ -z "$device_type_id" ]]; then
+            device_type_id="$(
+              xcrun simctl list devicetypes -j | jq -r '
+                [
+                  .devicetypes[]
+                  | select(.name | startswith("iPhone"))
+                ][0].identifier // empty
+              '
+            )"
+          fi
+
+          if [[ -z "$device_type_id" ]]; then
+            echo "No iPhone simulator device type found."
+            exit 1
+          fi
+
+          simulator_udid="$(
+            xcrun simctl create \
+              "Catenary Screenshots iOS $ios_version" \
+              "$device_type_id" \
+              "$runtime_id"
+          )"
+
+          echo "IOS_VERSION=$ios_version" >> "$GITHUB_ENV"
+          echo "IOS_RUNTIME_ID=$runtime_id" >> "$GITHUB_ENV"
+          echo "SIMULATOR_UDID=$simulator_udid" >> "$GITHUB_ENV"
+
+          echo "Using iOS $ios_version"
+          echo "Runtime: $runtime_id"
+          echo "Simulator: $simulator_udid"
+
+      - name: Boot simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl boot "$SIMULATOR_UDID"
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+
+      - name: Clear Xcode and SwiftPM state
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          rm -rf "$DERIVED_DATA"
+          rm -rf "$SOURCE_PACKAGES"
+          rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
+          rm -rf "$HOME/Library/Caches/org.swift.swiftpm"
+          rm -rf "$HOME/Library/org.swift.swiftpm"
+          rm -rf "$HOME/.swiftpm"
+          rm -rf /tmp/org.swift.swiftpm
+
+          mkdir -p "$DERIVED_DATA"
+          mkdir -p "$SOURCE_PACKAGES"
+
+          defaults write com.apple.dt.Xcode IDEPackageEnablePrebuilts -bool NO
+          mkdir -p "$HOME/.swiftpm/cache/prebuilts"
+          touch "$HOME/.swiftpm/cache/prebuilts/noprebuilts"
+
+      - name: Resolve Swift packages
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES"
+
+      - name: Build app for latest iOS simulator
+        shell: bash
+        run: |
+          set -o pipefail
+
+          xcodebuild \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            build 2>&1 | tee "$BUILD_LOG"
+
+      - name: Install app and set Downtown Los Angeles location
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          app_path="$DERIVED_DATA/Build/Products/Debug-iphonesimulator/Catenary.app"
+          test -d "$app_path"
+
+          xcrun simctl install "$SIMULATOR_UDID" "$app_path"
+          xcrun simctl privacy "$SIMULATOR_UDID" grant location "$BUNDLE_ID"
+          xcrun simctl location "$SIMULATOR_UDID" set "$DOWNTOWN_LA"
+
+          xcrun simctl status_bar "$SIMULATOR_UDID" override \
+            --time 9:41 \
+            --batteryState charged \
+            --batteryLevel 100 \
+            --wifiBars 3 \
+            --cellularBars 4 || true
+
+      - name: Capture portrait screenshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$SCREENSHOT_DIR"
+
+          capture_screenshot() {
+            local filename="$1"
+            shift
+
+            xcrun simctl terminate "$SIMULATOR_UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
+            xcrun simctl launch "$SIMULATOR_UDID" "$BUNDLE_ID" "$@" >/dev/null
+            sleep 10
+            xcrun simctl io "$SIMULATOR_UDID" screenshot "$SCREENSHOT_DIR/$filename"
+          }
+
+          capture_screenshot "01-start.png"
+          capture_screenshot "02-drawer-expanded.png" --ci-screenshot-drawer-expanded
+          capture_screenshot "03-drawer-collapsed.png" --ci-screenshot-drawer-collapsed
+
+          for screenshot in "$SCREENSHOT_DIR"/*.png; do
+            width="$(sips -g pixelWidth "$screenshot" | awk '/pixelWidth/ { print $2 }')"
+            height="$(sips -g pixelHeight "$screenshot" | awk '/pixelHeight/ { print $2 }')"
+
+            echo "$(basename "$screenshot"): ${width}x${height}"
+            if (( height <= width )); then
+              echo "Expected a portrait screenshot, but got ${width}x${height}: $screenshot"
+              exit 1
+            fi
+          done
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-${{ env.IOS_VERSION }}-screenshots
+          path: ${{ env.SCREENSHOT_DIR }}
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-screenshots
+          path: ${{ env.BUILD_LOG }}
+          if-no-files-found: ignore
+          retention-days: 7
