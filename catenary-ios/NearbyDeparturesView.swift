@@ -303,10 +303,9 @@ struct NearbyDeparturesView: View {
 
             if usesCompactDrawerSummary {
                 compactSummary
-                    .padding(.leading, 20)
-                    .padding(.trailing, 14)
-                    .padding(.top, 20)
-                    .padding(.bottom, 8)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 26)
+                    .padding(.bottom, 10)
                     .frame(maxWidth: .infinity, maxHeight: 80, alignment: .topLeading)
                     .clipped()
                     .opacity(1 - drawerExpansionProgress)
@@ -422,11 +421,13 @@ struct NearbyDeparturesView: View {
 
     private var drawerExpansionProgress: CGFloat {
         guard usesCompactDrawerSummary else { return 1 }
-        guard let drawerHeight else {
-            return isDrawerCollapsed == true ? 0 : 1
-        }
 
-        if isDrawerCollapsed == true, collapsedDrawerHeight == nil { return 0 }
+        // The selected detent is authoritative once the drawer is closed. Native
+        // sheet geometry includes presentation chrome, so a settled 80-point
+        // detent can measure taller and otherwise leave both layers half-visible.
+        if isDrawerCollapsed == true { return 0 }
+
+        guard let drawerHeight else { return 1 }
 
         let collapsedHeight = collapsedDrawerHeight ?? 80
         let crossfadeDistance: CGFloat = 96
@@ -435,10 +436,9 @@ struct NearbyDeparturesView: View {
             1
         )
 
-        // Native sheet selection can lag its geometry, particularly in CI.
-        // Trust the measured height once the user is near the closed detent so
-        // the compact summary is already crossfading in before selection settles.
-        if isDrawerCollapsed == true || drawerHeight <= collapsedHeight + crossfadeDistance {
+        // While collapsing from another detent, keep the geometry-driven fade so
+        // the compact summary can appear smoothly before detent selection settles.
+        if drawerHeight <= collapsedHeight + crossfadeDistance {
             return geometryProgress
         }
         return 1
