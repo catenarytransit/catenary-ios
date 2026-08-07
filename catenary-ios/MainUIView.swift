@@ -613,10 +613,9 @@ struct MainUIView: View {
 
     private var floatingToolbarYOffset: CGFloat {
         if usesPortraitPhoneDrawer {
-            // A fixed-height native sheet includes the home-indicator inset,
-            // while a bottom-aligned overlay starts above that inset. Remove it
-            // here so the explicit padding is the actual gap above the drawer.
-            return -max(liveSheetHeight - mapBottomSafeAreaInset, 0)
+            // The sheet height already includes the bottom safe-area region.
+            // Offset by the full height so the 8-point padding remains the true gap.
+            return -liveSheetHeight
         }
         return usesLeadingPaneLayout ? 0 : -min(liveSheetHeight, 350)
     }
