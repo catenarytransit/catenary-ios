@@ -215,8 +215,12 @@ jobs:
           }
 
           capture_screenshot "01-start.png"
+          sleep 2s
           capture_screenshot "02-drawer-expanded.png" --ci-screenshot-drawer-expanded
+          sleep 3s
           capture_screenshot "03-drawer-collapsed.png" --ci-screenshot-drawer-collapsed
+          sleep 3s
+          capture_screenshot "04-drawer-collapsed-after-state.png" --ci-screenshot-drawer-collapsed
 
           for screenshot in "$SCREENSHOT_DIR"/*.png; do
             width="$(sips -g pixelWidth "$screenshot" | awk '/pixelWidth/ { print $2 }')"
