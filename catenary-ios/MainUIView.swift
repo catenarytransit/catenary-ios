@@ -326,9 +326,6 @@ struct MainUIView: View {
             } else {
                 locationOpacity = 1
             }
-            if detent == .height(80), !usesCustomDrawer {
-                collapsedNativeSheetHeight = nil
-            }
             liveSheetHeight = detent == .height(80) ? 80 : 350
         }
         .task {

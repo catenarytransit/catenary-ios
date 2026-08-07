@@ -294,20 +294,24 @@ struct NearbyDeparturesView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             }
+            .padding(.horizontal, 10)
+            .padding(.top, 8)
+            .padding(.bottom, 6)
             .opacity(drawerExpansionProgress)
             .allowsHitTesting(drawerExpansionProgress > 0.9)
             .accessibilityHidden(drawerExpansionProgress < 0.5)
 
             if usesCompactDrawerSummary {
                 compactSummary
+                    .padding(.leading, 14)
+                    .padding(.trailing, 10)
+                    .padding(.top, 16)
+                    .padding(.bottom, 6)
                     .opacity(1 - drawerExpansionProgress)
                     .allowsHitTesting(false)
                     .accessibilityHidden(drawerExpansionProgress >= 0.5)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.top, 8)
-        .padding(.bottom, 6)
         .task {
             if fixedOrigin == nil {
                 locationManager.checkLocationAuthorization()
@@ -416,14 +420,26 @@ struct NearbyDeparturesView: View {
 
     private var drawerExpansionProgress: CGFloat {
         guard usesCompactDrawerSummary else { return 1 }
+        guard let drawerHeight else {
+            return isDrawerCollapsed == true ? 0 : 1
+        }
 
-        // The detent selection is the source of truth for the closed state.
-        // Geometry is used only for the few-pixel drag transition because a
-        // native fixed-height sheet can measure taller than its nominal 80 pt.
-        guard isDrawerCollapsed == true else { return 1 }
-        guard let drawerHeight, let collapsedDrawerHeight else { return 0 }
+        if isDrawerCollapsed == true, collapsedDrawerHeight == nil { return 0 }
 
-        return min(max((drawerHeight - collapsedDrawerHeight) / 14, 0), 1)
+        let collapsedHeight = collapsedDrawerHeight ?? 80
+        let crossfadeDistance: CGFloat = 96
+        let geometryProgress = min(
+            max((drawerHeight - collapsedHeight) / crossfadeDistance, 0),
+            1
+        )
+
+        // Native sheet selection can lag its geometry, particularly in CI.
+        // Trust the measured height once the user is near the closed detent so
+        // the compact summary is already crossfading in before selection settles.
+        if isDrawerCollapsed == true || drawerHeight <= collapsedHeight + crossfadeDistance {
+            return geometryProgress
+        }
+        return 1
     }
 
     private var compactSummary: some View {
@@ -456,7 +472,8 @@ struct NearbyDeparturesView: View {
     }
 
     private var compactRoutes: [NearbyRouteGroup] {
-        Array(
+        let routeLimit = max(5 - (compactStation == nil ? 0 : 1), 0)
+        return Array(
             model.response.local
                 .filter { group in
                     selectedModes.contains(TransitDisplayMode.from(routeType: group.routeType))
@@ -466,7 +483,7 @@ struct NearbyDeparturesView: View {
                         }
                 }
                 .sorted { $0.closestDistance < $1.closestDistance }
-                .prefix(3)
+                .prefix(routeLimit)
         )
     }
 
@@ -618,47 +635,43 @@ private struct NearbyCompactSummary: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 20)) { context in
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 4) {
-                    Image(systemName: pinActive ? "mappin.and.ellipse" : "location.fill")
-                        .font(.system(size: 9, weight: .semibold))
-                        .frame(width: 12, height: 10)
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: pinActive ? "mappin.and.ellipse" : "location.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 14, height: 14)
+                    .padding(.top, 1)
+                    .accessibilityLabel(pinActive ? "Pinned location" : "Current location")
 
-                    Text("Nearby departures")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                VStack(alignment: .leading, spacing: 0) {
+                    if let station {
+                        NearbyCompactStationRow(
+                            group: station,
+                            departures: stationDepartures,
+                            now: context.date
+                        )
+                        .frame(height: 11)
+                    }
 
-                    Spacer(minLength: 0)
+                    ForEach(routes) { route in
+                        NearbyCompactRouteRow(
+                            group: route,
+                            stops: stops[route.chateauId] ?? [:],
+                            fallbackTimezoneID: fallbackTimezoneID,
+                            now: context.date
+                        )
+                        .frame(height: 11)
+                    }
+
+                    if station == nil, routes.isEmpty {
+                        Text(isLoading ? "Loading departures..." : "No nearby departures")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .frame(height: 11)
+                    }
                 }
-                .frame(height: 10)
-
-                if let station {
-                    NearbyCompactStationRow(
-                        group: station,
-                        departures: stationDepartures,
-                        now: context.date
-                    )
-                    .frame(height: 13)
-                }
-
-                ForEach(routes) { route in
-                    NearbyCompactRouteRow(
-                        group: route,
-                        stops: stops[route.chateauId] ?? [:],
-                        fallbackTimezoneID: fallbackTimezoneID,
-                        now: context.date
-                    )
-                    .frame(height: 13)
-                }
-
-                if station == nil, routes.isEmpty {
-                    Text(isLoading ? "Loading departures..." : "No nearby departures")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .frame(height: 13)
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -810,7 +823,8 @@ private struct NearbyCompactRouteBadge: View {
             .minimumScaleFactor(0.7)
             .padding(.horizontal, 3)
             .frame(width: 34, height: 11)
-            .background(Color.primary.opacity(0.1), in: Capsule())
+            .foregroundStyle(Color.transitHex(group.textColor, fallback: .white))
+            .background(Color.transitHex(group.color, fallback: .secondary), in: Capsule())
             .overlay {
                 Capsule().stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
             }
