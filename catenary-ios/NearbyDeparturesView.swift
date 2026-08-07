@@ -223,7 +223,7 @@ struct NearbyDeparturesView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             if fixedOrigin == nil {
                 controls
             } else {
@@ -233,7 +233,7 @@ struct NearbyDeparturesView: View {
             }
 
             if let origin = lockedOrigin {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     TransitTimePicker(
                         selectedDate: $selectedDate,
                         isNow: $isNow,
@@ -242,7 +242,8 @@ struct NearbyDeparturesView: View {
                             isNow = now
                             if let date { selectedDate = date }
                             reloadNonce += 1
-                        }
+                        },
+                        compact: true
                     )
 
                     if let serverMs = model.response.debug?.totalTimeMs {
@@ -254,7 +255,11 @@ struct NearbyDeparturesView: View {
                 }
 
                 if availableModes.count > 1 {
-                    TransitModePicker(availableModes: availableModes, selectedModes: $selectedModes)
+                    TransitModePicker(
+                        availableModes: availableModes,
+                        selectedModes: $selectedModes,
+                        compact: true
+                    )
                 }
 
                 if model.isLoading {
@@ -279,9 +284,9 @@ struct NearbyDeparturesView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
+        .padding(.horizontal, 10)
+        .padding(.top, 8)
+        .padding(.bottom, 6)
         .task {
             if fixedOrigin == nil {
                 locationManager.checkLocationAuthorization()
@@ -323,7 +328,7 @@ struct NearbyDeparturesView: View {
     }
 
     private var controls: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Button {
                 pinActive = false
                 if let coordinate = locationManager.lastKnownLocation {
@@ -356,7 +361,7 @@ struct NearbyDeparturesView: View {
                     centerPinOnMap()
                 } label: {
                     Image(systemName: "scope")
-                        .frame(width: 24, height: 24)
+                        .frame(width: 18, height: 18)
                 }
                 .buttonStyle(.bordered)
                 .accessibilityLabel("Center pin on map")
@@ -366,7 +371,8 @@ struct NearbyDeparturesView: View {
 
             NearbySortToggle(selection: $sortMode)
         }
-        .font(.subheadline)
+        .font(.caption)
+        .controlSize(.small)
     }
 
     @ViewBuilder
@@ -503,10 +509,10 @@ private struct NearbySortToggle: View {
 
             sortButton(for: .distance) {
                 Image(systemName: "ruler")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
             }
         }
-        .padding(2)
+        .padding(1)
         .background(.thinMaterial, in: Capsule())
         .overlay {
             Capsule()
@@ -522,7 +528,7 @@ private struct NearbySortToggle: View {
             selection = mode
         } label: {
             label()
-                .frame(width: 32, height: 32)
+                .frame(width: 28, height: 28)
                 .foregroundStyle(selection == mode ? Color.accentColor : Color.primary)
                 .background {
                     if selection == mode {

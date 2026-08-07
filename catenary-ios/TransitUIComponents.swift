@@ -44,10 +44,11 @@ enum TransitDisplayMode: String, CaseIterable, Hashable, Identifiable {
 struct TransitModePicker: View {
     let availableModes: [TransitDisplayMode]
     @Binding var selectedModes: Set<TransitDisplayMode>
+    var compact = false
 
     var body: some View {
         ScrollView(.horizontal) {
-            HStack(spacing: 8) {
+            HStack(spacing: compact ? 6 : 8) {
                 ForEach(availableModes) { mode in
                     let selected = selectedModes.contains(mode)
                     Button {
@@ -58,9 +59,9 @@ struct TransitModePicker: View {
                         }
                     } label: {
                         Label(mode.label, systemImage: mode.symbol)
-                            .font(.caption.weight(.semibold))
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 7)
+                            .font(compact ? .caption2.weight(.semibold) : .caption.weight(.semibold))
+                            .padding(.horizontal, compact ? 9 : 11)
+                            .padding(.vertical, compact ? 5 : 7)
                             .foregroundStyle(selected ? Color.white : Color.primary)
                             .background(
                                 selected ? Color.accentColor : Color.secondary.opacity(0.12),

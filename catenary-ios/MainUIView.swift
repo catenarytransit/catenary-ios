@@ -150,6 +150,12 @@ private final class NativeSheetLeadingAnchorController: UIViewController {
     }
 }
 
+private struct MainViewGeometry: Equatable {
+    let size: CGSize
+    let topSafeAreaInset: CGFloat
+    let bottomSafeAreaInset: CGFloat
+}
+
 struct MainUIView: View {
     let searchViewModel: SearchViewModel
 
@@ -163,11 +169,15 @@ struct MainUIView: View {
     @State private var nearbyPinActive = false
     @State private var nearbyPinCoordinate: CLLocationCoordinate2D?
     @State private var mapViewportSize: CGSize = .zero
+    @State private var mapTopSafeAreaInset: CGFloat = 0
+    @State private var mapBottomSafeAreaInset: CGFloat = 0
+    @State private var floatingToolbarHeight: CGFloat = 0
     @State private var mapCameraRevision: UInt64 = 0
     @State private var searchFocusRequest = 0
     @State private var isSearchSheetTransitioning = false
     @State private var nativeSheetWidth: CGFloat = 0
-    @GestureState private var drawerDragOffset: CGFloat = 0
+    @State private var drawerDragOffset: CGFloat = 0
+    @State private var isLandscapeSearchRequested = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
@@ -188,6 +198,7 @@ struct MainUIView: View {
                 }
                 .catenaryOnChange(of: viewobject.catenaryStack) { _, stack in
                     guard !stack.isEmpty else { return }
+                    isLandscapeSearchRequested = false
                     isSheetPresented = true
                     if viewobject.presDetent != .large {
                         viewobject.presDetent = .large
@@ -211,6 +222,10 @@ struct MainUIView: View {
                             .padding(.horizontal, drawerOuterPadding)
                             .padding(.top, drawerOuterPadding)
                             .padding(.bottom, drawerBottomPadding)
+                            .ignoresSafeArea(
+                                .container,
+                                edges: usesLandscapePhoneDrawer ? .bottom : []
+                            )
                             .transition(.move(edge: .leading).combined(with: .opacity))
                     }
                 }
@@ -225,6 +240,11 @@ struct MainUIView: View {
                 .overlay(alignment: .bottomTrailing) {
                     if isSheetPresented {
                         floatingToolBar()
+                            .catenaryOnGeometryChange(for: CGFloat.self) { proxy in
+                                proxy.size.height
+                            } action: { _, newHeight in
+                                floatingToolbarHeight = newHeight
+                            }
                             .padding(.trailing, 15)
                             .padding(.bottom, floatingToolbarBottomPadding)
                             .transition(.move(edge: .trailing))
@@ -240,16 +260,23 @@ struct MainUIView: View {
                         )
                         .frame(width: usesLeadingPaneLayout ? leadingPaneWidth : nil)
                         .padding(drawerOuterPadding)
+                        .offset(y: landscapeSearchLauncherYOffset)
                         .ignoresSafeArea(.container, edges: .bottom)
-                        .transition(.opacity)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
 
         }
-        .catenaryOnGeometryChange(for: CGSize.self) { proxy in
-            proxy.size
-        } action: { _, newSize in
-            mapViewportSize = newSize
+        .catenaryOnGeometryChange(for: MainViewGeometry.self) { proxy in
+            MainViewGeometry(
+                size: proxy.size,
+                topSafeAreaInset: proxy.safeAreaInsets.top,
+                bottomSafeAreaInset: proxy.safeAreaInsets.bottom
+            )
+        } action: { _, geometry in
+            mapViewportSize = geometry.size
+            mapTopSafeAreaInset = geometry.topSafeAreaInset
+            mapBottomSafeAreaInset = geometry.bottomSafeAreaInset
 
             // A medium-height drawer is not useful on a short landscape phone.
             // Preserve roughly the same amount of visible content by promoting
@@ -288,6 +315,9 @@ struct MainUIView: View {
             }
 
             isSearchSheetTransitioning = false
+            if usesLandscapePhoneDrawer {
+                isLandscapeSearchRequested = false
+            }
             if usesPortraitPhoneDrawer {
                 withAnimation(.easeOut(duration: 0.18)) {
                     locationOpacity = 1
@@ -370,6 +400,7 @@ struct MainUIView: View {
             locationManager: locationManager,
             searchViewModel: searchViewModel,
             focusRequest: searchFocusRequest,
+            showsSearchBarWhenInactive: !usesLandscapePhoneDrawer || isLandscapeSearchRequested,
             nearbyPinActive: $nearbyPinActive,
             nearbyPinCoordinate: $nearbyPinCoordinate
         )
@@ -391,7 +422,7 @@ struct MainUIView: View {
         Capsule()
             .fill(Color.secondary.opacity(0.45))
             .frame(width: 36, height: 5)
-            .frame(width: 96, height: 28)
+            .frame(width: 112, height: usesLandscapePhoneDrawer ? 44 : 28)
             .contentShape(Rectangle())
             .gesture(drawerDragGesture)
             .accessibilityLabel(Text("Resize drawer"))
@@ -410,12 +441,18 @@ struct MainUIView: View {
     }
 
     private var drawerDragGesture: some Gesture {
-        DragGesture(minimumDistance: 5)
-            .updating($drawerDragOffset) { value, state, _ in
-                state = value.translation.height
+        // The handle moves while drawerVisibleHeight changes. Measuring in the
+        // root coordinate space prevents that relayout from feeding back into
+        // the gesture's reported translation and making the drawer jitter.
+        DragGesture(minimumDistance: 5, coordinateSpace: .global)
+            .onChanged { value in
+                drawerDragOffset = value.translation.height
             }
             .onEnded { value in
-                settleDrawer(predictedTranslation: value.predictedEndTranslation.height)
+                settleDrawer(
+                    translation: value.translation.height,
+                    predictedTranslation: value.predictedEndTranslation.height
+                )
             }
     }
 
@@ -423,7 +460,8 @@ struct MainUIView: View {
         let viewportHeight = mapViewportSize.height > 0
             ? mapViewportSize.height
             : UIScreen.main.bounds.height
-        let availableHeight = viewportHeight - drawerOuterPadding - drawerBottomPadding
+        let bottomPadding = usesLandscapePhoneDrawer ? 0 : drawerOuterPadding
+        let availableHeight = viewportHeight - drawerOuterPadding - bottomPadding
         return max(availableHeight, 80)
     }
 
@@ -451,14 +489,25 @@ struct MainUIView: View {
         )
     }
 
-    private func settleDrawer(predictedTranslation: CGFloat) {
-        let threshold: CGFloat = 44
-        guard abs(predictedTranslation) >= threshold else { return }
+    private func settleDrawer(translation: CGFloat, predictedTranslation: CGFloat) {
+        let effectiveTranslation: CGFloat
+        let threshold: CGFloat
+        if usesLandscapePhoneDrawer {
+            // Slow, deliberate drags should count in landscape; relying only on
+            // release velocity made the collapsed drawer very difficult to open.
+            effectiveTranslation = translation
+            threshold = 20
+        } else {
+            effectiveTranslation = predictedTranslation
+            threshold = 44
+        }
 
         let nextDetent: PresentationDetent
-        if usesLandscapePhoneDrawer {
-            nextDetent = predictedTranslation < 0 ? .large : .height(80)
-        } else if predictedTranslation < 0 {
+        if abs(effectiveTranslation) < threshold {
+            nextDetent = viewobject.presDetent
+        } else if usesLandscapePhoneDrawer {
+            nextDetent = effectiveTranslation < 0 ? .large : .height(80)
+        } else if effectiveTranslation < 0 {
             nextDetent = viewobject.presDetent == .height(80) ? .height(350) : .large
         } else {
             nextDetent = viewobject.presDetent == .large ? .height(350) : .height(80)
@@ -466,12 +515,14 @@ struct MainUIView: View {
 
         withAnimation(.catenaryBouncy) {
             viewobject.presDetent = nextDetent
+            drawerDragOffset = 0
         }
     }
 
     private func beginSearch() {
         guard viewobject.currentStackItem == nil else { return }
         isSearchSheetTransitioning = true
+        isLandscapeSearchRequested = usesLandscapePhoneDrawer
         locationOpacity = usesLandscapePhoneDrawer ? 1 : 0
         viewobject.presDetent = .large
         searchFocusRequest &+= 1
@@ -532,24 +583,57 @@ struct MainUIView: View {
     }
 
     private var floatingToolbarBottomPadding: CGFloat {
-        if usesPortraitPhoneDrawer { return 16 }
+        if usesPortraitPhoneDrawer { return 8 }
         return usesLeadingPaneLayout ? 15 : 0
     }
 
     private var floatingToolbarYOffset: CGFloat {
-        if usesPortraitPhoneDrawer { return -liveSheetHeight }
+        if usesPortraitPhoneDrawer {
+            // A fixed-height native sheet includes the home-indicator inset,
+            // while a bottom-aligned overlay starts above that inset. Remove it
+            // here so the explicit padding is the actual gap above the drawer.
+            return -max(liveSheetHeight - mapBottomSafeAreaInset, 0)
+        }
         return usesLeadingPaneLayout ? 0 : -min(liveSheetHeight, 350)
+    }
+
+    private var floatingToolbarOpacity: CGFloat {
+        guard usesPortraitPhoneDrawer,
+              mapViewportSize.height > 0,
+              floatingToolbarHeight > 0 else {
+            return locationOpacity
+        }
+
+        let toolbarTop = mapViewportSize.height
+            - liveSheetHeight
+            - floatingToolbarBottomPadding
+            - floatingToolbarHeight
+        let fadeDistance: CGFloat = 44
+        let clearanceOpacity = min(
+            max((toolbarTop - mapTopSafeAreaInset) / fadeDistance, 0),
+            1
+        )
+        return locationOpacity * clearanceOpacity
     }
 
     private var drawerOuterPadding: CGFloat {
         usesLandscapePhoneDrawer ? 8 : 16
     }
 
+    private var landscapeSearchLauncherYOffset: CGFloat {
+        guard usesLandscapePhoneDrawer else { return 0 }
+        return min(drawerDragOffset, 0)
+    }
+
     private var drawerBottomPadding: CGFloat {
-        if usesLandscapePhoneDrawer, viewobject.presDetent == .large {
-            return 0
-        }
-        return drawerOuterPadding
+        guard usesLandscapePhoneDrawer else { return drawerOuterPadding }
+
+        let heightRange = max(drawerMaximumHeight - 80, 1)
+        let expansionProgress = min(
+            max((drawerVisibleHeight - 80) / heightRange, 0),
+            1
+        )
+        return drawerOuterPadding * (1 - expansionProgress)
     }
 
     private var leadingPaneWidth: CGFloat {
@@ -647,7 +731,9 @@ struct MainUIView: View {
             // The native sheet already reports intermediate heights. Avoid adding
             // another animation layer so the toolbar stays locked to its top edge.
             .animation(nil, value: liveSheetHeight)
-            .opacity(locationOpacity)
+            .opacity(floatingToolbarOpacity)
+            .allowsHitTesting(floatingToolbarOpacity > 0.01)
+            .accessibilityHidden(floatingToolbarOpacity <= 0.01)
         }
 
     }

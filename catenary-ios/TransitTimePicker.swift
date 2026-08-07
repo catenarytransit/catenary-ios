@@ -7,6 +7,7 @@ struct TransitTimePicker: View {
     @Binding var isNow: Bool
     let timezoneID: String?
     let onCommit: (Date?, Bool) -> Void
+    var compact = false
 
     @State private var showingPicker = false
     @State private var dragStartDate: Date?
@@ -15,17 +16,17 @@ struct TransitTimePicker: View {
         Button {
             showingPicker = true
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: compact ? 6 : 8) {
                 Image(systemName: isNow ? "clock.badge.checkmark" : "calendar.badge.clock")
                 Text(label)
-                    .font(.subheadline.weight(.semibold))
+                    .font(compact ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
                     .monospacedDigit()
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, compact ? 9 : 12)
+            .padding(.vertical, compact ? 5 : 8)
             .contentShape(Capsule())
             .background(.thinMaterial, in: .capsule)
             .overlay {
