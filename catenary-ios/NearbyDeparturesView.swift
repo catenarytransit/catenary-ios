@@ -633,47 +633,166 @@ private struct NearbyCompactSummary: View {
     let fallbackTimezoneID: String?
     let isLoading: Bool
 
+    @State private var pageIndex = 0
+    @State private var pageStartedAt = Date()
+
+    private let rowsPerPage = 3
+    private let pageDuration: TimeInterval = 5
+    private let rowHeight: CGFloat = 18
+    private let rowSpacing: CGFloat = 2
+
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 20)) { context in
-            HStack(alignment: .top, spacing: 7) {
-                Image(systemName: pinActive ? "mappin.and.ellipse" : "location.fill")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 14, height: 14)
-                    .padding(.top, 40)
-                    .accessibilityLabel(pinActive ? "Pinned location" : "Current location")
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: pageCount <= 1)) { context in
+            ZStack(alignment: .bottomTrailing) {
+                HStack(alignment: .top, spacing: 7) {
+                    Image(systemName: pinActive ? "mappin.and.ellipse" : "location.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 14, height: 14)
+                        .padding(.top, 20)
+                        .accessibilityLabel(pinActive ? "Pinned location" : "Current location")
 
-                VStack(alignment: .leading, spacing: 0) {
-                    if let station {
-                        NearbyCompactStationRow(
-                            group: station,
-                            departures: stationDepartures,
-                            now: context.date
-                        )
-                        .frame(height: 8)
+                    ZStack(alignment: .topLeading) {
+                        compactPage(now: context.date)
+                            .id(pageIndex)
+                            .transition(
+                                .asymmetric(
+                                    insertion: .move(edge: .bottom).combined(with: .opacity),
+                                    removal: .move(edge: .top).combined(with: .opacity)
+                                )
+                            )
                     }
-
-                    ForEach(routes) { route in
-                        NearbyCompactRouteRow(
-                            group: route,
-                            stops: stops[route.chateauId] ?? [:],
-                            fallbackTimezoneID: fallbackTimezoneID,
-                            now: context.date
-                        )
-                        .frame(height: 8)
-                    }
-
-                    if station == nil, routes.isEmpty {
-                        Text(isLoading ? "Loading departures..." : "No nearby departures")
-                            .font(.system(size: 8))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .frame(height: 8)
-                    }
+                    .frame(
+                        maxWidth: .infinity,
+                        minHeight: pageHeight,
+                        maxHeight: pageHeight,
+                        alignment: .topLeading
+                    )
+                    .clipped()
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if pageCount > 1 {
+                    NearbyCompactPageProgress(progress: pageProgress(at: context.date))
+                        .padding(.trailing, 2)
+                        .padding(.bottom, 1)
+                        .accessibilityHidden(true)
+                }
             }
         }
+        .task(id: pageCount) {
+            pageIndex = min(pageIndex, max(pageCount - 1, 0))
+            pageStartedAt = Date()
+
+            guard pageCount > 1 else { return }
+
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(pageDuration * 1_000_000_000))
+                } catch {
+                    return
+                }
+
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeInOut(duration: 0.45)) {
+                    pageIndex = (pageIndex + 1) % pageCount
+                    pageStartedAt = Date()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func compactPage(now: Date) -> some View {
+        if totalRowCount == 0 {
+            Text(isLoading ? "Loading departures..." : "No nearby departures")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(height: rowHeight)
+        } else {
+            VStack(alignment: .leading, spacing: rowSpacing) {
+                ForEach(pageRowIndices, id: \.self) { rowIndex in
+                    compactRow(at: rowIndex, now: now)
+                        .frame(height: rowHeight)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+    }
+
+    @ViewBuilder
+    private func compactRow(at rowIndex: Int, now: Date) -> some View {
+        if let station {
+            if rowIndex == 0 {
+                NearbyCompactStationRow(
+                    group: station,
+                    departures: stationDepartures,
+                    now: now
+                )
+            } else {
+                let routeIndex = rowIndex - 1
+                if routes.indices.contains(routeIndex) {
+                    let route = routes[routeIndex]
+                    NearbyCompactRouteRow(
+                        group: route,
+                        stops: stops[route.chateauId] ?? [:],
+                        fallbackTimezoneID: fallbackTimezoneID,
+                        now: now
+                    )
+                }
+            }
+        } else if routes.indices.contains(rowIndex) {
+            let route = routes[rowIndex]
+            NearbyCompactRouteRow(
+                group: route,
+                stops: stops[route.chateauId] ?? [:],
+                fallbackTimezoneID: fallbackTimezoneID,
+                now: now
+            )
+        }
+    }
+
+    private var totalRowCount: Int {
+        (station == nil ? 0 : 1) + routes.count
+    }
+
+    private var pageCount: Int {
+        guard totalRowCount > 0 else { return 1 }
+        return min(2, (totalRowCount + rowsPerPage - 1) / rowsPerPage)
+    }
+
+    private var pageRowIndices: [Int] {
+        let start = pageIndex * rowsPerPage
+        guard start < totalRowCount else { return [] }
+        let end = min(start + rowsPerPage, totalRowCount)
+        return Array(start..<end)
+    }
+
+    private var pageHeight: CGFloat {
+        rowHeight * CGFloat(rowsPerPage) + rowSpacing * CGFloat(rowsPerPage - 1)
+    }
+
+    private func pageProgress(at date: Date) -> CGFloat {
+        let elapsed = date.timeIntervalSince(pageStartedAt)
+        return CGFloat(min(max(elapsed / pageDuration, 0), 1))
+    }
+}
+
+private struct NearbyCompactPageProgress: View {
+    let progress: CGFloat
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.secondary.opacity(0.18))
+
+                Capsule()
+                    .fill(Color.secondary.opacity(0.72))
+                    .frame(width: proxy.size.width * progress)
+            }
+        }
+        .frame(width: 28, height: 2)
     }
 }
 
@@ -685,10 +804,10 @@ private struct NearbyCompactStationRow: View {
     var body: some View {
         HStack(spacing: 4) {
             Text(group.stationName)
-                .font(.system(size: 8, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(maxWidth: 92, alignment: .leading)
+                .frame(maxWidth: 118, alignment: .leading)
 
             ForEach(Array(visibleDepartures.enumerated()), id: \.offset) { index, departure in
                 let destination = NearbyCompactFormatting.destination(
@@ -700,10 +819,10 @@ private struct NearbyCompactStationRow: View {
                     now: now
                 ) {
                     (Text(time)
-                        .font(.system(size: 8, weight: .medium))
+                        .font(.system(size: 11, weight: .medium))
                         .monospacedDigit()
                     + Text(" \(destination)")
-                        .font(.system(size: 8)))
+                        .font(.system(size: 11)))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .layoutPriority(index == 0 ? 1 : 0)
@@ -741,7 +860,7 @@ private struct NearbyCompactRouteRow: View {
             ForEach(Array(headsigns.enumerated()), id: \.offset) { index, headsign in
                 if index > 0 {
                     Text("|")
-                        .font(.system(size: 8))
+                        .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                 }
 
@@ -786,13 +905,13 @@ private struct NearbyCompactHeadsignSummary: View {
     var body: some View {
         HStack(spacing: 2) {
             Text(NearbyCompactFormatting.destination(headsign.name))
-                .font(.system(size: 8))
+                .font(.system(size: 11))
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(maxWidth: 68, alignment: .leading)
+                .frame(maxWidth: 88, alignment: .leading)
 
             Text(timeList)
-                .font(.system(size: 8, weight: .medium))
+                .font(.system(size: 11, weight: .medium))
                 .monospacedDigit()
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
@@ -818,11 +937,11 @@ private struct NearbyCompactRouteBadge: View {
 
     var body: some View {
         Text(label)
-            .font(.system(size: 7.5, weight: .bold, design: .rounded))
+            .font(.system(size: 11, weight: .bold, design: .rounded))
             .lineLimit(1)
-            .minimumScaleFactor(0.7)
-            .padding(.horizontal, 2)
-            .frame(width: 18, height: 10)
+            .minimumScaleFactor(0.65)
+            .padding(.horizontal, 3)
+            .frame(width: 28, height: 16)
             .foregroundStyle(Color.transitHex(group.textColor, fallback: .white))
             .background(
                 Color.transitHex(group.color, fallback: .secondary),
