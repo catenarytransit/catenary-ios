@@ -685,7 +685,7 @@ private struct StopDepartureTimeView: View {
                         diff: realtimeTime - scheduledTime,
                         showSeconds: showSeconds,
                         fontSizeOfPolarity: 12,
-                        useSymbolSign: false,
+                        useSymbolSign: true,
                         hideMinUnits: !showSeconds
                     )
                 } else if let realtimeTime {
