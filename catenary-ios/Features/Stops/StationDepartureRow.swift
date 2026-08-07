@@ -113,7 +113,11 @@ struct StationDepartureRow: View {
             .buttonStyle(.plain)
             .disabled(event.tripId == nil && event.routeId.isEmpty)
         }
-        .padding(.vertical, mode == .rail ? 11 : 9)
+        .padding(.vertical, mode == .rail ? 8 : 7)
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+        .listRowSeparator(.hidden)
         .accessibilityElement(children: .contain)
     }
 
@@ -125,8 +129,8 @@ struct StationDepartureRow: View {
             } label: {
                 StopRouteBadge(
                     chateauID: event.chateau,
-                    shortName: routeInfo?.shortName ?? event.tripShortName,
-                    longName: routeInfo?.longName,
+                    shortName: routeInfo?.shortName,
+                    longName: routeInfo?.longName ?? event.tripShortName,
                     colorHex: routeInfo?.color,
                     textColorHex: routeInfo?.textColor,
                     mode: mode,
@@ -158,8 +162,8 @@ struct StationDepartureRow: View {
                     } label: {
                         StopRouteBadge(
                             chateauID: event.chateau,
-                            shortName: routeInfo?.shortName ?? event.tripShortName,
-                            longName: routeInfo?.longName,
+                            shortName: routeInfo?.shortName,
+                            longName: routeInfo?.longName ?? event.tripShortName,
                             colorHex: routeInfo?.color,
                             textColorHex: routeInfo?.textColor,
                             mode: mode,
@@ -416,7 +420,7 @@ private struct StopDepartureTimeView: View {
                 }
             }
         }
-        .frame(width: showSeconds ? 70 : 62, alignment: .leading)
+        .frame(width: showSeconds ? 64 : 56, alignment: .leading)
     }
 
     private func clock(
@@ -485,7 +489,7 @@ private struct StopRouteBadge: View {
 
     private var label: String {
         if let shortName, !shortName.isEmpty { return shortName.replacingOccurrences(of: " Line", with: "") }
-        if let longName, !longName.isEmpty { return String(longName.replacingOccurrences(of: " Line", with: "").prefix(8)) }
+        if let longName, !longName.isEmpty { return longName.replacingOccurrences(of: " Line", with: "") }
         return mode == .rail ? L10n.string("Rail") : "—"
     }
 
