@@ -196,6 +196,8 @@ struct NearbyDeparturesView: View {
     @ObservedObject var locationManager: LocationManager
     let fixedOrigin: CLLocationCoordinate2D?
     let drawerHeight: CGFloat?
+    let isDrawerCollapsed: Bool?
+    let collapsedDrawerHeight: CGFloat?
     @Binding private var pinActive: Bool
     @Binding private var pickedCoordinate: CLLocationCoordinate2D?
 
@@ -212,12 +214,16 @@ struct NearbyDeparturesView: View {
         locationManager: LocationManager,
         fixedOrigin: CLLocationCoordinate2D? = nil,
         drawerHeight: CGFloat? = nil,
+        isDrawerCollapsed: Bool? = nil,
+        collapsedDrawerHeight: CGFloat? = nil,
         pinActive: Binding<Bool> = .constant(false),
         pickedCoordinate: Binding<CLLocationCoordinate2D?> = .constant(nil)
     ) {
         self.locationManager = locationManager
         self.fixedOrigin = fixedOrigin
         self.drawerHeight = drawerHeight
+        self.isDrawerCollapsed = isDrawerCollapsed
+        self.collapsedDrawerHeight = collapsedDrawerHeight
         _pinActive = pinActive
         _pickedCoordinate = pickedCoordinate
         _lockedOrigin = State(
@@ -403,16 +409,21 @@ struct NearbyDeparturesView: View {
     }
 
     private var usesCompactDrawerSummary: Bool {
-        fixedOrigin == nil && drawerHeight != nil
+        fixedOrigin == nil
+            && drawerHeight != nil
+            && isDrawerCollapsed != nil
     }
 
     private var drawerExpansionProgress: CGFloat {
-        guard usesCompactDrawerSummary, let drawerHeight else { return 1 }
+        guard usesCompactDrawerSummary else { return 1 }
 
-        // The drawer drag gesture begins after five points. Fade the compact
-        // summary over the next few points so the full controls are already
-        // visible before the drag has meaningfully expanded the drawer.
-        return min(max((drawerHeight - 80) / 14, 0), 1)
+        // The detent selection is the source of truth for the closed state.
+        // Geometry is used only for the few-pixel drag transition because a
+        // native fixed-height sheet can measure taller than its nominal 80 pt.
+        guard isDrawerCollapsed == true else { return 1 }
+        guard let drawerHeight, let collapsedDrawerHeight else { return 0 }
+
+        return min(max((drawerHeight - collapsedDrawerHeight) / 14, 0), 1)
     }
 
     private var compactSummary: some View {
@@ -999,7 +1010,8 @@ private struct NearbyStationDepartureRow: View {
                 chateauID: departure.chateauId
             ),
             trainDisplayName: departure.tripShortName,
-            showAgencyName: true
+            showAgencyName: false,
+            showTimeDiff: false
         )
     }
 
