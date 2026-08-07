@@ -192,7 +192,11 @@ struct StationDepartureRow: View {
             if event.chateau == NationalRailUtils.chateauID {
                 NationalRailAgencyLabel(
                     agencyID: routeInfo?.agencyId,
-                    agencyName: agency?.agencyName
+                    agencyName: agency?.agencyName,
+                    showsName: !NationalRailUtils.isElizabethLine(
+                        agencyID: routeInfo?.agencyId,
+                        agencyName: agency?.agencyName
+                    )
                 )
             } else {
                 Text(resolvedAgencyName)
@@ -413,7 +417,11 @@ struct StationTrainDepartureRowCompact: View {
                     NationalRailAgencyLabel(
                         agencyID: routeInfo?.agencyId,
                         agencyName: agency?.agencyName,
-                        compact: true
+                        compact: true,
+                        showsName: !NationalRailUtils.isElizabethLine(
+                            agencyID: routeInfo?.agencyId,
+                            agencyName: agency?.agencyName
+                        )
                     )
                 } else {
                     Text(resolvedAgencyName)

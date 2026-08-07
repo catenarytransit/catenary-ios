@@ -29,12 +29,15 @@ struct NationalRailAgencyLabel: View {
     let agencyID: String?
     let agencyName: String?
     var compact = false
+    var showsName = true
 
     var body: some View {
         if let resolvedName = NationalRailUtils.resolvedAgencyName(
             agencyID: agencyID,
             agencyName: agencyName
         ) {
+            let iconSize: CGFloat = compact ? 14 : 16
+
             HStack(spacing: 4) {
                 if let iconURL = NationalRailUtils.agencyIconURL(
                     agencyID: agencyID,
@@ -43,17 +46,20 @@ struct NationalRailAgencyLabel: View {
                     TransitRemoteSVGImage(
                         url: iconURL,
                         accessibilityLabel: resolvedName,
-                        contentSize: compact ? 14 : 16,
+                        contentSize: iconSize,
                         showsPlaceholder: false
                     ) {
                         EmptyView()
                     }
+                    .frame(width: iconSize, height: iconSize)
                 }
 
-                Text(resolvedName)
-                    .font(compact ? .caption2 : .caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                if showsName {
+                    Text(resolvedName)
+                        .font(compact ? .caption2 : .caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
         }
     }
