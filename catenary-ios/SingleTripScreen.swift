@@ -6,7 +6,6 @@ struct SingleTripScreen: View {
 
     @EnvironmentObject private var viewObject: viewObject
     @StateObject private var model: SingleTripViewModel
-    @AppStorage("singleTripShowPreviousStops") private var showPreviousStops = false
     @AppStorage("singleTripShowOriginalTimetable") private var showOriginalTimetable = false
     @AppStorage("singleTripShowCountdown") private var showCountdown = true
     @State private var hasScrolledToCurrentStop = false
@@ -130,27 +129,7 @@ struct SingleTripScreen: View {
 
                     displayOptions
 
-                    if !showPreviousStops, model.lastInactiveStopIndex > 0 {
-                        Button {
-                            withAnimation {
-                                showPreviousStops = true
-                            }
-                        } label: {
-                            Label {
-                                Text(verbatim: L10n.format(
-                                    "trip.show_previous_stops",
-                                    defaultValue: "Show %d previous stops",
-                                    model.lastInactiveStopIndex
-                                ))
-                            } icon: {
-                                Image(systemName: "chevron.up")
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                    }
-
-                    ForEach(visibleStops, id: \.offset) { item in
+                    ForEach(Array(model.stopTimes.enumerated()), id: \.offset) { item in
                         let index = item.offset
                         let stop = item.element
                         SingleTripStopRow(
@@ -320,7 +299,6 @@ struct SingleTripScreen: View {
 
     private var displayOptions: some View {
         Menu {
-            Toggle("Show previous stops", isOn: $showPreviousStops)
             Toggle("Show original timetable", isOn: $showOriginalTimetable)
             Toggle("Show countdowns", isOn: $showCountdown)
         } label: {
@@ -342,13 +320,6 @@ struct SingleTripScreen: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(10)
             .background(color.opacity(0.12), in: .rect(cornerRadius: 10))
-    }
-
-    private var visibleStops: [(offset: Int, element: SingleTripStopState)] {
-        let enumerated = Array(model.stopTimes.enumerated())
-        guard !showPreviousStops, model.lastInactiveStopIndex > 0 else { return enumerated }
-        let firstVisible = max(model.lastInactiveStopIndex - 1, 0)
-        return Array(enumerated.dropFirst(firstVisible))
     }
 
     private var currentStopTarget: Int? {
