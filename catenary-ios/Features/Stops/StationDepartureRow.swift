@@ -67,23 +67,23 @@ struct StationDepartureRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 6) {
-            if layout == .swiss {
-                leadingRouteButton
-            }
+        Button(action: openTrip) {
+            HStack(alignment: .center, spacing: 6) {
+                if layout == .swiss {
+                    leadingRouteBadge
+                }
 
-            StopDepartureTimeView(
-                event: event,
-                timezoneID: timezoneID,
-                now: now,
-                showCountdown: mode == .rail ? showCountdownsUnder1h : showLocalTransitCountdowns
-            )
+                StopDepartureTimeView(
+                    event: event,
+                    timezoneID: timezoneID,
+                    now: now,
+                    showCountdown: mode == .rail ? showCountdownsUnder1h : showLocalTransitCountdowns
+                )
 
-            if showsLeadingRoute, layout != .swiss {
-                leadingRouteButton
-            }
+                if showsLeadingRoute, layout != .swiss {
+                    leadingRouteBadge
+                }
 
-            Button(action: openTrip) {
                 HStack(alignment: .center, spacing: 8) {
                     VStack(alignment: .leading, spacing: 4) {
                         destinationLabel
@@ -108,12 +108,12 @@ struct StationDepartureRow: View {
                             .frame(minWidth: 24, alignment: .trailing)
                     }
                 }
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .disabled(event.tripId == nil && event.routeId.isEmpty)
+            .padding(.vertical, mode == .rail ? 8 : 7)
+            .contentShape(Rectangle())
         }
-        .padding(.vertical, mode == .rail ? 8 : 7)
+        .buttonStyle(.plain)
+        .disabled(event.tripId == nil && event.routeId.isEmpty)
         .overlay(alignment: .bottom) {
             Divider()
         }
@@ -122,23 +122,17 @@ struct StationDepartureRow: View {
     }
 
     @ViewBuilder
-    private var leadingRouteButton: some View {
+    private var leadingRouteBadge: some View {
         if showsRouteBadge {
-            Button {
-                openRoute()
-            } label: {
-                StopRouteBadge(
-                    chateauID: event.chateau,
-                    shortName: routeInfo?.shortName ?? event.tripShortName,
-                    longName: routeInfo?.longName,
-                    colorHex: routeInfo?.color,
-                    textColorHex: routeInfo?.textColor,
-                    mode: mode,
-                    layout: layout
-                )
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Open route")
+            StopRouteBadge(
+                chateauID: event.chateau,
+                shortName: routeInfo?.shortName ?? event.tripShortName,
+                longName: routeInfo?.longName,
+                colorHex: routeInfo?.color,
+                textColorHex: routeInfo?.textColor,
+                mode: mode,
+                layout: layout
+            )
         }
     }
 
@@ -157,22 +151,16 @@ struct StationDepartureRow: View {
         if layout == .regular, mode == .rail, showsRouteBadge || !values.isEmpty || hasAgency {
             HStack(spacing: 5) {
                 if showsRouteBadge {
-                    Button {
-                        openRoute()
-                    } label: {
-                        StopRouteBadge(
-                            chateauID: event.chateau,
-                            shortName: routeInfo?.shortName ?? event.tripShortName,
-                            longName: routeInfo?.longName,
-                            colorHex: routeInfo?.color,
-                            textColorHex: routeInfo?.textColor,
-                            mode: mode,
-                            layout: layout,
-                            compact: true
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Open route")
+                    StopRouteBadge(
+                        chateauID: event.chateau,
+                        shortName: routeInfo?.shortName ?? event.tripShortName,
+                        longName: routeInfo?.longName,
+                        colorHex: routeInfo?.color,
+                        textColorHex: routeInfo?.textColor,
+                        mode: mode,
+                        layout: layout,
+                        compact: true
+                    )
                 }
 
                 agencyMetadata
@@ -302,10 +290,6 @@ struct StationDepartureRow: View {
         return value.isEmpty ? raw : value
     }
 
-    private func openRoute() {
-        viewObject.push(.route(chateauID: event.chateau, routeID: event.routeId))
-    }
-
     private func openTrip() {
         viewObject.push(.singleTrip(
             chateauID: event.chateau,
@@ -356,23 +340,23 @@ struct StationTrainDepartureRowCompact: View {
     @AppStorage("showCountdownsUnder1h") private var showCountdownsUnder1h = false
 
     var body: some View {
-        HStack(alignment: .center, spacing: 5) {
-            if layout == .swiss {
-                routeButton
-            }
+        Button(action: openTrip) {
+            HStack(alignment: .center, spacing: 5) {
+                if layout == .swiss {
+                    routeBadge
+                }
 
-            CompactTrainDepartureTimeView(
-                event: event,
-                timezoneID: timezoneID,
-                now: now,
-                showCountdown: showTimeDiff && showCountdownsUnder1h
-            )
+                CompactTrainDepartureTimeView(
+                    event: event,
+                    timezoneID: timezoneID,
+                    now: now,
+                    showCountdown: showTimeDiff && showCountdownsUnder1h
+                )
 
-            if layout == .eurostyle {
-                routeButton
-            }
+                if layout == .eurostyle {
+                    routeBadge
+                }
 
-            Button(action: openTrip) {
                 HStack(alignment: .center, spacing: 6) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(destinationText)
@@ -392,32 +376,28 @@ struct StationTrainDepartureRowCompact: View {
                             .frame(minWidth: 22, alignment: .trailing)
                     }
                 }
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .disabled(event.tripId == nil && event.routeId.isEmpty)
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
         }
-        .padding(.vertical, 2)
+        .buttonStyle(.plain)
+        .disabled(event.tripId == nil && event.routeId.isEmpty)
         .accessibilityElement(children: .contain)
     }
 
     @ViewBuilder
-    private var routeButton: some View {
+    private var routeBadge: some View {
         if showsRouteBadge {
-            Button(action: openRoute) {
-                StopRouteBadge(
-                    chateauID: event.chateau,
-                    shortName: routeInfo?.shortName,
-                    longName: routeInfo?.longName ?? event.tripShortName,
-                    colorHex: routeInfo?.color,
-                    textColorHex: routeInfo?.textColor,
-                    mode: compactMode,
-                    layout: layout,
-                    compact: layout == .regular
-                )
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Open route")
+            StopRouteBadge(
+                chateauID: event.chateau,
+                shortName: routeInfo?.shortName,
+                longName: routeInfo?.longName ?? event.tripShortName,
+                colorHex: routeInfo?.color,
+                textColorHex: routeInfo?.textColor,
+                mode: compactMode,
+                layout: layout,
+                compact: layout == .regular
+            )
         }
     }
 
@@ -425,7 +405,7 @@ struct StationTrainDepartureRowCompact: View {
     private var metadataLine: some View {
         HStack(spacing: 5) {
             if layout == .regular {
-                routeButton
+                routeBadge
             }
 
             if showAgencyName, let resolvedAgencyName {
@@ -519,10 +499,6 @@ struct StationTrainDepartureRowCompact: View {
         guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
               !value.isEmpty else { return nil }
         return value
-    }
-
-    private func openRoute() {
-        viewObject.push(.route(chateauID: event.chateau, routeID: event.routeId))
     }
 
     private func openTrip() {
