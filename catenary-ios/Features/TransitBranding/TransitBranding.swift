@@ -41,11 +41,14 @@ struct NationalRailAgencyLabel: View {
                     agencyID: agencyID,
                     agencyName: agencyName
                 ) {
-                    TransitRemoteSVGImage(url: iconURL, accessibilityLabel: resolvedName) {
-                        Image(systemName: "train.side.front.car")
-                            .foregroundStyle(.secondary)
+                    TransitRemoteSVGImage(
+                        url: iconURL,
+                        accessibilityLabel: resolvedName,
+                        contentSize: compact ? 14 : 16,
+                        showsPlaceholder: false
+                    ) {
+                        EmptyView()
                     }
-                    .frame(width: compact ? 14 : 16, height: compact ? 14 : 16)
                 }
 
                 Text(resolvedName)
@@ -60,6 +63,8 @@ struct NationalRailAgencyLabel: View {
 private struct TransitRemoteSVGImage<Placeholder: View>: View {
     let url: URL?
     let accessibilityLabel: String
+    let contentSize: CGFloat?
+    let showsPlaceholder: Bool
     private let placeholder: Placeholder
 
     @State private var svgSource: String?
@@ -67,10 +72,14 @@ private struct TransitRemoteSVGImage<Placeholder: View>: View {
     init(
         url: URL?,
         accessibilityLabel: String,
+        contentSize: CGFloat? = nil,
+        showsPlaceholder: Bool = true,
         @ViewBuilder placeholder: () -> Placeholder
     ) {
         self.url = url
         self.accessibilityLabel = accessibilityLabel
+        self.contentSize = contentSize
+        self.showsPlaceholder = showsPlaceholder
         self.placeholder = placeholder()
     }
 
@@ -78,8 +87,11 @@ private struct TransitRemoteSVGImage<Placeholder: View>: View {
         Group {
             if let svgSource {
                 TransitInlineSVGView(svgSource: svgSource)
-            } else {
+                    .frame(width: contentSize, height: contentSize)
+            } else if showsPlaceholder {
                 placeholder
+            } else {
+                Color.clear.frame(width: 0, height: 0)
             }
         }
         .accessibilityElement(children: .ignore)

@@ -126,7 +126,7 @@ struct StationDepartureRow: View {
         if showsRouteBadge {
             StopRouteBadge(
                 chateauID: event.chateau,
-                shortName: routeInfo?.shortName ?? event.tripShortName,
+                shortName: routeInfo?.shortName,
                 longName: routeInfo?.longName,
                 colorHex: routeInfo?.color,
                 textColorHex: routeInfo?.textColor,
@@ -153,7 +153,7 @@ struct StationDepartureRow: View {
                 if showsRouteBadge {
                     StopRouteBadge(
                         chateauID: event.chateau,
-                        shortName: routeInfo?.shortName ?? event.tripShortName,
+                        shortName: routeInfo?.shortName,
                         longName: routeInfo?.longName,
                         colorHex: routeInfo?.color,
                         textColorHex: routeInfo?.textColor,
@@ -272,7 +272,7 @@ struct StationDepartureRow: View {
     }
 
     private var routeLabel: String? {
-        for value in [routeInfo?.shortName, routeInfo?.longName, event.tripShortName] {
+        for value in [routeInfo?.shortName, routeInfo?.longName] {
             if let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty {
                 return value
             }
@@ -391,7 +391,7 @@ struct StationTrainDepartureRowCompact: View {
             StopRouteBadge(
                 chateauID: event.chateau,
                 shortName: routeInfo?.shortName,
-                longName: routeInfo?.longName ?? event.tripShortName,
+                longName: routeInfo?.longName,
                 colorHex: routeInfo?.color,
                 textColorHex: routeInfo?.textColor,
                 mode: compactMode,
@@ -455,7 +455,6 @@ struct StationTrainDepartureRowCompact: View {
     private var routeLabel: String? {
         nonBlank(routeInfo?.shortName)
             ?? nonBlank(routeInfo?.longName)
-            ?? nonBlank(event.tripShortName)
     }
 
     private var effectiveTrainName: String? {
@@ -477,13 +476,7 @@ struct StationTrainDepartureRowCompact: View {
     }
 
     private var showsRouteBadge: Bool {
-        guard routeLabel != nil else { return false }
-        guard event.chateau == NationalRailUtils.chateauID else { return true }
-
-        let agencyID = routeInfo?.agencyId?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .uppercased()
-        return ["TW", "ME", "LO", "XR", "HX"].contains(agencyID ?? "")
+        routeLabel != nil
     }
 
     private var platformText: String? {
@@ -606,7 +599,7 @@ private struct CompactTrainDepartureTimeView: View {
                 }
             }
         }
-        .frame(width: showSeconds ? 76 : 58, alignment: .leading)
+        .frame(width: showSeconds ? 70 : 54, alignment: .leading)
     }
 
     private func clock(
@@ -729,7 +722,7 @@ private struct StopDepartureTimeView: View {
                 }
             }
         }
-        .frame(width: showSeconds ? 64 : 56, alignment: .leading)
+        .frame(width: showSeconds ? 60 : 52, alignment: .leading)
     }
 
     private func clock(
