@@ -1,7 +1,6 @@
 import Foundation
+import SVGView
 import SwiftUI
-import UIKit
-import WebKit
 
 struct MTASubwayIcon: View {
     let routeID: String
@@ -67,7 +66,7 @@ private struct TransitRemoteSVGImage<Placeholder: View>: View {
     let showsPlaceholder: Bool
     private let placeholder: Placeholder
 
-    @State private var svgSource: String?
+    @State private var svgData: Data?
 
     init(
         url: URL?,
@@ -85,8 +84,9 @@ private struct TransitRemoteSVGImage<Placeholder: View>: View {
 
     var body: some View {
         Group {
-            if let svgSource {
-                TransitInlineSVGView(svgSource: svgSource)
+            if let svgData {
+                SVGView(data: svgData)
+                    .aspectRatio(contentMode: .fit)
                     .frame(width: contentSize, height: contentSize)
             } else if showsPlaceholder {
                 placeholder
@@ -97,7 +97,7 @@ private struct TransitRemoteSVGImage<Placeholder: View>: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
         .task(id: url?.absoluteString) {
-            svgSource = nil
+            svgData = nil
             guard let url else { return }
 
             do {
@@ -112,80 +112,13 @@ private struct TransitRemoteSVGImage<Placeholder: View>: View {
                    !(200 ... 299).contains(response.statusCode) {
                     return
                 }
-                guard !Task.isCancelled,
-                      let source = String(data: data, encoding: .utf8) else {
+                guard !Task.isCancelled else {
                     return
                 }
-                svgSource = source
+                svgData = data
             } catch {
                 // Retain the SwiftUI fallback if the remote icon cannot be loaded.
             }
         }
-    }
-}
-
-private struct TransitInlineSVGView: UIViewRepresentable {
-    let svgSource: String
-
-    final class Coordinator {
-        var lastSource: String?
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    func makeUIView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
-
-        let webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.isOpaque = false
-        webView.backgroundColor = .clear
-        webView.scrollView.backgroundColor = .clear
-        webView.scrollView.isScrollEnabled = false
-        webView.scrollView.contentInsetAdjustmentBehavior = .never
-        webView.isUserInteractionEnabled = false
-        webView.isAccessibilityElement = false
-        webView.accessibilityElementsHidden = true
-        return webView
-    }
-
-    func updateUIView(_ webView: WKWebView, context: Context) {
-        guard context.coordinator.lastSource != svgSource else { return }
-        context.coordinator.lastSource = svgSource
-        webView.loadHTMLString(html, baseURL: nil)
-    }
-
-    private var html: String {
-        let svg = svgSource
-            .replacingOccurrences(
-                of: #"(?s)<\?xml.*?\?>"#,
-                with: "",
-                options: .regularExpression
-            )
-            .replacingOccurrences(
-                of: #"(?s)<!DOCTYPE.*?>"#,
-                with: "",
-                options: .regularExpression
-            )
-
-        return """
-        <!doctype html>
-        <html>
-        <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-            <style>
-                html, body {
-                    width: 100%; height: 100%; margin: 0; padding: 0;
-                    overflow: hidden; background: transparent;
-                }
-                body { display: flex; align-items: center; justify-content: center; }
-                svg { display: block; width: 100%; height: 100%; }
-            </style>
-        </head>
-        <body>\(svg)</body>
-        </html>
-        """
     }
 }
