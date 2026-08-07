@@ -163,6 +163,7 @@ struct MainUIView: View {
     @StateObject private var nearbyPinMapCoordinator = NearbyPinMapCoordinator()
     @State private var isSheetPresented = true
     @State private var liveSheetHeight: CGFloat = 350
+    @State private var collapsedNativeSheetHeight: CGFloat?
     @State private var locationOpacity: CGFloat = 1
     @State private var text = ""
     @State var tempSheetOpacity: CGFloat = 0
@@ -325,7 +326,12 @@ struct MainUIView: View {
             } else {
                 locationOpacity = 1
             }
-            liveSheetHeight = detent == .height(80) ? 80 : 350
+            // Native sheets include presentation/safe-area chrome in their measured
+            // height. Keep that geometry as the source of truth so the FAB stays a
+            // fixed distance above the drawer instead of jumping at detent settle.
+            if usesCustomDrawer {
+                liveSheetHeight = detent == .height(80) ? 80 : 350
+            }
         }
         .task {
             locationManager.checkLocationAuthorization()
@@ -376,6 +382,23 @@ struct MainUIView: View {
                     ? viewobject.largeDetentHeight
                     : newValue
                 let boundedHeight = min(newValue, maximumHeight)
+
+                // A fixed detent's SwiftUI geometry can include safe-area/presentation
+                // chrome, so the measured closed height is not guaranteed to be 80.
+                // While the selection still says "collapsed", retain the smallest
+                // geometry value we observe. During an upward drag the height grows,
+                // leaving this as a stable baseline for the compact-pill crossfade.
+                if viewobject.presDetent == .height(80) {
+                    if let collapsedNativeSheetHeight {
+                        self.collapsedNativeSheetHeight = min(
+                            collapsedNativeSheetHeight,
+                            boundedHeight
+                        )
+                    } else {
+                        collapsedNativeSheetHeight = boundedHeight
+                    }
+                }
+
                 if abs(liveSheetHeight - boundedHeight) > 0.5 {
                     liveSheetHeight = boundedHeight
                 }
@@ -397,6 +420,7 @@ struct MainUIView: View {
         BottomDrawer(
             selectedDetent: $viewobject.presDetent,
             sheetHeight: sheetHeight,
+            collapsedDrawerHeight: usesCustomDrawer ? 80 : collapsedNativeSheetHeight,
             locationManager: locationManager,
             searchViewModel: searchViewModel,
             focusRequest: searchFocusRequest,
@@ -589,10 +613,9 @@ struct MainUIView: View {
 
     private var floatingToolbarYOffset: CGFloat {
         if usesPortraitPhoneDrawer {
-            // A fixed-height native sheet includes the home-indicator inset,
-            // while a bottom-aligned overlay starts above that inset. Remove it
-            // here so the explicit padding is the actual gap above the drawer.
-            return -max(liveSheetHeight - mapBottomSafeAreaInset, 0)
+            // The sheet height already includes the bottom safe-area region.
+            // Offset by the full height so the 8-point padding remains the true gap.
+            return -liveSheetHeight
         }
         return usesLeadingPaneLayout ? 0 : -min(liveSheetHeight, 350)
     }

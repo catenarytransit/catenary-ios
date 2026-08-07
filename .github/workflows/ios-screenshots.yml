@@ -30,11 +30,29 @@ jobs:
       SOURCE_PACKAGES: ${{ github.workspace }}/SourcePackages-screenshots
       BUILD_LOG: ${{ github.workspace }}/xcodebuild-screenshots.log
       SCREENSHOT_DIR: ${{ github.workspace }}/screenshots
+      SCREENSHOT_SETTLE_SECONDS: "10"
       DOWNTOWN_LA: "34.0522,-118.2437"
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.SOURCE_PACKAGES }}
+          key: ios-screenshots-swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('catenary-ios.xcodeproj/project.pbxproj', '**/Package.resolved') }}
+          restore-keys: |
+            ios-screenshots-swiftpm-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Cache Xcode build artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA }}
+          key: ios-screenshots-derived-data-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('catenary-ios.xcodeproj/project.pbxproj', '**/Package.resolved') }}-${{ github.sha }}
+          restore-keys: |
+            ios-screenshots-derived-data-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('catenary-ios.xcodeproj/project.pbxproj', '**/Package.resolved') }}-
+            ios-screenshots-derived-data-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Select Xcode
         run: sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
@@ -126,13 +144,11 @@ jobs:
           xcrun simctl boot "$SIMULATOR_UDID"
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
 
-      - name: Clear Xcode and SwiftPM state
+      - name: Prepare Xcode and SwiftPM state
         shell: bash
         run: |
           set -euxo pipefail
 
-          rm -rf "$DERIVED_DATA"
-          rm -rf "$SOURCE_PACKAGES"
           rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
           rm -rf "$HOME/Library/Caches/org.swift.swiftpm"
           rm -rf "$HOME/Library/org.swift.swiftpm"
@@ -208,13 +224,18 @@ jobs:
 
             xcrun simctl terminate "$SIMULATOR_UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
             xcrun simctl launch "$SIMULATOR_UDID" "$BUNDLE_ID" "$@" >/dev/null
-            sleep 10
+            # Wait for the screen state to settle and animations to finish before capture.
+            sleep "$SCREENSHOT_SETTLE_SECONDS"
             xcrun simctl io "$SIMULATOR_UDID" screenshot "$SCREENSHOT_DIR/$filename"
           }
 
           capture_screenshot "01-start.png"
+          sleep 2s
           capture_screenshot "02-drawer-expanded.png" --ci-screenshot-drawer-expanded
+          sleep 3s
           capture_screenshot "03-drawer-collapsed.png" --ci-screenshot-drawer-collapsed
+          sleep 3s
+          capture_screenshot "04-drawer-collapsed-after-state.png" --ci-screenshot-drawer-collapsed
 
           for screenshot in "$SCREENSHOT_DIR"/*.png; do
             width="$(sips -g pixelWidth "$screenshot" | awk '/pixelWidth/ { print $2 }')"

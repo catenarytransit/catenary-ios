@@ -62,6 +62,13 @@ enum NationalRailUtils {
         return URL(string: "https://maps.catenarymaps.org/agencyicons/\(iconName)")
     }
 
+    static func isElizabethLine(agencyID: String?, agencyName: String?) -> Bool {
+        resolvedAgencyName(
+            agencyID: agencyID,
+            agencyName: agencyName
+        )?.caseInsensitiveCompare("Elizabeth Line") == .orderedSame
+    }
+
     private static func normalize(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }

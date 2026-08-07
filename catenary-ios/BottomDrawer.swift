@@ -15,6 +15,7 @@ import MapLibreSwiftUI
 struct BottomDrawer: View {
     @Binding var selectedDetent: PresentationDetent
     let sheetHeight: CGFloat
+    let collapsedDrawerHeight: CGFloat?
     @ObservedObject var locationManager: LocationManager
     let searchViewModel: SearchViewModel
     let focusRequest: Int
@@ -39,6 +40,9 @@ struct BottomDrawer: View {
                 ZStack {
                     NearbyDeparturesView(
                         locationManager: locationManager,
+                        drawerHeight: sheetHeight,
+                        isDrawerCollapsed: selectedDetent == .height(80),
+                        collapsedDrawerHeight: collapsedDrawerHeight,
                         pinActive: $nearbyPinActive,
                         pickedCoordinate: $nearbyPinCoordinate
                     )

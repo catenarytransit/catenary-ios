@@ -4,9 +4,8 @@
 //
 
 import Foundation
+import SVGView
 import SwiftUI
-import UIKit
-import WebKit
 
 struct RouteHeading<Controls: View>: View {
     let color: String
@@ -657,7 +656,7 @@ private struct RemoteSVGImage<Placeholder: View>: View {
     let accessibilityLabel: String
     private let placeholder: Placeholder
 
-    @State private var svgSource: String?
+    @State private var svgData: Data?
 
     init(
         url: URL?,
@@ -673,8 +672,9 @@ private struct RemoteSVGImage<Placeholder: View>: View {
 
     var body: some View {
         Group {
-            if let svgSource {
-                InlineSVGView(svgSource: svgSource, tintCSS: tintCSS)
+            if let svgData {
+                SVGView(data: svgData)
+                    .aspectRatio(contentMode: .fit)
             } else {
                 placeholder
             }
@@ -682,7 +682,7 @@ private struct RemoteSVGImage<Placeholder: View>: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
         .task(id: url?.absoluteString) {
-            svgSource = nil
+            svgData = nil
             guard let url else {
                 return
             }
@@ -699,102 +699,50 @@ private struct RemoteSVGImage<Placeholder: View>: View {
                    !(200 ... 299).contains(response.statusCode) {
                     return
                 }
-                guard !Task.isCancelled, let source = String(data: data, encoding: .utf8) else {
+                guard !Task.isCancelled else {
                     return
                 }
-                svgSource = source
+                svgData = applyingTint(to: data)
             } catch {
                 // Keep the agency-specific SwiftUI fallback visible.
             }
         }
     }
-}
 
-private struct InlineSVGView: UIViewRepresentable {
-    let svgSource: String
-    let tintCSS: String?
-
-    final class Coordinator {
-        var lastSource: String?
-        var lastTint: String?
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    func makeUIView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
-
-        let webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.isOpaque = false
-        webView.backgroundColor = .clear
-        webView.scrollView.backgroundColor = .clear
-        webView.scrollView.isScrollEnabled = false
-        webView.scrollView.contentInsetAdjustmentBehavior = .never
-        webView.isUserInteractionEnabled = false
-        webView.isAccessibilityElement = false
-        webView.accessibilityElementsHidden = true
-        return webView
-    }
-
-    func updateUIView(_ webView: WKWebView, context: Context) {
-        guard context.coordinator.lastSource != svgSource
-                || context.coordinator.lastTint != tintCSS else {
-            return
+    private func applyingTint(to data: Data) -> Data {
+        guard let tintCSS,
+              var source = String(data: data, encoding: .utf8) else {
+            return data
         }
 
-        context.coordinator.lastSource = svgSource
-        context.coordinator.lastTint = tintCSS
-        webView.loadHTMLString(html, baseURL: nil)
-    }
+        let replacements: [(pattern: String, replacement: String)] = [
+            (
+                #"(?i)(\bfill\s*=\s*")(?!none\b|transparent\b)[^"]*(")"#,
+                "$1\(tintCSS)$2"
+            ),
+            (
+                #"(?i)(\bstroke\s*=\s*")(?!none\b|transparent\b)[^"]*(")"#,
+                "$1\(tintCSS)$2"
+            ),
+            (
+                #"(?i)(\bfill\s*:\s*)(?!none\b|transparent\b)[^;"']+"#,
+                "$1\(tintCSS)"
+            ),
+            (
+                #"(?i)(\bstroke\s*:\s*)(?!none\b|transparent\b)[^;"']+"#,
+                "$1\(tintCSS)"
+            )
+        ]
 
-    private var html: String {
-        let svg = svgSource
-            .replacingOccurrences(
-                of: #"(?s)<\?xml.*?\?>"#,
-                with: "",
+        for replacement in replacements {
+            source = source.replacingOccurrences(
+                of: replacement.pattern,
+                with: replacement.replacement,
                 options: .regularExpression
             )
-            .replacingOccurrences(
-                of: #"(?s)<!DOCTYPE.*?>"#,
-                with: "",
-                options: .regularExpression
-            )
-
-        let tintRules: String
-        if let tintCSS {
-            tintRules = """
-            svg[fill]:not([fill="none"]), svg [fill]:not([fill="none"]) {
-                fill: \(tintCSS) !important;
-            }
-            svg[stroke]:not([stroke="none"]), svg [stroke]:not([stroke="none"]) {
-                stroke: \(tintCSS) !important;
-            }
-            """
-        } else {
-            tintRules = ""
         }
 
-        return """
-        <!doctype html>
-        <html>
-        <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-            <style>
-                html, body {
-                    width: 100%; height: 100%; margin: 0; padding: 0;
-                    overflow: hidden; background: transparent;
-                }
-                body { display: flex; align-items: center; justify-content: center; }
-                svg { display: block; width: 100%; height: 100%; }
-                \(tintRules)
-            </style>
-        </head>
-        <body>\(svg)</body>
-        </html>
-        """
+        return source.data(using: .utf8) ?? data
     }
 }
 
