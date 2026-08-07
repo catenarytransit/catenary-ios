@@ -326,7 +326,12 @@ struct MainUIView: View {
             } else {
                 locationOpacity = 1
             }
-            liveSheetHeight = detent == .height(80) ? 80 : 350
+            // Native sheets include presentation/safe-area chrome in their measured
+            // height. Keep that geometry as the source of truth so the FAB stays a
+            // fixed distance above the drawer instead of jumping at detent settle.
+            if usesCustomDrawer {
+                liveSheetHeight = detent == .height(80) ? 80 : 350
+            }
         }
         .task {
             locationManager.checkLocationAuthorization()

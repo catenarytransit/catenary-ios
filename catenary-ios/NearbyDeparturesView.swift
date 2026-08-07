@@ -303,10 +303,12 @@ struct NearbyDeparturesView: View {
 
             if usesCompactDrawerSummary {
                 compactSummary
-                    .padding(.leading, 14)
-                    .padding(.trailing, 10)
-                    .padding(.top, 16)
-                    .padding(.bottom, 6)
+                    .padding(.leading, 20)
+                    .padding(.trailing, 14)
+                    .padding(.top, 20)
+                    .padding(.bottom, 8)
+                    .frame(maxWidth: .infinity, maxHeight: 80, alignment: .topLeading)
+                    .clipped()
                     .opacity(1 - drawerExpansionProgress)
                     .allowsHitTesting(false)
                     .accessibilityHidden(drawerExpansionProgress >= 0.5)
@@ -472,7 +474,7 @@ struct NearbyDeparturesView: View {
     }
 
     private var compactRoutes: [NearbyRouteGroup] {
-        let routeLimit = max(5 - (compactStation == nil ? 0 : 1), 0)
+        let routeLimit = max(4 - (compactStation == nil ? 0 : 1), 0)
         return Array(
             model.response.local
                 .filter { group in
