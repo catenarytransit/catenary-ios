@@ -304,8 +304,7 @@ struct NearbyDeparturesView: View {
             if usesCompactDrawerSummary {
                 compactSummary
                     .padding(.horizontal, 16)
-                    .padding(.top, 26)
-                    .padding(.bottom, 10)
+                    .padding(.top, 32)
                     .frame(maxWidth: .infinity, maxHeight: 80, alignment: .topLeading)
                     .clipped()
                     .opacity(1 - drawerExpansionProgress)
@@ -474,7 +473,7 @@ struct NearbyDeparturesView: View {
     }
 
     private var compactRoutes: [NearbyRouteGroup] {
-        let routeLimit = max(4 - (compactStation == nil ? 0 : 1), 0)
+        let routeLimit = max(6 - (compactStation == nil ? 0 : 1), 0)
         return Array(
             model.response.local
                 .filter { group in
@@ -652,7 +651,7 @@ private struct NearbyCompactSummary: View {
                             departures: stationDepartures,
                             now: context.date
                         )
-                        .frame(height: 11)
+                        .frame(height: 8)
                     }
 
                     ForEach(routes) { route in
@@ -662,15 +661,15 @@ private struct NearbyCompactSummary: View {
                             fallbackTimezoneID: fallbackTimezoneID,
                             now: context.date
                         )
-                        .frame(height: 11)
+                        .frame(height: 8)
                     }
 
                     if station == nil, routes.isEmpty {
                         Text(isLoading ? "Loading departures..." : "No nearby departures")
-                            .font(.system(size: 9))
+                            .font(.system(size: 8))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
-                            .frame(height: 11)
+                            .frame(height: 8)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -687,7 +686,7 @@ private struct NearbyCompactStationRow: View {
     var body: some View {
         HStack(spacing: 4) {
             Text(group.stationName)
-                .font(.system(size: 9, weight: .semibold))
+                .font(.system(size: 8, weight: .semibold))
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(maxWidth: 92, alignment: .leading)
@@ -702,10 +701,10 @@ private struct NearbyCompactStationRow: View {
                     now: now
                 ) {
                     (Text(time)
-                        .font(.system(size: 9, weight: .medium))
+                        .font(.system(size: 8, weight: .medium))
                         .monospacedDigit()
-                    + Text(" -> \(destination)")
-                        .font(.system(size: 9)))
+                    + Text(" \(destination)")
+                        .font(.system(size: 8)))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .layoutPriority(index == 0 ? 1 : 0)
@@ -788,13 +787,13 @@ private struct NearbyCompactHeadsignSummary: View {
     var body: some View {
         HStack(spacing: 2) {
             Text(NearbyCompactFormatting.destination(headsign.name))
-                .font(.system(size: 8.5))
+                .font(.system(size: 8))
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(maxWidth: 68, alignment: .leading)
 
             Text(timeList)
-                .font(.system(size: 8.5, weight: .medium))
+                .font(.system(size: 8, weight: .medium))
                 .monospacedDigit()
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
@@ -820,15 +819,19 @@ private struct NearbyCompactRouteBadge: View {
 
     var body: some View {
         Text(label)
-            .font(.system(size: 8, weight: .bold, design: .rounded))
+            .font(.system(size: 7.5, weight: .bold, design: .rounded))
             .lineLimit(1)
             .minimumScaleFactor(0.7)
-            .padding(.horizontal, 3)
-            .frame(width: 34, height: 11)
+            .padding(.horizontal, 2)
+            .frame(width: 18, height: 18)
             .foregroundStyle(Color.transitHex(group.textColor, fallback: .white))
-            .background(Color.transitHex(group.color, fallback: .secondary), in: Capsule())
+            .background(
+                Color.transitHex(group.color, fallback: .secondary),
+                in: RoundedRectangle(cornerRadius: 4, style: .continuous)
+            )
             .overlay {
-                Capsule().stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
             }
     }
 
