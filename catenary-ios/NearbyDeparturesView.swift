@@ -304,7 +304,7 @@ struct NearbyDeparturesView: View {
             if usesCompactDrawerSummary {
                 compactSummary
                     .padding(.horizontal, 16)
-                    .padding(.top, 38)
+                    .padding(.top, 36)
                     .frame(maxWidth: .infinity, maxHeight: 120, alignment: .topLeading)
                     .opacity(1 - drawerExpansionProgress)
                     .allowsHitTesting(false)
@@ -671,7 +671,8 @@ private struct NearbyCompactSummary: View {
 
                 if pageCount > 1 {
                     NearbyCompactPageProgress(progress: pageProgress(at: context.date))
-                        .frame(height: pageHeight)
+                        .frame(height: pageHeight - 5)
+                        .padding(.vertical, 2.5)
                         .padding(.trailing, 2)
                         .accessibilityHidden(true)
                 }
