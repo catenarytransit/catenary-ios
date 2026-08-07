@@ -39,6 +39,7 @@ struct BottomDrawer: View {
                 ZStack {
                     NearbyDeparturesView(
                         locationManager: locationManager,
+                        drawerHeight: sheetHeight,
                         pinActive: $nearbyPinActive,
                         pickedCoordinate: $nearbyPinCoordinate
                     )

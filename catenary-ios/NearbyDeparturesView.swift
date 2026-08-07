@@ -195,6 +195,7 @@ private enum NearbyListItem: Identifiable {
 struct NearbyDeparturesView: View {
     @ObservedObject var locationManager: LocationManager
     let fixedOrigin: CLLocationCoordinate2D?
+    let drawerHeight: CGFloat?
     @Binding private var pinActive: Bool
     @Binding private var pickedCoordinate: CLLocationCoordinate2D?
 
@@ -210,11 +211,13 @@ struct NearbyDeparturesView: View {
     init(
         locationManager: LocationManager,
         fixedOrigin: CLLocationCoordinate2D? = nil,
+        drawerHeight: CGFloat? = nil,
         pinActive: Binding<Bool> = .constant(false),
         pickedCoordinate: Binding<CLLocationCoordinate2D?> = .constant(nil)
     ) {
         self.locationManager = locationManager
         self.fixedOrigin = fixedOrigin
+        self.drawerHeight = drawerHeight
         _pinActive = pinActive
         _pickedCoordinate = pickedCoordinate
         _lockedOrigin = State(
@@ -223,7 +226,8 @@ struct NearbyDeparturesView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        ZStack(alignment: .topLeading) {
+            VStack(alignment: .leading, spacing: 8) {
             if fixedOrigin == nil {
                 controls
             } else {
@@ -283,6 +287,17 @@ struct NearbyDeparturesView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            }
+            .opacity(drawerExpansionProgress)
+            .allowsHitTesting(drawerExpansionProgress > 0.9)
+            .accessibilityHidden(drawerExpansionProgress < 0.5)
+
+            if usesCompactDrawerSummary {
+                compactSummary
+                    .opacity(1 - drawerExpansionProgress)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(drawerExpansionProgress >= 0.5)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.top, 8)
@@ -329,32 +344,13 @@ struct NearbyDeparturesView: View {
 
     private var controls: some View {
         HStack(spacing: 6) {
-            Button {
-                pinActive = false
-                if let coordinate = locationManager.lastKnownLocation {
-                    lockedOrigin = coordinate
-                    isNow = true
-                    selectedDate = Date()
-                    reloadNonce += 1
-                } else {
-                    locationManager.checkLocationAuthorization()
-                }
-            } label: {
-                Label("My location", systemImage: pinActive ? "location" : "location.fill")
+            if pinActive {
+                pinControlButton
+                locationControlButton
+            } else {
+                locationControlButton
+                pinControlButton
             }
-            .buttonStyle(.bordered)
-
-            Button {
-                dropPinAtMapCenter()
-            } label: {
-                Label(
-                    pinActive
-                        ? LocalizedStringKey("Move pin")
-                        : LocalizedStringKey("Drop pin"),
-                    systemImage: "mappin.and.ellipse"
-                )
-            }
-            .buttonStyle(.bordered)
 
             if pinActive {
                 Button {
@@ -373,6 +369,109 @@ struct NearbyDeparturesView: View {
         }
         .font(.caption)
         .controlSize(.small)
+    }
+
+    private var locationControlButton: some View {
+        Button {
+            pinActive = false
+            if let coordinate = locationManager.lastKnownLocation {
+                lockedOrigin = coordinate
+                isNow = true
+                selectedDate = Date()
+                reloadNonce += 1
+            } else {
+                locationManager.checkLocationAuthorization()
+            }
+        } label: {
+            Label("My location", systemImage: pinActive ? "location" : "location.fill")
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private var pinControlButton: some View {
+        Button {
+            dropPinAtMapCenter()
+        } label: {
+            Label(
+                pinActive
+                    ? LocalizedStringKey("Move pin")
+                    : LocalizedStringKey("Drop pin"),
+                systemImage: "mappin.and.ellipse"
+            )
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private var usesCompactDrawerSummary: Bool {
+        fixedOrigin == nil && drawerHeight != nil
+    }
+
+    private var drawerExpansionProgress: CGFloat {
+        guard usesCompactDrawerSummary, let drawerHeight else { return 1 }
+
+        // The drawer drag gesture begins after five points. Fade the compact
+        // summary over the next few points so the full controls are already
+        // visible before the drag has meaningfully expanded the drawer.
+        return min(max((drawerHeight - 80) / 14, 0), 1)
+    }
+
+    private var compactSummary: some View {
+        NearbyCompactSummary(
+            pinActive: pinActive,
+            station: compactStation,
+            stationDepartures: compactStation.map { compactStationDepartures(for: $0) } ?? [],
+            routes: compactRoutes,
+            stops: model.response.stops,
+            fallbackTimezoneID: nearbyTimezone,
+            isLoading: model.isLoading && !model.hasLoaded
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var compactStation: NearbyStationGroup? {
+        model.response.longDistance
+            .filter { !compactStationDepartures(for: $0).isEmpty }
+            .min { $0.distanceM < $1.distanceM }
+    }
+
+    private func compactStationDepartures(for group: NearbyStationGroup) -> [NearbyStationDeparture] {
+        group.departures
+            .filter { departure in
+                guard departure.lastStop != true else { return false }
+                let routeType = model.response.routes[departure.chateauId]?[departure.routeId]?.routeType
+                return selectedModes.contains(TransitDisplayMode.from(routeType: routeType ?? 2))
+            }
+            .sorted { ($0.effectiveDeparture ?? .max) < ($1.effectiveDeparture ?? .max) }
+    }
+
+    private var compactRoutes: [NearbyRouteGroup] {
+        Array(
+            model.response.local
+                .filter { group in
+                    selectedModes.contains(TransitDisplayMode.from(routeType: group.routeType))
+                        && isCompactLocalRouteType(group.routeType)
+                        && group.headsigns.values.contains { departures in
+                            departures.contains { $0.lastStop != true }
+                        }
+                }
+                .sorted { $0.closestDistance < $1.closestDistance }
+                .prefix(3)
+        )
+    }
+
+    private func isCompactLocalRouteType(_ routeType: Int?) -> Bool {
+        guard let routeType else { return true }
+
+        switch routeType {
+        case 0, 1, 3, 11,
+             400...499,
+             700...799,
+             800...899,
+             900...999:
+            return true
+        default:
+            return false
+        }
     }
 
     @ViewBuilder
@@ -494,6 +593,268 @@ struct NearbyDeparturesView: View {
         guard fixedOrigin == nil, pinActive, let pickedCoordinate else { return }
         lockedOrigin = pickedCoordinate
         reloadNonce += 1
+    }
+}
+
+private struct NearbyCompactSummary: View {
+    let pinActive: Bool
+    let station: NearbyStationGroup?
+    let stationDepartures: [NearbyStationDeparture]
+    let routes: [NearbyRouteGroup]
+    let stops: [String: [String: NearbyStopInfo]]
+    let fallbackTimezoneID: String?
+    let isLoading: Bool
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 20)) { context in
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 4) {
+                    Image(systemName: pinActive ? "mappin.and.ellipse" : "location.fill")
+                        .font(.system(size: 9, weight: .semibold))
+                        .frame(width: 12, height: 10)
+
+                    Text("Nearby departures")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 0)
+                }
+                .frame(height: 10)
+
+                if let station {
+                    NearbyCompactStationRow(
+                        group: station,
+                        departures: stationDepartures,
+                        now: context.date
+                    )
+                    .frame(height: 13)
+                }
+
+                ForEach(routes) { route in
+                    NearbyCompactRouteRow(
+                        group: route,
+                        stops: stops[route.chateauId] ?? [:],
+                        fallbackTimezoneID: fallbackTimezoneID,
+                        now: context.date
+                    )
+                    .frame(height: 13)
+                }
+
+                if station == nil, routes.isEmpty {
+                    Text(isLoading ? "Loading departures..." : "No nearby departures")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(height: 13)
+                }
+            }
+        }
+    }
+}
+
+private struct NearbyCompactStationRow: View {
+    let group: NearbyStationGroup
+    let departures: [NearbyStationDeparture]
+    let now: Date
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(group.stationName)
+                .font(.system(size: 9, weight: .semibold))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: 92, alignment: .leading)
+
+            ForEach(Array(visibleDepartures.enumerated()), id: \.offset) { index, departure in
+                let destination = NearbyCompactFormatting.destination(
+                    departure.finalStationName ?? departure.headsign
+                )
+                if let time = NearbyCompactFormatting.time(
+                    departure.effectiveDeparture,
+                    timezoneID: group.timezone,
+                    now: now
+                ) {
+                    (Text(time)
+                        .font(.system(size: 9, weight: .medium))
+                        .monospacedDigit()
+                    + Text(" -> \(destination)")
+                        .font(.system(size: 9)))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .layoutPriority(index == 0 ? 1 : 0)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var visibleDepartures: [NearbyStationDeparture] {
+        Array(
+            departures
+                .sorted { ($0.effectiveDeparture ?? .max) < ($1.effectiveDeparture ?? .max) }
+                .prefix(2)
+        )
+    }
+}
+
+private struct NearbyCompactHeadsign {
+    let name: String
+    let departures: [NearbyLocalDeparture]
+}
+
+private struct NearbyCompactRouteRow: View {
+    let group: NearbyRouteGroup
+    let stops: [String: NearbyStopInfo]
+    let fallbackTimezoneID: String?
+    let now: Date
+
+    var body: some View {
+        HStack(spacing: 3) {
+            NearbyCompactRouteBadge(group: group)
+
+            ForEach(Array(headsigns.enumerated()), id: \.offset) { index, headsign in
+                if index > 0 {
+                    Text("|")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.tertiary)
+                }
+
+                NearbyCompactHeadsignSummary(
+                    headsign: headsign,
+                    stops: stops,
+                    fallbackTimezoneID: fallbackTimezoneID,
+                    now: now
+                )
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var headsigns: [NearbyCompactHeadsign] {
+        Array(
+            group.headsigns
+                .compactMap { entry -> NearbyCompactHeadsign? in
+                    let (name, departures) = entry
+                    let visible = departures
+                        .filter { $0.lastStop != true }
+                        .sorted { ($0.effectiveDeparture ?? .max) < ($1.effectiveDeparture ?? .max) }
+                    guard !visible.isEmpty else { return nil }
+                    return NearbyCompactHeadsign(name: name, departures: visible)
+                }
+                .sorted {
+                    ($0.departures.first?.effectiveDeparture ?? .max)
+                        < ($1.departures.first?.effectiveDeparture ?? .max)
+                }
+                .prefix(2)
+        )
+    }
+}
+
+private struct NearbyCompactHeadsignSummary: View {
+    let headsign: NearbyCompactHeadsign
+    let stops: [String: NearbyStopInfo]
+    let fallbackTimezoneID: String?
+    let now: Date
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Text(NearbyCompactFormatting.destination(headsign.name))
+                .font(.system(size: 8.5))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: 68, alignment: .leading)
+
+            Text(timeList)
+                .font(.system(size: 8.5, weight: .medium))
+                .monospacedDigit()
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+    }
+
+    private var timeList: String {
+        let timestamps = headsign.departures
+            .compactMap(\.effectiveDeparture)
+        let timezoneID = headsign.departures.first.flatMap { departure in
+            stops[departure.stopId]?.timezone
+        } ?? fallbackTimezoneID
+        return NearbyCompactFormatting.times(
+            timestamps,
+            timezoneID: timezoneID,
+            now: now
+        )
+    }
+}
+
+private struct NearbyCompactRouteBadge: View {
+    let group: NearbyRouteGroup
+
+    var body: some View {
+        Text(label)
+            .font(.system(size: 8, weight: .bold, design: .rounded))
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .padding(.horizontal, 3)
+            .frame(width: 34, height: 11)
+            .background(Color.primary.opacity(0.1), in: Capsule())
+            .overlay {
+                Capsule().stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
+            }
+    }
+
+    private var label: String {
+        let value = group.shortName ?? group.longName ?? group.routeId
+        let cleaned = value.replacingOccurrences(of: " Line", with: "")
+        return String(cleaned.prefix(6))
+    }
+}
+
+private enum NearbyCompactFormatting {
+    static func destination(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: " Underground Station", with: "")
+            .replacingOccurrences(of: " Station", with: "")
+    }
+
+    static func time(_ timestamp: Int64?, timezoneID: String?, now: Date) -> String? {
+        guard let timestamp else { return nil }
+        let diff = TimeInterval(timestamp) - now.timeIntervalSince1970
+        if diff > -60, diff <= 3_600 {
+            return "\(max(Int(ceil(diff / 60)), 0))min"
+        }
+        return clock(timestamp, timezoneID: timezoneID)
+    }
+
+    static func times(_ timestamps: [Int64], timezoneID: String?, now: Date) -> String {
+        let visible = Array(timestamps.prefix(3))
+        guard !visible.isEmpty else { return "-" }
+
+        let diffs = visible.map { TimeInterval($0) - now.timeIntervalSince1970 }
+        if diffs.allSatisfy({ $0 > -60 && $0 <= 3_600 }) {
+            return diffs
+                .map { String(max(Int(ceil($0 / 60)), 0)) }
+                .joined(separator: ",") + "min"
+        }
+
+        return visible
+            .compactMap { time($0, timezoneID: timezoneID, now: now) }
+            .joined(separator: ",")
+    }
+
+    private static func clock(_ timestamp: Int64, timezoneID: String?) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_GB")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "HH:mm"
+        if let timezoneID, let timezone = TimeZone(identifier: timezoneID) {
+            formatter.timeZone = timezone
+        } else {
+            formatter.timeZone = .current
+        }
+        return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(timestamp)))
     }
 }
 
