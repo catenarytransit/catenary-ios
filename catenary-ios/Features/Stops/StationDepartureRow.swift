@@ -412,7 +412,8 @@ struct StationTrainDepartureRowCompact: View {
                     colorHex: routeInfo?.color,
                     textColorHex: routeInfo?.textColor,
                     mode: compactMode,
-                    layout: layout
+                    layout: layout,
+                    compact: layout == .regular
                 )
             }
             .buttonStyle(.plain)
@@ -795,7 +796,8 @@ private struct StopRouteBadge: View {
             Text(label)
                 .font(.system(size: layout == .swiss ? 12 : 10, weight: .bold))
                 .lineLimit(1)
-                .minimumScaleFactor(0.6)
+                .minimumScaleFactor(compact ? 1 : 0.6)
+                .truncationMode(.tail)
                 .foregroundStyle(StopHexColor.color(textColorHex, fallback: .white))
                 .padding(.horizontal, 4)
                 .padding(.vertical, 1)
