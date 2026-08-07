@@ -26,8 +26,8 @@ jobs:
       matrix:
         include:
           # Compiles the legacy branches below iOS 17 and iOS 18.
-          - deployment_target: "16.0"
-            build_name: legacy
+          #- deployment_target: "16.0"
+          #  build_name: legacy
 
           # Compiles the modern code paths with the current runner SDK.
           - deployment_target: "26.0"
