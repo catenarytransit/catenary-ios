@@ -30,6 +30,7 @@ jobs:
       SOURCE_PACKAGES: ${{ github.workspace }}/SourcePackages-screenshots
       BUILD_LOG: ${{ github.workspace }}/xcodebuild-screenshots.log
       SCREENSHOT_DIR: ${{ github.workspace }}/screenshots
+      SCREENSHOT_SETTLE_SECONDS: "10"
       DOWNTOWN_LA: "34.0522,-118.2437"
 
     steps:
@@ -208,7 +209,8 @@ jobs:
 
             xcrun simctl terminate "$SIMULATOR_UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
             xcrun simctl launch "$SIMULATOR_UDID" "$BUNDLE_ID" "$@" >/dev/null
-            sleep 10
+            # Wait for the screen state to settle and animations to finish before capture.
+            sleep "$SCREENSHOT_SETTLE_SECONDS"
             xcrun simctl io "$SIMULATOR_UDID" screenshot "$SCREENSHOT_DIR/$filename"
           }
 
