@@ -27,6 +27,7 @@ final class FloatingWindow: UIWindow {
 
 private struct NativeSheetLeadingAnchor: UIViewControllerRepresentable {
     @Binding var sheetWidth: CGFloat
+    @Binding var sheetVisibleHeight: CGFloat
 
     func makeUIViewController(context: Context) -> NativeSheetLeadingAnchorController {
         let controller = NativeSheetLeadingAnchorController()
@@ -44,16 +45,24 @@ private struct NativeSheetLeadingAnchor: UIViewControllerRepresentable {
 
     private func configure(_ controller: NativeSheetLeadingAnchorController) {
         let widthBinding = $sheetWidth
+        let visibleHeightBinding = $sheetVisibleHeight
         controller.onSheetWidthChange = { width in
             guard abs(widthBinding.wrappedValue - width) > 0.5 else { return }
             widthBinding.wrappedValue = width
+        }
+        controller.onSheetVisibleHeightChange = { height in
+            guard abs(visibleHeightBinding.wrappedValue - height) > 0.25 else { return }
+            visibleHeightBinding.wrappedValue = height
         }
     }
 }
 
 private final class NativeSheetLeadingAnchorController: UIViewController {
     var onSheetWidthChange: ((CGFloat) -> Void)?
+    var onSheetVisibleHeightChange: ((CGFloat) -> Void)?
     private var delayedUpdate: DispatchWorkItem?
+    private var sheetTrackingDisplayLink: CADisplayLink?
+    private var lastReportedSheetVisibleHeight: CGFloat?
 
     override func loadView() {
         let view = UIView(frame: .zero)
@@ -70,6 +79,12 @@ private final class NativeSheetLeadingAnchorController: UIViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         scheduleUpdate()
+        startSheetTracking()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        stopSheetTracking()
     }
 
     override func viewDidLayoutSubviews() {
@@ -89,10 +104,12 @@ private final class NativeSheetLeadingAnchorController: UIViewController {
 
     deinit {
         delayedUpdate?.cancel()
+        stopSheetTracking()
     }
 
     func scheduleUpdate() {
         applySheetPosition()
+        reportSheetVisibleHeight()
 
         delayedUpdate?.cancel()
         let workItem = DispatchWorkItem { [weak self] in
@@ -100,6 +117,53 @@ private final class NativeSheetLeadingAnchorController: UIViewController {
         }
         delayedUpdate = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: workItem)
+    }
+
+    private func startSheetTracking() {
+        guard sheetTrackingDisplayLink == nil else { return }
+
+        let displayLink = CADisplayLink(
+            target: self,
+            selector: #selector(trackSheetPresentation)
+        )
+        displayLink.add(to: .main, forMode: .common)
+        sheetTrackingDisplayLink = displayLink
+        trackSheetPresentation()
+    }
+
+    private func stopSheetTracking() {
+        sheetTrackingDisplayLink?.invalidate()
+        sheetTrackingDisplayLink = nil
+    }
+
+    @objc private func trackSheetPresentation() {
+        reportSheetVisibleHeight()
+    }
+
+    private func reportSheetVisibleHeight() {
+        guard let sheetController = containingPresentedController,
+              let presentationController = sheetController.presentationController,
+              let containerView = presentationController.containerView,
+              let sheetView = presentationController.presentedView else {
+            return
+        }
+
+        // UISheetPresentationController completes a detent snap in Core Animation.
+        // Reading the presentation layer keeps the FAB attached to the drawer's
+        // actual on-screen top edge for every frame of that snap.
+        let presentedFrame = sheetView.layer.presentation()?.frame ?? sheetView.layer.frame
+        let frameInContainer = sheetView.superview?.convert(presentedFrame, to: containerView)
+            ?? presentedFrame
+        let visibleHeight = max(containerView.bounds.maxY - frameInContainer.minY, 0)
+
+        guard visibleHeight.isFinite else { return }
+        if let lastReportedSheetVisibleHeight,
+           abs(lastReportedSheetVisibleHeight - visibleHeight) <= 0.25 {
+            return
+        }
+
+        lastReportedSheetVisibleHeight = visibleHeight
+        onSheetVisibleHeightChange?(visibleHeight)
     }
 
     private func applySheetPosition() {
@@ -163,6 +227,7 @@ struct MainUIView: View {
     @StateObject private var nearbyPinMapCoordinator = NearbyPinMapCoordinator()
     @State private var isSheetPresented = true
     @State private var liveSheetHeight: CGFloat = 350
+    @State private var nativeSheetVisibleHeight: CGFloat = 350
     @State private var collapsedNativeSheetHeight: CGFloat?
     @State private var locationOpacity: CGFloat = 1
     @State private var text = ""
@@ -371,7 +436,10 @@ struct MainUIView: View {
             .ignoresSafeArea(.container, edges: .bottom)
             .interactiveDismissDisabled()
             .background(
-                NativeSheetLeadingAnchor(sheetWidth: $nativeSheetWidth)
+                NativeSheetLeadingAnchor(
+                    sheetWidth: $nativeSheetWidth,
+                    sheetVisibleHeight: $nativeSheetVisibleHeight
+                )
             )
             .catenaryOnGeometryChange(for: CGFloat.self) { proxy in
                 max(proxy.size.height, 0)
@@ -615,7 +683,7 @@ struct MainUIView: View {
         if usesPortraitPhoneDrawer {
             // The sheet height already includes the bottom safe-area region.
             // Offset by the full height so the 8-point padding remains the true gap.
-            return -liveSheetHeight
+            return -nativeSheetVisibleHeight
         }
         return usesLeadingPaneLayout ? 0 : -min(liveSheetHeight, 350)
     }
@@ -628,7 +696,7 @@ struct MainUIView: View {
         }
 
         let toolbarTop = mapViewportSize.height
-            - liveSheetHeight
+            - nativeSheetVisibleHeight
             - floatingToolbarBottomPadding
             - floatingToolbarHeight
         let fadeDistance: CGFloat = 44
@@ -751,9 +819,9 @@ struct MainUIView: View {
             }
             .font(.title3)
             .offset(y: floatingToolbarYOffset)
-            // The native sheet already reports intermediate heights. Avoid adding
-            // another animation layer so the toolbar stays locked to its top edge.
-            .animation(nil, value: liveSheetHeight)
+            // The native sheet snap is already represented in nativeSheetVisibleHeight.
+            // Do not add a second animation curve; mirror the drawer frame-for-frame.
+            .animation(nil, value: nativeSheetVisibleHeight)
             .opacity(floatingToolbarOpacity)
             .allowsHitTesting(floatingToolbarOpacity > 0.01)
             .accessibilityHidden(floatingToolbarOpacity <= 0.01)
