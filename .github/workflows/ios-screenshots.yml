@@ -37,6 +37,23 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.SOURCE_PACKAGES }}
+          key: ios-screenshots-swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('catenary-ios.xcodeproj/project.pbxproj', '**/Package.resolved') }}
+          restore-keys: |
+            ios-screenshots-swiftpm-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Cache Xcode build artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA }}
+          key: ios-screenshots-derived-data-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('catenary-ios.xcodeproj/project.pbxproj', '**/Package.resolved') }}-${{ github.sha }}
+          restore-keys: |
+            ios-screenshots-derived-data-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('catenary-ios.xcodeproj/project.pbxproj', '**/Package.resolved') }}-
+            ios-screenshots-derived-data-${{ runner.os }}-${{ runner.arch }}-
+
       - name: Select Xcode
         run: sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
 
@@ -127,13 +144,11 @@ jobs:
           xcrun simctl boot "$SIMULATOR_UDID"
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
 
-      - name: Clear Xcode and SwiftPM state
+      - name: Prepare Xcode and SwiftPM state
         shell: bash
         run: |
           set -euxo pipefail
 
-          rm -rf "$DERIVED_DATA"
-          rm -rf "$SOURCE_PACKAGES"
           rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
           rm -rf "$HOME/Library/Caches/org.swift.swiftpm"
           rm -rf "$HOME/Library/org.swift.swiftpm"
