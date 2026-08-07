@@ -304,9 +304,8 @@ struct NearbyDeparturesView: View {
             if usesCompactDrawerSummary {
                 compactSummary
                     .padding(.horizontal, 16)
-                    .padding(.top, 32)
-                    .frame(maxWidth: .infinity, maxHeight: 80, alignment: .topLeading)
-                    .clipped()
+                    .padding(.top, 48)
+                    .frame(maxWidth: .infinity, maxHeight: 120, alignment: .topLeading)
                     .opacity(1 - drawerExpansionProgress)
                     .allowsHitTesting(false)
                     .accessibilityHidden(drawerExpansionProgress >= 0.5)
@@ -636,12 +635,12 @@ private struct NearbyCompactSummary: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 20)) { context in
-            HStack(alignment: .top, spacing: 6) {
+            HStack(alignment: .top, spacing: 7) {
                 Image(systemName: pinActive ? "mappin.and.ellipse" : "location.fill")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: 14, height: 14)
-                    .padding(.top, 1)
+                    .padding(.top, 40)
                     .accessibilityLabel(pinActive ? "Pinned location" : "Current location")
 
                 VStack(alignment: .leading, spacing: 0) {
@@ -823,7 +822,7 @@ private struct NearbyCompactRouteBadge: View {
             .lineLimit(1)
             .minimumScaleFactor(0.7)
             .padding(.horizontal, 2)
-            .frame(width: 18, height: 18)
+            .frame(width: 18, height: 10)
             .foregroundStyle(Color.transitHex(group.textColor, fallback: .white))
             .background(
                 Color.transitHex(group.color, fallback: .secondary),
