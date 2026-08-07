@@ -472,7 +472,7 @@ struct NearbyDeparturesView: View {
     }
 
     private var compactRoutes: [NearbyRouteGroup] {
-        let routeLimit = max(6 - (compactStation == nil ? 0 : 1), 0)
+        let routeLimit = max(7 - (compactStation == nil ? 0 : 1), 0)
         return Array(
             model.response.local
                 .filter { group in
