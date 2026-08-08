@@ -1,0 +1,349 @@
+name: iOS Production Screenshots
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-production-screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    name: Production iPhone and iPad screenshots
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    timeout-minutes: 60
+
+    env:
+      PROJECT: catenary-ios.xcodeproj
+      SCHEME: catenary-ios
+      CONFIGURATION: Release
+      BUNDLE_ID: org.catenarymaps.maps
+      DERIVED_DATA: ${{ github.workspace }}/DerivedData-production-screenshots
+      SOURCE_PACKAGES: ${{ github.workspace }}/SourcePackages-production-screenshots
+      BUILD_LOG: ${{ github.workspace }}/xcodebuild-production-screenshots.log
+      SCREENSHOT_DIR: ${{ github.workspace }}/production-screenshots
+      SCREENSHOT_SETTLE_SECONDS: "10"
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.SOURCE_PACKAGES }}
+          key: ios-production-screenshots-swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('catenary-ios.xcodeproj/project.pbxproj', '**/Package.resolved') }}
+          restore-keys: |
+            ios-production-screenshots-swiftpm-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Cache Xcode build artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA }}
+          key: ios-production-screenshots-derived-data-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('catenary-ios.xcodeproj/project.pbxproj', '**/Package.resolved') }}-${{ github.sha }}
+          restore-keys: |
+            ios-production-screenshots-derived-data-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('catenary-ios.xcodeproj/project.pbxproj', '**/Package.resolved') }}-
+            ios-production-screenshots-derived-data-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Select Xcode
+        run: sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+
+      - name: Create latest iPhone and iPad simulators
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          xcodebuild -version
+
+          runtime_line="$(
+            xcrun simctl list runtimes available -j | jq -r '
+              [
+                .runtimes[]
+                | select(.identifier | contains("SimRuntime.iOS-"))
+                | . + {versionParts: (.version | split(".") | map(tonumber))}
+              ]
+              | sort_by(.versionParts)
+              | last
+              | [.version, .identifier]
+              | @tsv
+            '
+          )"
+
+          ios_version="$(cut -f1 <<< "$runtime_line")"
+          runtime_id="$(cut -f2 <<< "$runtime_line")"
+
+          if [[ -z "$ios_version" || -z "$runtime_id" ]]; then
+            echo "No available iOS simulator runtime found."
+            exit 1
+          fi
+
+          iphone_type_id="$(
+            xcrun simctl list devicetypes -j | jq -r '
+              [
+                .devicetypes[]
+                | select(.name | test("^iPhone [0-9]+ Pro$"))
+                | . + {
+                    generation: (
+                      .name
+                      | capture("^iPhone (?<generation>[0-9]+) Pro$")
+                      | .generation
+                      | tonumber
+                    )
+                  }
+              ]
+              | sort_by(.generation)
+              | last
+              | .identifier // empty
+            '
+          )"
+
+          if [[ -z "$iphone_type_id" ]]; then
+            iphone_type_id="$(
+              xcrun simctl list devicetypes -j | jq -r '
+                [.devicetypes[] | select(.name | startswith("iPhone"))]
+                | last
+                | .identifier // empty
+              '
+            )"
+          fi
+
+          ipad_type_id="$(
+            xcrun simctl list devicetypes -j | jq -r '
+              [
+                .devicetypes[]
+                | select(.name | test("^iPad Pro 13-inch \\(M[0-9]+\\)$"))
+                | . + {
+                    generation: (
+                      .name
+                      | capture("\\(M(?<generation>[0-9]+)\\)$")
+                      | .generation
+                      | tonumber
+                    )
+                  }
+              ]
+              | sort_by(.generation)
+              | last
+              | .identifier // empty
+            '
+          )"
+
+          if [[ -z "$ipad_type_id" ]]; then
+            ipad_type_id="$(
+              xcrun simctl list devicetypes -j | jq -r '
+                [.devicetypes[] | select(.name | startswith("iPad Pro"))]
+                | last
+                | .identifier // empty
+              '
+            )"
+          fi
+
+          if [[ -z "$iphone_type_id" || -z "$ipad_type_id" ]]; then
+            echo "Could not resolve both an iPhone and iPad simulator device type."
+            exit 1
+          fi
+
+          iphone_udid="$(
+            xcrun simctl create \
+              "Catenary Production Screenshots iPhone iOS $ios_version" \
+              "$iphone_type_id" \
+              "$runtime_id"
+          )"
+          ipad_udid="$(
+            xcrun simctl create \
+              "Catenary Production Screenshots iPad iOS $ios_version" \
+              "$ipad_type_id" \
+              "$runtime_id"
+          )"
+
+          echo "IOS_VERSION=$ios_version" >> "$GITHUB_ENV"
+          echo "IOS_RUNTIME_ID=$runtime_id" >> "$GITHUB_ENV"
+          echo "IPHONE_UDID=$iphone_udid" >> "$GITHUB_ENV"
+          echo "IPAD_UDID=$ipad_udid" >> "$GITHUB_ENV"
+
+          echo "Using iOS $ios_version"
+          echo "iPhone simulator: $iphone_udid"
+          echo "iPad simulator: $ipad_udid"
+
+      - name: Boot simulators
+        shell: bash
+        run: |
+          set -euo pipefail
+          for udid in "$IPHONE_UDID" "$IPAD_UDID"; do
+            xcrun simctl boot "$udid"
+            xcrun simctl bootstatus "$udid" -b
+          done
+
+      - name: Prepare Xcode and SwiftPM state
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
+          rm -rf "$HOME/Library/Caches/org.swift.swiftpm"
+          rm -rf "$HOME/Library/org.swift.swiftpm"
+          rm -rf "$HOME/.swiftpm"
+          rm -rf /tmp/org.swift.swiftpm
+
+          mkdir -p "$DERIVED_DATA"
+          mkdir -p "$SOURCE_PACKAGES"
+
+          defaults write com.apple.dt.Xcode IDEPackageEnablePrebuilts -bool NO
+          mkdir -p "$HOME/.swiftpm/cache/prebuilts"
+          touch "$HOME/.swiftpm/cache/prebuilts/noprebuilts"
+
+      - name: Resolve Swift packages
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES"
+
+      - name: Build production screenshot app
+        shell: bash
+        run: |
+          set -o pipefail
+
+          xcodebuild \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration "$CONFIGURATION" \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS="SCREENSHOT_AUTOMATION" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            build 2>&1 | tee "$BUILD_LOG"
+
+      - name: Capture requested screenshots
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          app_path="$DERIVED_DATA/Build/Products/${CONFIGURATION}-iphonesimulator/Catenary.app"
+          test -d "$app_path"
+          mkdir -p "$SCREENSHOT_DIR/iphone" "$SCREENSHOT_DIR/ipad"
+
+          reset_app() {
+            local udid="$1"
+
+            xcrun simctl terminate "$udid" "$BUNDLE_ID" >/dev/null 2>&1 || true
+            xcrun simctl uninstall "$udid" "$BUNDLE_ID" >/dev/null 2>&1 || true
+            xcrun simctl install "$udid" "$app_path"
+            xcrun simctl privacy "$udid" grant location "$BUNDLE_ID"
+            xcrun simctl status_bar "$udid" override \
+              --time 9:41 \
+              --batteryState charged \
+              --batteryLevel 100 \
+              --wifiBars 3 \
+              --cellularBars 4 || true
+          }
+
+          capture_screenshot() {
+            local udid="$1"
+            local output="$2"
+            local user_location="$3"
+            shift 3
+
+            reset_app "$udid"
+
+            if [[ -n "$user_location" ]]; then
+              xcrun simctl location "$udid" set "$user_location"
+            else
+              xcrun simctl location "$udid" clear >/dev/null 2>&1 || true
+            fi
+
+            xcrun simctl launch "$udid" "$BUNDLE_ID" "$@" >/dev/null
+
+            # Stack/deeplink state is applied at app initialization. Give station,
+            # nearby-departure, drawer, map, and network state time to settle.
+            sleep "$SCREENSHOT_SETTLE_SECONDS"
+            xcrun simctl io "$udid" screenshot "$output"
+          }
+
+          capture_device() {
+            local udid="$1"
+            local family="$2"
+            local dir="$SCREENSHOT_DIR/$family"
+
+            capture_screenshot \
+              "$udid" \
+              "$dir/01-grand-central-midway.png" \
+              "" \
+              --ci-screenshot-map "40.7531,-73.98159,12" \
+              --ci-screenshot-deep-link "https://maps.catenarymaps.org/?page=osm_station&osm_id=7099182377&name=Grand+Central+Terminal" \
+              --ci-screenshot-drawer midway
+
+            capture_screenshot \
+              "$udid" \
+              "$dir/02-munich-hbf-expanded.png" \
+              "" \
+              --ci-screenshot-deep-link "https://maps.catenarymaps.org/?page=osm_station&osm_id=2470201868&name=M%C3%BCnchen+Hbf" \
+              --ci-screenshot-drawer expanded
+
+            capture_screenshot \
+              "$udid" \
+              "$dir/03-st-pancras-nearby-midway.png" \
+              "51.53214505504545,-0.12611027769636962" \
+              --ci-screenshot-user-location "51.53214505504545,-0.12611027769636962" \
+              --ci-screenshot-map "51.53214505504545,-0.12611027769636962,15" \
+              --ci-screenshot-deep-link "https://maps.catenarymaps.org/?page=nearby_departures&lat=51.53214505504545&lon=-0.12611027769636962" \
+              --ci-screenshot-drawer midway
+
+            capture_screenshot \
+              "$udid" \
+              "$dir/04-louvre-collapsed.png" \
+              "48.8604024,2.3385987" \
+              --ci-screenshot-user-location "48.8604024,2.3385987" \
+              --ci-screenshot-map "48.8604024,2.3385987,13.5" \
+              --ci-screenshot-drawer collapsed
+          }
+
+          capture_device "$IPHONE_UDID" iphone
+          capture_device "$IPAD_UDID" ipad
+
+          for screenshot in "$SCREENSHOT_DIR"/*/*.png; do
+            width="$(sips -g pixelWidth "$screenshot" | awk '/pixelWidth/ { print $2 }')"
+            height="$(sips -g pixelHeight "$screenshot" | awk '/pixelHeight/ { print $2 }')"
+
+            echo "${screenshot#$SCREENSHOT_DIR/}: ${width}x${height}"
+            if (( height <= width )); then
+              echo "Expected a portrait screenshot, but got ${width}x${height}: $screenshot"
+              exit 1
+            fi
+          done
+
+      - name: Upload screenshot artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-production-${{ env.IOS_VERSION }}-screenshots-${{ github.sha }}
+          path: ${{ env.SCREENSHOT_DIR }}
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-production-screenshots
+          path: ${{ env.BUILD_LOG }}
+          if-no-files-found: ignore
+          retention-days: 7

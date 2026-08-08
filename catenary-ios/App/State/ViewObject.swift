@@ -49,6 +49,11 @@ private let persistedMapCameraAtLaunch = MapCameraPersistence.load()
 
 class viewObject: ObservableObject {
     @Published var camera: MapViewCamera = {
+#if DEBUG || SCREENSHOT_AUTOMATION
+        if let mapCamera = ScreenshotLaunchConfiguration.current.mapCamera {
+            return .center(mapCamera.coordinate, zoom: mapCamera.zoom)
+        }
+#endif
         if let saved = persistedMapCameraAtLaunch {
             return .center(saved.coordinate, zoom: saved.zoom)
         }
@@ -57,8 +62,23 @@ class viewObject: ObservableObject {
             zoom: 5.0
         )
     }()
-    private var hasResolvedInitialMapCamera = persistedMapCameraAtLaunch != nil
+    private var hasResolvedInitialMapCamera: Bool = {
+#if DEBUG || SCREENSHOT_AUTOMATION
+        if ScreenshotLaunchConfiguration.current.mapCamera != nil {
+            return true
+        }
+#endif
+        return persistedMapCameraAtLaunch != nil
+    }()
     @Published private(set) var selectedStopContext: SelectedStopMapContext?
+
+    var preservesScreenshotMapCamera: Bool {
+#if DEBUG || SCREENSHOT_AUTOMATION
+        return ScreenshotLaunchConfiguration.current.mapCamera != nil
+#else
+        return false
+#endif
+    }
 
     func setSelectedStopContext(_ context: SelectedStopMapContext) {
         guard selectedStopContext != context else { return }
@@ -94,19 +114,44 @@ class viewObject: ObservableObject {
     @Published var visibleCoordinateBounds: MLNCoordinateBounds = MLNCoordinateBounds(sw: CLLocationCoordinate2D(latitude: 0, longitude: 0), ne: CLLocationCoordinate2D(latitude: 0, longitude: 0))
 
     @Published var presDetent: PresentationDetent = {
-#if DEBUG
-        let arguments = ProcessInfo.processInfo.arguments
-        if arguments.contains("--ci-screenshot-drawer-expanded") {
-            return .large
-        }
-        if arguments.contains("--ci-screenshot-drawer-collapsed") {
+#if DEBUG || SCREENSHOT_AUTOMATION
+        switch ScreenshotLaunchConfiguration.current.drawerState {
+        case .some(.collapsed):
             return .height(80)
+        case .some(.midway):
+            return .height(350)
+        case .some(.expanded):
+            return .large
+        case .none:
+            break
         }
 #endif
         return .height(350)
     }()
     @Published var largeDetentHeight: CGFloat = 0
     @Published var currentRotation: CLLocationDirection = 0
+
+    init() {
+#if DEBUG || SCREENSHOT_AUTOMATION
+        let configuration = ScreenshotLaunchConfiguration.current
+        if let deepLink = configuration.deepLink {
+            openDeepLink(deepLink)
+
+            // `push` expands the drawer. Restore the requested screenshot detent
+            // after the stack has been initialized.
+            switch configuration.drawerState {
+            case .some(.collapsed):
+                presDetent = .height(80)
+            case .some(.midway):
+                presDetent = .height(350)
+            case .some(.expanded):
+                presDetent = .large
+            case .none:
+                break
+            }
+        }
+#endif
+    }
 
     /// `true` whenever the map camera is in any user-tracking mode.
     /// Derived from `camera.state`, so it updates automatically when the user

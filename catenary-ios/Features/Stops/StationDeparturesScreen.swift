@@ -488,6 +488,10 @@ struct StationDeparturesScreen: View {
         )
 
         guard !hasCenteredMap else { return }
+        if viewObject.preservesScreenshotMapCamera {
+            hasCenteredMap = true
+            return
+        }
         viewObject.camera = .center(coordinate, zoom: 14)
         hasCenteredMap = true
     }

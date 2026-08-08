@@ -12,7 +12,20 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
     @Published var lastKnownLocation: CLLocationCoordinate2D?
     var manager = CLLocationManager()
 
+    override init() {
+        super.init()
+#if DEBUG || SCREENSHOT_AUTOMATION
+        lastKnownLocation = ScreenshotLaunchConfiguration.current.userCoordinate
+#endif
+    }
+
     func checkLocationAuthorization() {
+#if DEBUG || SCREENSHOT_AUTOMATION
+        if let userCoordinate = ScreenshotLaunchConfiguration.current.userCoordinate {
+            lastKnownLocation = userCoordinate
+            return
+        }
+#endif
         manager.delegate = self
 
         switch manager.authorizationStatus {
