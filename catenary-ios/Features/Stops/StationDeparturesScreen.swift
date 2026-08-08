@@ -88,6 +88,11 @@ struct StationDeparturesScreen: View {
             await model.reset(source: source, anchor: referenceDate)
             synchronizeFilters()
             updateMapContext()
+#if DEBUG || SCREENSHOT_AUTOMATION
+            if model.errorMessage == nil {
+                ScreenshotReadiness.shared.markDrawerReady()
+            }
+#endif
 
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 10_000_000_000)
@@ -492,6 +497,9 @@ struct StationDeparturesScreen: View {
             hasCenteredMap = true
             return
         }
+#if DEBUG || SCREENSHOT_AUTOMATION
+        ScreenshotReadiness.shared.invalidateMapReady()
+#endif
         viewObject.camera = .center(coordinate, zoom: 14)
         hasCenteredMap = true
     }

@@ -343,6 +343,11 @@ struct NearbyDeparturesView: View {
             guard let origin = lockedOrigin else { return }
             let departureTime = isNow ? nil : Int64(selectedDate.timeIntervalSince1970)
             await model.load(origin: origin, departureTime: departureTime)
+#if DEBUG || SCREENSHOT_AUTOMATION
+            if model.hasLoaded {
+                ScreenshotReadiness.shared.markDrawerReady()
+            }
+#endif
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 10_000_000_000)
                 guard !Task.isCancelled else { return }

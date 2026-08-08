@@ -2332,6 +2332,11 @@ struct mapLibreView: View, Equatable {
             map.mapView.attributionButton.isHidden = true
             map.mapView.compassView.isHidden = true
             map.mapView.showsUserLocation = false
+#if DEBUG || SCREENSHOT_AUTOMATION
+            if ScreenshotLaunchConfiguration.current.readyToken != nil {
+                ScreenshotMapRenderObserver.shared.install(on: map.mapView)
+            }
+#endif
             nearbyPinMapCoordinator.install(on: map.mapView)
             nearbyPinMapCoordinator.updateContentInset(contentInset)
             nearbyPinMapCoordinator.updatePin(

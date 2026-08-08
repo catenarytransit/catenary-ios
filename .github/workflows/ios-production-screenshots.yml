@@ -29,7 +29,7 @@ jobs:
       SOURCE_PACKAGES: ${{ github.workspace }}/SourcePackages-production-screenshots
       BUILD_LOG: ${{ github.workspace }}/xcodebuild-production-screenshots.log
       SCREENSHOT_DIR: ${{ github.workspace }}/production-screenshots
-      SCREENSHOT_INITIAL_SETTLE_SECONDS: "8"
+      SCREENSHOT_READY_TIMEOUT_SECONDS: "90"
       SCREENSHOT_RETRY_SECONDS: "3"
       SCREENSHOT_MAX_ATTEMPTS: "4"
       SCREENSHOT_MIN_BYTES: "100000"
@@ -346,11 +346,26 @@ jobs:
               run_with_timeout 15 xcrun simctl location "$udid" clear || true
             fi
 
-            run_with_timeout 30 xcrun simctl launch "$udid" "$BUNDLE_ID" "$@"
+            local ready_token data_container ready_file deadline
+            ready_token="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+            data_container="$(xcrun simctl get_app_container "$udid" "$BUNDLE_ID" data)"
+            ready_file="$data_container/tmp/catenary-screenshot-ready-$ready_token"
+            rm -f "$ready_file"
 
-            # Let the initial SwiftUI/map hierarchy render, then retry obviously
-            # blank PNGs instead of blindly accepting a single frame.
-            sleep "$SCREENSHOT_INITIAL_SETTLE_SECONDS"
+            run_with_timeout 30 xcrun simctl launch "$udid" "$BUNDLE_ID" \
+              --ci-screenshot-ready-token "$ready_token" \
+              "$@"
+
+            echo "Waiting for SCREENSHOT_READY $ready_token..."
+            deadline=$((SECONDS + SCREENSHOT_READY_TIMEOUT_SECONDS))
+            while [[ ! -f "$ready_file" ]]; do
+              if (( SECONDS >= deadline )); then
+                echo "::error::Timed out waiting for drawer data and fully rendered map tiles: ${output#$SCREENSHOT_DIR/}"
+                return 1
+              fi
+              sleep 0.25
+            done
+            echo "SCREENSHOT_READY $ready_token"
 
             local attempt bytes
             for (( attempt = 1; attempt <= SCREENSHOT_MAX_ATTEMPTS; attempt++ )); do
