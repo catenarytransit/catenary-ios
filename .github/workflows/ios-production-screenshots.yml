@@ -29,7 +29,10 @@ jobs:
       SOURCE_PACKAGES: ${{ github.workspace }}/SourcePackages-production-screenshots
       BUILD_LOG: ${{ github.workspace }}/xcodebuild-production-screenshots.log
       SCREENSHOT_DIR: ${{ github.workspace }}/production-screenshots
-      SCREENSHOT_SETTLE_SECONDS: "10"
+      SCREENSHOT_INITIAL_SETTLE_SECONDS: "8"
+      SCREENSHOT_RETRY_SECONDS: "3"
+      SCREENSHOT_MAX_ATTEMPTS: "4"
+      SCREENSHOT_MIN_BYTES: "100000"
 
     steps:
       - name: Check out main
@@ -177,10 +180,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          # Boot both devices first, then wait for both in parallel. Waiting for
+          # each simulator serially was adding several minutes to every run.
           for udid in "$IPHONE_UDID" "$IPAD_UDID"; do
             xcrun simctl boot "$udid"
-            xcrun simctl bootstatus "$udid" -b
           done
+
+          iphone_boot_pid=""
+          ipad_boot_pid=""
+          xcrun simctl bootstatus "$IPHONE_UDID" -b &
+          iphone_boot_pid=$!
+          xcrun simctl bootstatus "$IPAD_UDID" -b &
+          ipad_boot_pid=$!
+
+          wait "$iphone_boot_pid"
+          wait "$ipad_boot_pid"
 
       - name: Prepare Xcode and SwiftPM state
         shell: bash
@@ -216,16 +231,25 @@ jobs:
         run: |
           set -o pipefail
 
+          # This is still the Release configuration (so DEBUG-only production
+          # behavior stays off), but screenshots do not need whole-module
+          # optimization or a multi-architecture simulator binary.
           xcodebuild \
             -project "$PROJECT" \
             -scheme "$SCHEME" \
             -configuration "$CONFIGURATION" \
-            -destination "generic/platform=iOS Simulator" \
+            -destination "platform=iOS Simulator,id=$IPHONE_UDID" \
             -derivedDataPath "$DERIVED_DATA" \
             -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
+            -disableAutomaticPackageResolution \
+            -parallelizeTargets \
             -skipPackagePluginValidation \
             -skipMacroValidation \
             SWIFT_ACTIVE_COMPILATION_CONDITIONS="SCREENSHOT_AUTOMATION" \
+            SWIFT_COMPILATION_MODE=incremental \
+            SWIFT_OPTIMIZATION_LEVEL=-Onone \
+            ONLY_ACTIVE_ARCH=YES \
+            DEBUG_INFORMATION_FORMAT=dwarf \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
@@ -241,9 +265,12 @@ jobs:
           test -d "$app_path"
           mkdir -p "$SCREENSHOT_DIR/iphone" "$SCREENSHOT_DIR/ipad"
 
-          reset_app() {
+          prepare_device() {
             local udid="$1"
 
+            # Install once per simulator. Each test case still restarts the app so
+            # ProcessInfo launch arguments are re-read, but reinstalling the same
+            # large .app for every screenshot is unnecessary.
             xcrun simctl terminate "$udid" "$BUNDLE_ID" >/dev/null 2>&1 || true
             xcrun simctl uninstall "$udid" "$BUNDLE_ID" >/dev/null 2>&1 || true
             xcrun simctl install "$udid" "$app_path"
@@ -262,7 +289,9 @@ jobs:
             local user_location="$3"
             shift 3
 
-            reset_app "$udid"
+            # ScreenshotLaunchConfiguration is initialized from process arguments,
+            # so a fresh process per case is intentional. A reinstall is not.
+            xcrun simctl terminate "$udid" "$BUNDLE_ID" >/dev/null 2>&1 || true
 
             if [[ -n "$user_location" ]]; then
               xcrun simctl location "$udid" set "$user_location"
@@ -272,10 +301,28 @@ jobs:
 
             xcrun simctl launch "$udid" "$BUNDLE_ID" "$@" >/dev/null
 
-            # Stack/deeplink state is applied at app initialization. Give station,
-            # nearby-departure, drawer, map, and network state time to settle.
-            sleep "$SCREENSHOT_SETTLE_SECONDS"
-            xcrun simctl io "$udid" screenshot "$output"
+            # Let the initial SwiftUI/map hierarchy render, then retry obviously
+            # blank PNGs instead of blindly accepting a single frame.
+            sleep "$SCREENSHOT_INITIAL_SETTLE_SECONDS"
+
+            local attempt bytes
+            for (( attempt = 1; attempt <= SCREENSHOT_MAX_ATTEMPTS; attempt++ )); do
+              xcrun simctl io "$udid" screenshot "$output" >/dev/null
+              bytes="$(stat -f%z "$output")"
+
+              if (( bytes >= SCREENSHOT_MIN_BYTES )); then
+                echo "Captured ${output#$SCREENSHOT_DIR/} (${bytes} bytes, attempt $attempt)"
+                return 0
+              fi
+
+              if (( attempt == SCREENSHOT_MAX_ATTEMPTS )); then
+                echo "Screenshot still looks blank after $attempt attempts: $output (${bytes} bytes)"
+                return 1
+              fi
+
+              echo "Screenshot looks blank (${bytes} bytes); retrying ${output#$SCREENSHOT_DIR/}..."
+              sleep "$SCREENSHOT_RETRY_SECONDS"
+            done
           }
 
           capture_device() {
@@ -316,6 +363,13 @@ jobs:
               --ci-screenshot-drawer collapsed
           }
 
+          # Two installs total instead of one install per screenshot.
+          prepare_device "$IPHONE_UDID"
+          prepare_device "$IPAD_UDID"
+
+          # Keep rendering serial on a single macOS runner. If we later need more
+          # device families, split capture into separate jobs after uploading the
+          # already-built .app rather than compiling once per matrix entry.
           capture_device "$IPHONE_UDID" iphone
           capture_device "$IPAD_UDID" ipad
 
