@@ -265,22 +265,70 @@ jobs:
           test -d "$app_path"
           mkdir -p "$SCREENSHOT_DIR/iphone" "$SCREENSHOT_DIR/ipad"
 
+          run_with_timeout() {
+            local seconds="$1"
+            shift
+
+            "$@" &
+            local command_pid=$!
+
+            (
+              sleep "$seconds"
+              if kill -0 "$command_pid" 2>/dev/null; then
+                echo "::warning::Timed out after ${seconds}s: $*"
+                kill -TERM "$command_pid" 2>/dev/null || true
+                sleep 2
+                kill -KILL "$command_pid" 2>/dev/null || true
+              fi
+            ) &
+            local watchdog_pid=$!
+
+            local status
+            if wait "$command_pid"; then
+              status=0
+            else
+              status=$?
+            fi
+
+            kill "$watchdog_pid" 2>/dev/null || true
+            wait "$watchdog_pid" 2>/dev/null || true
+            return "$status"
+          }
+
+          boot_device() {
+            local udid="$1"
+            local family="$2"
+
+            echo "::group::Boot $family simulator"
+            run_with_timeout 30 xcrun simctl boot "$udid" || true
+            run_with_timeout 120 xcrun simctl bootstatus "$udid" -b
+            echo "::endgroup::"
+          }
+
           prepare_device() {
             local udid="$1"
+            local family="$2"
 
-            # Install once per simulator. Each test case still restarts the app so
-            # ProcessInfo launch arguments are re-read, but reinstalling the same
-            # large .app for every screenshot is unnecessary.
-            xcrun simctl terminate "$udid" "$BUNDLE_ID" >/dev/null 2>&1 || true
-            xcrun simctl uninstall "$udid" "$BUNDLE_ID" >/dev/null 2>&1 || true
-            xcrun simctl install "$udid" "$app_path"
-            xcrun simctl privacy "$udid" grant location "$BUNDLE_ID"
-            xcrun simctl status_bar "$udid" override \
+            echo "::group::Prepare $family simulator"
+            run_with_timeout 15 xcrun simctl terminate "$udid" "$BUNDLE_ID" || true
+
+            echo "Installing Catenary.app on $family..."
+            if ! run_with_timeout 90 xcrun simctl install "$udid" "$app_path"; then
+              echo "::warning::Install failed or timed out on $family; rebooting simulator and retrying once."
+              run_with_timeout 30 xcrun simctl shutdown "$udid" || true
+              run_with_timeout 30 xcrun simctl boot "$udid" || true
+              run_with_timeout 120 xcrun simctl bootstatus "$udid" -b
+              run_with_timeout 90 xcrun simctl install "$udid" "$app_path"
+            fi
+
+            run_with_timeout 30 xcrun simctl privacy "$udid" grant location "$BUNDLE_ID"
+            run_with_timeout 30 xcrun simctl status_bar "$udid" override \
               --time 9:41 \
               --batteryState charged \
               --batteryLevel 100 \
               --wifiBars 3 \
               --cellularBars 4 || true
+            echo "::endgroup::"
           }
 
           capture_screenshot() {
@@ -289,17 +337,16 @@ jobs:
             local user_location="$3"
             shift 3
 
-            # ScreenshotLaunchConfiguration is initialized from process arguments,
-            # so a fresh process per case is intentional. A reinstall is not.
-            xcrun simctl terminate "$udid" "$BUNDLE_ID" >/dev/null 2>&1 || true
+            echo "Starting ${output#$SCREENSHOT_DIR/}..."
+            run_with_timeout 15 xcrun simctl terminate "$udid" "$BUNDLE_ID" || true
 
             if [[ -n "$user_location" ]]; then
-              xcrun simctl location "$udid" set "$user_location"
+              run_with_timeout 15 xcrun simctl location "$udid" set "$user_location"
             else
-              xcrun simctl location "$udid" clear >/dev/null 2>&1 || true
+              run_with_timeout 15 xcrun simctl location "$udid" clear || true
             fi
 
-            xcrun simctl launch "$udid" "$BUNDLE_ID" "$@" >/dev/null
+            run_with_timeout 30 xcrun simctl launch "$udid" "$BUNDLE_ID" "$@"
 
             # Let the initial SwiftUI/map hierarchy render, then retry obviously
             # blank PNGs instead of blindly accepting a single frame.
@@ -307,7 +354,7 @@ jobs:
 
             local attempt bytes
             for (( attempt = 1; attempt <= SCREENSHOT_MAX_ATTEMPTS; attempt++ )); do
-              xcrun simctl io "$udid" screenshot "$output" >/dev/null
+              run_with_timeout 30 xcrun simctl io "$udid" screenshot "$output"
               bytes="$(stat -f%z "$output")"
 
               if (( bytes >= SCREENSHOT_MIN_BYTES )); then
@@ -363,14 +410,17 @@ jobs:
               --ci-screenshot-drawer collapsed
           }
 
-          # Two installs total instead of one install per screenshot.
-          prepare_device "$IPHONE_UDID"
-          prepare_device "$IPAD_UDID"
-
-          # Keep rendering serial on a single macOS runner. If we later need more
-          # device families, split capture into separate jobs after uploading the
-          # already-built .app rather than compiling once per matrix entry.
+          # Capture on one simulator at a time. Both devices were booted earlier
+          # for build setup, so shut the iPad down before touching the iPhone.
+          run_with_timeout 30 xcrun simctl shutdown "$IPAD_UDID" || true
+          prepare_device "$IPHONE_UDID" iphone
           capture_device "$IPHONE_UDID" iphone
+
+          run_with_timeout 15 xcrun simctl terminate "$IPHONE_UDID" "$BUNDLE_ID" || true
+          run_with_timeout 30 xcrun simctl shutdown "$IPHONE_UDID" || true
+
+          boot_device "$IPAD_UDID" iPad
+          prepare_device "$IPAD_UDID" iPad
           capture_device "$IPAD_UDID" ipad
 
           for screenshot in "$SCREENSHOT_DIR"/*/*.png; do
