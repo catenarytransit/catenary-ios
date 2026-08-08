@@ -489,6 +489,19 @@ struct MainUIView: View {
         return max(availableHeight, 80)
     }
 
+    private var drawerMidwayHeight: CGFloat {
+        guard usesTabletDrawer else {
+            return min(350, drawerMaximumHeight)
+        }
+
+        let viewportHeight = mapViewportSize.height > 0
+            ? mapViewportSize.height
+            : UIScreen.main.bounds.height
+
+        // Android wide layout places the midway anchor at half the screen.
+        return min(max(viewportHeight / 2, 80), drawerMaximumHeight)
+    }
+
     private var drawerBaseHeight: CGFloat {
         if viewobject.presDetent == .height(80) {
             return 80
@@ -503,7 +516,7 @@ struct MainUIView: View {
         if viewobject.presDetent == .large {
             return drawerMaximumHeight
         }
-        return min(350, drawerMaximumHeight)
+        return drawerMidwayHeight
     }
 
     private var drawerVisibleHeight: CGFloat {
@@ -569,16 +582,10 @@ struct MainUIView: View {
         )
     }
 
-    private var usesLegacyTabletDrawer: Bool {
-        guard UIDevice.current.userInterfaceIdiom == .pad,
-              horizontalSizeClass == .regular else {
-            return false
-        }
-
-        if #available(iOS 17.0, *) {
-            return false
-        }
-        return true
+    private var usesTabletDrawer: Bool {
+        // Tablets always use the custom bottom-leading drawer. This avoids the
+        // centered native iPad sheet and matches Android's wide layout.
+        UIDevice.current.userInterfaceIdiom == .pad
     }
 
     private var usesLandscapePhoneDrawer: Bool {
@@ -591,7 +598,7 @@ struct MainUIView: View {
     }
 
     private var usesCustomDrawer: Bool {
-        usesLegacyTabletDrawer || usesLandscapePhoneDrawer
+        usesTabletDrawer || usesLandscapePhoneDrawer
     }
 
     private var usesPortraitPhoneDrawer: Bool {
@@ -663,8 +670,8 @@ struct MainUIView: View {
         if usesLandscapePhoneDrawer {
             return landscapePhoneDrawerWidth
         }
-        if usesLegacyTabletDrawer {
-            return min(tabletPaneWidth, 440)
+        if usesTabletDrawer {
+            return tabletPaneWidth
         }
         return tabletPaneWidth
     }
@@ -682,17 +689,19 @@ struct MainUIView: View {
         let viewportWidth = mapViewportSize.width > 0
             ? mapViewportSize.width
             : UIScreen.main.bounds.width
-        let availableWidth = max(viewportWidth - 32, 0)
-        let fallbackWidth = min(600, max(viewportWidth * 0.5, 320))
-        let preferredWidth = nativeSheetWidth > 0 ? nativeSheetWidth : fallbackWidth
-        return min(preferredWidth, availableWidth)
+
+        // Match Android's wide layout: the drawer occupies the leading half
+        // of the viewport, accounting for the outer leading margin.
+        return max((viewportWidth / 2) - drawerOuterPadding, 0)
     }
 
     private var mapContentInset: UIEdgeInsets {
         guard isSheetPresented, mapViewportSize.height > 0 else { return .zero }
-        guard viewobject.presDetent == .large else { return .zero }
 
         if usesLeadingPaneLayout {
+            // Android shifts the map into the unobscured half at both the
+            // midway and expanded wide-layout snap points.
+            guard viewobject.presDetent != .height(80) else { return .zero }
             return UIEdgeInsets(
                 top: 0,
                 left: leadingPaneWidth + drawerOuterPadding,
@@ -700,6 +709,8 @@ struct MainUIView: View {
                 right: 0
             )
         }
+
+        guard viewobject.presDetent == .large else { return .zero }
 
         return UIEdgeInsets(
             top: 0,
