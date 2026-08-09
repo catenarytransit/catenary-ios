@@ -1182,13 +1182,14 @@ struct mapLibreView: View, Equatable {
         //bus
         let widthStops = NSExpression(forConstantValue: [
             9:  railInFrame ? 0.3 : 0.4,
-            10: railInFrame ? 0.45 : 0.6,
-            12: 1.0,
-            14: 2.6
+            10: railInFrame ? 0.4 : 0.6,
+            12: 0.8,
+            14: 1.4,
+            16: 2.0
         ])
         let opacityStops = NSExpression(forConstantValue: [
-            7:  railInFrame ? 0.04 : 0.09,
-            8:  railInFrame ? 0.04 : 0.15,
+            8:  railInFrame ? 0.03 : 0.15,
+            9:  railInFrame ? 0.03 : 0.15,
             11: railInFrame ? 0.15 : 0.30,
             14: railInFrame ? 0.20 : 0.30,
             16: railInFrame ? 0.30 : 0.30
@@ -1207,7 +1208,7 @@ struct mapLibreView: View, Equatable {
                          curveType: .linear,
                          parameters: nil,
                          stops: opacityStops)
-            .minimumZoomLevel(railInFrame ? 9 : 8)
+            .minimumZoomLevel(railInFrame ? 10 : 8)
             .visible(viewobject.allLayerSettings.bus.shapes)
         
             // BUS SYMBOL LAYER
@@ -1246,10 +1247,11 @@ struct mapLibreView: View, Equatable {
                      curveType: .linear,
                      parameters: nil,
                      stops: NSExpression(forConstantValue: [7: 2.0, 9: 3.0]))
-        .lineOpacity(interpolatedBy: .zoomLevel,
-                     curveType: .linear,
-                     parameters: nil,
-                     stops: NSExpression(forConstantValue: [0: 1.0]))
+        .lineOpacity(expression: NSExpression(
+            forMLNConditional: NSPredicate(format: "stop_to_stop_generated == YES"),
+            trueExpression: NSExpression(forConstantValue: 0.2),
+            falseExpression: NSExpression(forConstantValue: 1.0)
+        ))
         .minimumZoomLevel(1)
         .visible(viewobject.allLayerSettings.other.shapes)
         .predicate(NSPredicate(format: "NOT ((chateau == %@) AND (stop_to_stop_generated == %@)) AND (route_type == 6 OR route_type == 7)", "schweiz", NSNumber(value: true))) //TODO: make sure this works ?? More of a guess
@@ -1262,12 +1264,12 @@ struct mapLibreView: View, Equatable {
         .lineWidth(interpolatedBy: .zoomLevel,
                      curveType: .linear,
                      parameters: nil,
-                     stops: NSExpression(forConstantValue: [6: 0.5, 7: 1.0, 10: 1.5, 14: 3.0]))
+                     stops: NSExpression(forConstantValue: [6: 0.5, 7: 1.0, 10: 1.0, 14: 2.0]))
         .lineOpacity(interpolatedBy: .zoomLevel,
                      curveType: .linear,
                      parameters: nil,
-                     stops: NSExpression(forConstantValue: [6: 0.8, 7: 0.9]))
-        .minimumZoomLevel(3)
+                     stops: NSExpression(forConstantValue: [6: 0.6, 7: 0.7]))
+        .minimumZoomLevel(3.5)
         .visible(viewobject.allLayerSettings.other.shapes)
         .predicate(NSPredicate(format: "route_type == 4"))
         .lineDashPattern([1,2])
@@ -1299,9 +1301,9 @@ struct mapLibreView: View, Equatable {
                      source: shapeTileSources.intercityRailSource(),
                      sourceLayerIdentifier: "data")
         .lineColor(expression: lineColorExpression)
-        .lineWidth(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [3: 0.4, 5: 0.7, 7: 1.0, 9: 2.0, 11: 2.5]))
+        .lineWidth(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil, stops: NSExpression(forConstantValue: [3: 0.1, 5: 0.2, 7: 0.6, 9: 0.7, 11: 2.0, 12: 2.3]))
         .lineOpacity(expression: NSExpression(forMLNConditional: NSPredicate(format: "stop_to_stop_generated == YES"), trueExpression: NSExpression(forConstantValue: 0.2), falseExpression: NSExpression(forConstantValue: 0.9)))
-        .minimumZoomLevel(2)
+        .minimumZoomLevel(3)
         .visible(viewobject.allLayerSettings.intercityrail.shapes)
         .predicate(NSPredicate(format: "route_type == 2"))
         
@@ -1336,7 +1338,7 @@ struct mapLibreView: View, Equatable {
         .lineWidth(interpolatedBy: .zoomLevel,
                      curveType: .linear,
                      parameters: nil,
-                     stops: NSExpression(forConstantValue: [6: 0.5, 7: 1, 9: 2]))
+                     stops: NSExpression(forConstantValue: [5: 0.2, 6: 0.4, 7: 0.5, 9: 1.0, 11: 1.5, 12: 2.2]))
         .lineOpacity(1)
         .minimumZoomLevel(5)
         .visible(viewobject.allLayerSettings.localrail.shapes)
@@ -1375,7 +1377,7 @@ struct mapLibreView: View, Equatable {
         .lineWidth(interpolatedBy: .zoomLevel,
                      curveType: .linear,
                      parameters: nil,
-                     stops: NSExpression(forConstantValue: [6: 0.5, 7: 1, 9: 2]))
+                     stops: NSExpression(forConstantValue: [6: 0.3, 7: 0.4, 9: 0.9, 12: 2.0, 14: 2.5]))
         .lineOpacity(1)
         .minimumZoomLevel(5)
         .visible(viewobject.allLayerSettings.localrail.shapes)
