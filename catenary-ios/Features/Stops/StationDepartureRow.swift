@@ -484,7 +484,31 @@ struct StationTrainDepartureRowCompact: View {
     }
 
     private var showsRouteBadge: Bool {
-        routeLabel != nil
+        guard routeLabel != nil else { return false }
+        return event.chateau != NationalRailUtils.chateauID
+            || isNationalRailRouteBadgeException
+    }
+
+    private var isNationalRailRouteBadgeException: Bool {
+        guard event.chateau == NationalRailUtils.chateauID else { return false }
+
+        let agencyID = routeInfo?.agencyId?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+
+        if agencyID == "LO" || agencyID == "XR" {
+            return true
+        }
+
+        let agencyName = NationalRailUtils.resolvedAgencyName(
+            agencyID: routeInfo?.agencyId,
+            agencyName: agency?.agencyName
+        )?
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+
+        return agencyName == "london overground"
+            || agencyName == "elizabeth line"
     }
 
     private var platformText: String? {
