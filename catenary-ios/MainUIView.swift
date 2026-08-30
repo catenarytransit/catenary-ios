@@ -587,6 +587,13 @@ struct MainUIView: View {
                 .padding(.horizontal, portraitDrawerHorizontalInset)
         }
         .padding(.bottom, portraitDrawerOuterBottomInset)
+        // `overlay(alignment: .bottom)` is laid out against the map's safe-area
+        // bottom on portrait iPhones. Ignoring the safe area changes drawing but
+        // does not move that alignment anchor. Translate the whole FAB + drawer
+        // assembly through the home-indicator inset so the expanded surface is
+        // actually flush with the physical screen bottom. The collapsed pill
+        // keeps its own 8-point visual gap via portraitDrawerOuterBottomInset.
+        .offset(y: mapBottomSafeAreaInset)
         // The first 96 points of expansion are also the compact-summary
         // crossfade window. Morph the pill into the full sheet over that same
         // range so shape, content, and FAB all feel like one transition.
