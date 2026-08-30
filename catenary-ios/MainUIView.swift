@@ -257,7 +257,7 @@ struct MainUIView: View {
                     }
                 }
                 .overlay(alignment: .bottomTrailing) {
-                    if isSheetPresented {
+                    if isSheetPresented, !usesPortraitPhoneDrawer {
                         floatingToolBar()
                             .catenaryOnGeometryChange(for: CGFloat.self) { proxy in
                                 proxy.size.height
@@ -405,6 +405,13 @@ struct MainUIView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea(.container, edges: .bottom)
             .interactiveDismissDisabled()
+            .background {
+                if usesPortraitPhoneDrawer {
+                    NativeSheetFloatingToolbarHost {
+                        floatingToolBar(attachedToPortraitSheet: true)
+                    }
+                }
+            }
             .background(
                 NativeSheetLeadingAnchor(sheetWidth: $nativeSheetWidth, sheetHeight: $nativeSheetLiveHeight)
             )
@@ -848,7 +855,7 @@ struct MainUIView: View {
     }
 
     @ViewBuilder
-    func floatingToolBar() -> some View {
+    func floatingToolBar(attachedToPortraitSheet: Bool = false) -> some View {
         Group {
             VStack {
                 if viewobject.currentRotation != 0 {
@@ -888,13 +895,14 @@ struct MainUIView: View {
 
             }
             .font(.title3)
-            .offset(y: floatingToolbarYOffset)
+            .offset(y: attachedToPortraitSheet ? 0 : floatingToolbarYOffset)
             // The native sheet already reports intermediate heights. Avoid adding
             // another animation layer so the toolbar stays locked to its top edge.
             .animation(nil, value: liveSheetHeight)
-            .opacity(floatingToolbarOpacity)
-            .allowsHitTesting(floatingToolbarOpacity > 0.01)
-            .accessibilityHidden(floatingToolbarOpacity <= 0.01)
+            .animation(attachedToPortraitSheet ? .easeOut(duration: 0.18) : nil, value: locationOpacity)
+            .opacity(attachedToPortraitSheet ? locationOpacity : floatingToolbarOpacity)
+            .allowsHitTesting((attachedToPortraitSheet ? locationOpacity : floatingToolbarOpacity) > 0.01)
+            .accessibilityHidden((attachedToPortraitSheet ? locationOpacity : floatingToolbarOpacity) <= 0.01)
         }
 
     }
