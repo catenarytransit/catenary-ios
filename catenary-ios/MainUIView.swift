@@ -562,38 +562,80 @@ struct MainUIView: View {
 
     private var portraitDrawer: some View {
         VStack(alignment: .trailing, spacing: 8) {
-            // The FAB and drawer are siblings in one bottom-aligned SwiftUI
-            // container. The drawer remains pinned to the bottom while the FAB
-            // naturally rides its top edge through drags and snap animations.
+            // Keep the FAB and drawer in one SwiftUI layout container so they
+            // move together without measuring or recomputing the FAB position.
             floatingToolBar(attachedToPortraitSheet: true)
                 .padding(.trailing, 15)
 
             drawerContent(sheetHeight: drawerVisibleHeight)
-                .padding(.bottom, mapBottomSafeAreaInset)
+                // At the collapsed detent the drawer is a floating 80-point pill,
+                // so keep the home-indicator safe area outside the surface. As it
+                // opens, move that inset inside the sheet until the expanded
+                // drawer is once again edge-attached like the native sheet.
+                .padding(.bottom, portraitDrawerInternalSafeArea)
                 .frame(maxWidth: .infinity)
                 .frame(height: portraitDrawerSurfaceHeight)
-                .background(.regularMaterial)
+                .background(portraitDrawerMaterial)
                 .clipShape(
                     UnevenRoundedRectangle(
-                        topLeadingRadius: 18,
-                        topTrailingRadius: 18,
+                        topLeadingRadius: portraitDrawerTopCornerRadius,
+                        bottomLeadingRadius: portraitDrawerBottomCornerRadius,
+                        bottomTrailingRadius: portraitDrawerBottomCornerRadius,
+                        topTrailingRadius: portraitDrawerTopCornerRadius,
                         style: .continuous
                     )
                 )
                 .overlay(alignment: .top) {
                     drawerDragHandle
                 }
-                .shadow(radius: 12, y: 4)
+                .shadow(radius: portraitDrawerShadowRadius, y: 4)
+                .padding(.horizontal, portraitDrawerHorizontalInset)
         }
-        // Programmatic detent changes (map taps/search/navigation) now animate
-        // the FAB and drawer in the same layout transaction. Interactive drags
-        // still follow the finger directly because drawerDragOffset itself is not
-        // an animation value here.
+        .padding(.bottom, portraitDrawerOuterBottomInset)
+        // The first 96 points of expansion are also the compact-summary
+        // crossfade window. Morph the pill into the full sheet over that same
+        // range so shape, content, and FAB all feel like one transition.
         .animation(.easeOut(duration: 0.32), value: viewobject.presDetent)
     }
 
+    private var portraitDrawerMorphProgress: CGFloat {
+        let morphDistance: CGFloat = 96
+        return min(
+            max((drawerVisibleHeight - 80) / morphDistance, 0),
+            1
+        )
+    }
+
+    private var portraitDrawerInternalSafeArea: CGFloat {
+        mapBottomSafeAreaInset * portraitDrawerMorphProgress
+    }
+
+    private var portraitDrawerOuterBottomInset: CGFloat {
+        (mapBottomSafeAreaInset + 8) * (1 - portraitDrawerMorphProgress)
+    }
+
+    private var portraitDrawerHorizontalInset: CGFloat {
+        12 * (1 - portraitDrawerMorphProgress)
+    }
+
+    private var portraitDrawerTopCornerRadius: CGFloat {
+        40 - (22 * portraitDrawerMorphProgress)
+    }
+
+    private var portraitDrawerBottomCornerRadius: CGFloat {
+        40 * (1 - portraitDrawerMorphProgress)
+    }
+
+    private var portraitDrawerMaterial: Material {
+        viewobject.presDetent == .height(80) ? .thinMaterial : .regularMaterial
+    }
+
+    private var portraitDrawerShadowRadius: CGFloat {
+        8 + (4 * portraitDrawerMorphProgress)
+    }
+
     private var portraitDrawerSurfaceHeight: CGFloat {
-        drawerVisibleHeight + mapBottomSafeAreaInset
+        drawerVisibleHeight + portraitDrawerInternalSafeArea
     }
 
     private var drawerDragHandle: some View {
