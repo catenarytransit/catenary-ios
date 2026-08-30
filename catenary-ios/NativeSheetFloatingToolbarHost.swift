@@ -31,7 +31,7 @@ struct NativeSheetFloatingToolbarHost<Content: View>: UIViewControllerRepresenta
     }
 }
 
-private final class NativeSheetFloatingToolbarController: UIViewController {
+final class NativeSheetFloatingToolbarController: UIViewController {
     private var toolbarView: (UIView & UIContentView)?
     private var toolbarContent: AnyView?
     private weak var attachedSheetView: UIView?
@@ -152,3 +152,18 @@ private final class NativeSheetFloatingToolbarController: UIViewController {
         attachedSheetView = nil
         attachedContainerView = nil
     }
+
+    private var containingPresentedController: UIViewController? {
+        var controller: UIViewController? = self
+
+        while let current = controller {
+            if current.presentingViewController != nil,
+               current.presentationController?.presentedViewController === current {
+                return current
+            }
+            controller = current.parent
+        }
+
+        return nil
+    }
+}
