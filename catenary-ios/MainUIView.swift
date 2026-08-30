@@ -201,9 +201,6 @@ struct MainUIView: View {
                     guard !stack.isEmpty else { return }
                     isLandscapeSearchRequested = false
                     isSheetPresented = true
-                    if viewobject.presDetent != .large {
-                        viewobject.presDetent = .large
-                    }
                 }
                 .sheet(isPresented: nativeSheetPresentationBinding) {
                     bottomDrawerSheet

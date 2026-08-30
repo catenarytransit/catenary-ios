@@ -115,7 +115,7 @@ struct MapOverlappingSelectionScreen: View {
         @ViewBuilder label: () -> Label
     ) -> some View {
         Button {
-            viewObject.push(option.destination)
+            viewObject.pushFromMap(option.destination)
         } label: {
             label()
                 .contentShape(Rectangle())

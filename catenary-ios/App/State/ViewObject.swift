@@ -176,6 +176,13 @@ class viewObject: ObservableObject {
         presDetent = .large
     }
 
+    /// Match the Compose map-tap behavior: reveal a collapsed drawer at the
+    /// midway detent, but preserve a drawer that is already midway or expanded.
+    func pushFromMap(_ item: CatenaryStackItem) {
+        catenaryStack.append(item)
+        revealMapSelectionIfNeeded()
+    }
+
     func replaceTop(with item: CatenaryStackItem) {
         if catenaryStack.isEmpty {
             catenaryStack.append(item)
@@ -183,6 +190,20 @@ class viewObject: ObservableObject {
             catenaryStack[catenaryStack.count - 1] = item
         }
         presDetent = .large
+    }
+
+    func replaceTopFromMap(with item: CatenaryStackItem) {
+        if catenaryStack.isEmpty {
+            catenaryStack.append(item)
+        } else {
+            catenaryStack[catenaryStack.count - 1] = item
+        }
+        revealMapSelectionIfNeeded()
+    }
+
+    private func revealMapSelectionIfNeeded() {
+        guard presDetent == .height(80) else { return }
+        presDetent = .height(350)
     }
 
     @discardableResult
