@@ -248,6 +248,13 @@ struct MainUIView: View {
                             .transition(.move(edge: .leading).combined(with: .opacity))
                     }
                 }
+                .overlay(alignment: .bottom) {
+                    if usesSwiftUIPortraitDrawer, isSheetPresented {
+                        portraitDrawer
+                            .ignoresSafeArea(.container, edges: .bottom)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
                 .overlay {
                     if nearbyPinActive, nearbyPinCoordinate != nil {
                         DraggableNearbyPinOverlay(
@@ -529,7 +536,9 @@ struct MainUIView: View {
         BottomDrawer(
             selectedDetent: $viewobject.presDetent,
             sheetHeight: sheetHeight,
-            collapsedDrawerHeight: usesCustomDrawer ? 80 : collapsedNativeSheetHeight,
+            collapsedDrawerHeight: (usesCustomDrawer || usesSwiftUIPortraitDrawer)
+                ? 80
+                : collapsedNativeSheetHeight,
             locationManager: locationManager,
             searchViewModel: searchViewModel,
             focusRequest: searchFocusRequest,
@@ -549,6 +558,42 @@ struct MainUIView: View {
                 drawerDragHandle
             }
             .shadow(radius: 12, y: 4)
+    }
+
+    private var portraitDrawer: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            // The FAB and drawer are siblings in one bottom-aligned SwiftUI
+            // container. The drawer remains pinned to the bottom while the FAB
+            // naturally rides its top edge through drags and snap animations.
+            floatingToolBar(attachedToPortraitSheet: true)
+                .padding(.trailing, 15)
+
+            drawerContent(sheetHeight: drawerVisibleHeight)
+                .padding(.bottom, mapBottomSafeAreaInset)
+                .frame(maxWidth: .infinity)
+                .frame(height: portraitDrawerSurfaceHeight)
+                .background(.regularMaterial)
+                .clipShape(
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: 18,
+                        topTrailingRadius: 18,
+                        style: .continuous
+                    )
+                )
+                .overlay(alignment: .top) {
+                    drawerDragHandle
+                }
+                .shadow(radius: 12, y: 4)
+        }
+        // Programmatic detent changes (map taps/search/navigation) now animate
+        // the FAB and drawer in the same layout transaction. Interactive drags
+        // still follow the finger directly because drawerDragOffset itself is not
+        // an animation value here.
+        .animation(.easeOut(duration: 0.32), value: viewobject.presDetent)
+    }
+
+    private var portraitDrawerSurfaceHeight: CGFloat {
+        drawerVisibleHeight + mapBottomSafeAreaInset
     }
 
     private var drawerDragHandle: some View {
@@ -593,6 +638,17 @@ struct MainUIView: View {
         let viewportHeight = mapViewportSize.height > 0
             ? mapViewportSize.height
             : UIScreen.main.bounds.height
+
+        if usesSwiftUIPortraitDrawer {
+            // drawerVisibleHeight is the logical content height. The portrait
+            // surface adds the bottom safe-area inset separately, matching native
+            // sheet semantics while keeping the top edge deterministic.
+            return max(
+                viewportHeight - mapTopSafeAreaInset - mapBottomSafeAreaInset,
+                80
+            )
+        }
+
         let bottomPadding = usesLandscapePhoneDrawer ? 0 : drawerOuterPadding
         let availableHeight = viewportHeight - drawerOuterPadding - bottomPadding
         return max(availableHeight, 80)
@@ -659,7 +715,10 @@ struct MainUIView: View {
             nextDetent = viewobject.presDetent == .large ? .height(350) : .height(80)
         }
 
-        withAnimation(.catenaryBouncy) {
+        let animation: Animation = usesSwiftUIPortraitDrawer
+            ? .easeOut(duration: 0.32)
+            : .catenaryBouncy
+        withAnimation(animation) {
             viewobject.presDetent = nextDetent
             drawerDragOffset = 0
         }
@@ -682,10 +741,10 @@ struct MainUIView: View {
     private var nativeSheetPresentationBinding: Binding<Bool> {
         Binding(
             get: {
-                isSheetPresented && !usesCustomDrawer
+                isSheetPresented && !usesCustomDrawer && !usesSwiftUIPortraitDrawer
             },
             set: { presented in
-                guard !usesCustomDrawer else { return }
+                guard !usesCustomDrawer, !usesSwiftUIPortraitDrawer else { return }
                 isSheetPresented = presented
             }
         )
@@ -712,6 +771,15 @@ struct MainUIView: View {
 
     private var usesPortraitPhoneDrawer: Bool {
         UIDevice.current.userInterfaceIdiom == .phone && !usesLandscapePhoneDrawer
+    }
+
+    private var usesSwiftUIPortraitDrawer: Bool {
+        guard usesPortraitPhoneDrawer else { return false }
+
+        // SwiftUI is the primary implementation. Keeping this launch argument
+        // provides an explicit escape hatch to the existing native/UIKit sheet
+        // if a future OS release exposes a presentation regression.
+        return !CommandLine.arguments.contains("--native-portrait-sheet")
     }
 
     private var usesTabletLayout: Bool {
