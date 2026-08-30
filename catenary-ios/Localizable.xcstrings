@@ -33433,6 +33433,167 @@
           }
         }
       }
+    },
+    "Catenary needs access to your location to provide you with transit information around you." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "bg" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary се нуждае от достъп до местоположението ви, за да ви предостави информация за градския транспорт около вас."
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary potřebuje přístup k vaší poloze, aby vám mohl poskytovat informace o veřejné dopravě ve vašem okolí."
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary skal bruge adgang til din lokation for at give dig oplysninger om offentlig transport i nærheden."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary benötigt Zugriff auf deinen Standort, um dir Informationen zu öffentlichen Verkehrsmitteln in deiner Nähe bereitzustellen."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το Catenary χρειάζεται πρόσβαση στην τοποθεσία σας για να σας παρέχει πληροφορίες σχετικά με τις συγκοινωνίες γύρω σας."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary needs access to your location to provide you with transit information around you."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary necesita acceder a tu ubicación para ofrecerte información de transporte público cerca de ti."
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary tarvitsee pääsyn sijaintiisi tarjotakseen sinulle joukkoliikennetietoja ympäristössäsi."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary a besoin d'accéder à votre position pour vous fournir des informations sur les transports en commun autour de vous."
+          }
+        },
+        "hu" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Catenary hozzáférést igényel a helyadataidhoz, hogy tömegközlekedési információkat nyújthasson a környékeden."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary ha bisogno di accedere alla tua posizione per fornirti informazioni sui trasporti pubblici nelle vicinanze."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenaryは、周辺の公共交通機関情報を提供するために位置情報へのアクセスが必要です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary는 주변의 대중교통 정보를 제공하기 위해 위치 정보에 대한 접근이 필요합니다."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary trenger tilgang til posisjonen din for å gi deg informasjon om kollektivtransport i nærheten."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary heeft toegang tot je locatie nodig om je informatie over het openbaar vervoer in de buurt te geven."
+          }
+        },
+        "oc" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary a besonh d'accedir a vòstra posicion per vos provesir d'informacions sul transpòrt public a l'entorn."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary potrzebuje dostępu do Twojej lokalizacji, aby dostarczać Ci informacje o transporcie publicznym w pobliżu."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Catenary precisa de aceder à sua localização para lhe fornecer informações de transporte público à sua volta."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary are nevoie de acces la locația ta pentru a-ți oferi informații despre transportul public din apropiere."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary нужен доступ к вашему местоположению, чтобы предоставлять вам информацию об общественном транспорте рядом с вами."
+          }
+        },
+        "sk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary potrebuje prístup k vašej polohe, aby vám mohol poskytovať informácie o verejnej doprave vo vašom okolí."
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary behöver tillgång till din plats för att ge dig information om kollektivtrafik i närheten."
+          }
+        },
+        "uk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary потрібен доступ до вашого місцезнаходження, щоб надавати вам інформацію про громадський транспорт поруч."
+          }
+        },
+        "zh-HK" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary 需要存取你的位置，以便為你提供周邊嘅公共交通資訊。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary 需要访问您的位置，以便为您提供周边的公共交通信息。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catenary 需要存取您的位置，以便為您提供周邊的大眾運輸資訊。"
+          }
+        }
+      }
     }
   },
   "version" : "1.1"
