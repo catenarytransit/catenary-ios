@@ -388,7 +388,8 @@ struct MainUIView: View {
                 // While the selection still says "collapsed", retain the smallest
                 // geometry value we observe. During an upward drag the height grows,
                 // leaving this as a stable baseline for the compact-pill crossfade.
-                if viewobject.presDetent == .height(80) {
+                if viewobject.presDetent == .height(80),
+                   boundedHeight >= 80 {
                     if let collapsedNativeSheetHeight {
                         self.collapsedNativeSheetHeight = min(
                             collapsedNativeSheetHeight,
@@ -613,6 +614,31 @@ struct MainUIView: View {
         usesCustomDrawer || usesTabletLayout
     }
 
+    private var portraitNativeSheetHeightCorrection: CGFloat {
+        guard usesPortraitPhoneDrawer,
+              let collapsedNativeSheetHeight else {
+            return 0
+        }
+
+        return max(collapsedNativeSheetHeight - 80, 0)
+    }
+
+    private var effectivePortraitSheetHeight: CGFloat {
+        guard usesPortraitPhoneDrawer else { return liveSheetHeight }
+
+        // Until the first native measurement arrives, trust the semantic detent
+        // height so a cold launch directly into collapsed state cannot flash high.
+        if collapsedNativeSheetHeight == nil,
+           viewobject.presDetent == .height(80) {
+            return 80
+        }
+
+        // SwiftUI's native-sheet geometry can contain a device-dependent constant
+        // amount of safe-area/presentation chrome. Calibrate that bias from the
+        // observed collapsed detent, whose logical height is known to be 80 points.
+        return max(liveSheetHeight - portraitNativeSheetHeightCorrection, 80)
+    }
+
     private var floatingToolbarBottomPadding: CGFloat {
         if usesPortraitPhoneDrawer { return 8 }
         return usesLeadingPaneLayout ? 15 : 0
@@ -620,9 +646,9 @@ struct MainUIView: View {
 
     private var floatingToolbarYOffset: CGFloat {
         if usesPortraitPhoneDrawer {
-            // The sheet height already includes the bottom safe-area region.
-            // Offset by the full height so the 8-point padding remains the true gap.
-            return -liveSheetHeight
+            // Use the calibrated logical drawer height rather than raw
+            // native-sheet geometry, which can include presentation chrome.
+            return -effectivePortraitSheetHeight
         }
         return usesLeadingPaneLayout ? 0 : -min(liveSheetHeight, 350)
     }
@@ -635,7 +661,7 @@ struct MainUIView: View {
         }
 
         let toolbarTop = mapViewportSize.height
-            - liveSheetHeight
+            - effectivePortraitSheetHeight
             - floatingToolbarBottomPadding
             - floatingToolbarHeight
         let fadeDistance: CGFloat = 44
