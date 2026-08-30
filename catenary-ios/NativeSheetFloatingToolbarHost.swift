@@ -31,8 +31,60 @@ struct NativeSheetFloatingToolbarHost<Content: View>: UIViewControllerRepresenta
     }
 }
 
+private final class NativeSheetToolbarContentView: UIView {
+    private let contentView: UIView & UIContentView
+
+    init(configuration: UIHostingConfiguration<AnyView, EmptyView>) {
+        contentView = configuration.makeContentView()
+        super.init(frame: .zero)
+
+        backgroundColor = .clear
+        isUserInteractionEnabled = true
+
+        contentView.backgroundColor = .clear
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(contentView)
+
+        NSLayoutConstraint.activate([
+            contentView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            contentView.topAnchor.constraint(equalTo: topAnchor),
+            contentView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func update(configuration: UIHostingConfiguration<AnyView, EmptyView>) {
+        contentView.configuration = configuration
+        contentView.invalidateIntrinsicContentSize()
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
+    }
+
+    override var intrinsicContentSize: CGSize {
+        let measured = contentView.systemLayoutSizeFitting(
+            UIView.layoutFittingCompressedSize,
+            withHorizontalFittingPriority: .fittingSizeLevel,
+            verticalFittingPriority: .fittingSizeLevel
+        )
+
+        // A standalone UIHostingConfiguration content view is normally sized by
+        // a table/collection cell. When used as a free-floating view it can report
+        // no intrinsic size, which collapses the FAB to 0x0. Preserve the measured
+        // SwiftUI size when available and keep a conservative toolbar-sized floor
+        // as a fallback so the accessory can never disappear from Auto Layout.
+        return CGSize(
+            width: max(measured.width.rounded(.up), 56),
+            height: max(measured.height.rounded(.up), 104)
+        )
+    }
+}
+
 final class NativeSheetFloatingToolbarController: UIViewController {
-    private var toolbarView: (UIView & UIContentView)?
+    private var toolbarView: NativeSheetToolbarContentView?
     private var toolbarContent: AnyView?
     private weak var attachedSheetView: UIView?
     private weak var attachedContainerView: UIView?
@@ -70,7 +122,7 @@ final class NativeSheetFloatingToolbarController: UIViewController {
         toolbarContent = content
 
         if let toolbarView {
-            toolbarView.configuration = hostingConfiguration(for: content)
+            toolbarView.update(configuration: hostingConfiguration(for: content))
         }
 
         scheduleAttachment()
@@ -105,13 +157,18 @@ final class NativeSheetFloatingToolbarController: UIViewController {
             return
         }
 
-        let toolbarView: UIView & UIContentView
+        let toolbarView: NativeSheetToolbarContentView
         if let existingToolbarView = self.toolbarView {
             toolbarView = existingToolbarView
         } else {
-            let newToolbarView = hostingConfiguration(for: content).makeContentView()
-            newToolbarView.backgroundColor = .clear
+            let newToolbarView = NativeSheetToolbarContentView(
+                configuration: hostingConfiguration(for: content)
+            )
             newToolbarView.translatesAutoresizingMaskIntoConstraints = false
+            newToolbarView.setContentHuggingPriority(.required, for: .horizontal)
+            newToolbarView.setContentHuggingPriority(.required, for: .vertical)
+            newToolbarView.setContentCompressionResistancePriority(.required, for: .horizontal)
+            newToolbarView.setContentCompressionResistancePriority(.required, for: .vertical)
             self.toolbarView = newToolbarView
             toolbarView = newToolbarView
         }
@@ -142,7 +199,10 @@ final class NativeSheetFloatingToolbarController: UIViewController {
             attachedContainerView = containerView
         }
 
+        toolbarView.isHidden = false
         containerView.bringSubviewToFront(toolbarView)
+        containerView.setNeedsLayout()
+        containerView.layoutIfNeeded()
     }
 
     private func detachToolbar() {
