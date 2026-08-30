@@ -568,11 +568,6 @@ struct MainUIView: View {
                 .padding(.trailing, 15)
 
             drawerContent(sheetHeight: drawerVisibleHeight)
-                // At the collapsed detent the drawer is a floating 80-point pill,
-                // so keep the home-indicator safe area outside the surface. As it
-                // opens, move that inset inside the sheet until the expanded
-                // drawer is once again edge-attached like the native sheet.
-                .padding(.bottom, portraitDrawerInternalSafeArea)
                 .frame(maxWidth: .infinity)
                 .frame(height: portraitDrawerSurfaceHeight)
                 .background(portraitDrawerMaterial)
@@ -606,12 +601,18 @@ struct MainUIView: View {
         )
     }
 
-    private var portraitDrawerInternalSafeArea: CGFloat {
+    private var portraitDrawerBottomExtension: CGFloat {
+        // Native fixed-height sheets extend through the bottom safe area. Keep
+        // that extra surface height, but let BottomDrawer use it as real layout
+        // space instead of converting it into blank bottom padding.
         mapBottomSafeAreaInset * portraitDrawerMorphProgress
     }
 
     private var portraitDrawerOuterBottomInset: CGFloat {
-        (mapBottomSafeAreaInset + 8) * (1 - portraitDrawerMorphProgress)
+        // The overlay already ignores the bottom safe area. Adding the safe-area
+        // inset again here lifted the collapsed pill roughly 40 points too high.
+        // Keep only the small visual gap used by the floating pill treatment.
+        8 * (1 - portraitDrawerMorphProgress)
     }
 
     private var portraitDrawerHorizontalInset: CGFloat {
@@ -635,7 +636,7 @@ struct MainUIView: View {
     }
 
     private var portraitDrawerSurfaceHeight: CGFloat {
-        drawerVisibleHeight + portraitDrawerInternalSafeArea
+        drawerVisibleHeight + portraitDrawerBottomExtension
     }
 
     private var drawerDragHandle: some View {
