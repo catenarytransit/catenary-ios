@@ -566,6 +566,7 @@ struct MainUIView: View {
             // move together without measuring or recomputing the FAB position.
             floatingToolBar(attachedToPortraitSheet: true)
                 .padding(.trailing, 15)
+                .zIndex(1)
 
             drawerContent(sheetHeight: drawerVisibleHeight)
                 .frame(maxWidth: .infinity)
@@ -587,51 +588,51 @@ struct MainUIView: View {
                 .padding(.horizontal, portraitDrawerHorizontalInset)
         }
         .padding(.bottom, portraitDrawerOuterBottomInset)
-        // `overlay(alignment: .bottom)` is laid out against the map's safe-area
-        // bottom on portrait iPhones. Ignoring the safe area changes drawing but
-        // does not move that alignment anchor. Translate the whole FAB + drawer
-        // assembly through the home-indicator inset so the expanded surface is
-        // actually flush with the physical screen bottom. The collapsed pill
-        // keeps its own 8-point visual gap via portraitDrawerOuterBottomInset.
-        .offset(y: mapBottomSafeAreaInset)
-        // The first 96 points of expansion are also the compact-summary
-        // crossfade window. Morph the pill into the full sheet over that same
-        // range so shape, content, and FAB all feel like one transition.
+        // Move the layout alignment itself through the home-indicator inset.
+        // Unlike .offset, this keeps SwiftUI's hit-test geometry in the same
+        // coordinate space as the rendered FAB and drawer controls.
+        .alignmentGuide(.bottom) { dimensions in
+            dimensions[.bottom] - mapBottomSafeAreaInset
+        }
+        // Morph the floating pill over the complete collapsed -> midway travel.
+        // This makes the surface continuously widen as it is pulled upward,
+        // instead of dropping the horizontal margin within the first 96 points.
         .animation(.easeOut(duration: 0.32), value: viewobject.presDetent)
     }
 
-    private var portraitDrawerMorphProgress: CGFloat {
-        let morphDistance: CGFloat = 96
+    private var portraitDrawerExpansionProgress: CGFloat {
+        let expansionDistance = max(drawerMidwayHeight - 80, 1)
         return min(
-            max((drawerVisibleHeight - 80) / morphDistance, 0),
+            max((drawerVisibleHeight - 80) / expansionDistance, 0),
             1
         )
     }
 
     private var portraitDrawerBottomExtension: CGFloat {
-        // Native fixed-height sheets extend through the bottom safe area. Keep
-        // that extra surface height, but let BottomDrawer use it as real layout
-        // space instead of converting it into blank bottom padding.
-        mapBottomSafeAreaInset * portraitDrawerMorphProgress
+        // Native fixed-height sheets extend through the bottom safe area. Grow
+        // that extension continuously with the rest of the surface geometry so
+        // the pill meets the physical bottom as it approaches the midway state.
+        mapBottomSafeAreaInset * portraitDrawerExpansionProgress
     }
 
     private var portraitDrawerOuterBottomInset: CGFloat {
-        // The overlay already ignores the bottom safe area. Adding the safe-area
-        // inset again here lifted the collapsed pill roughly 40 points too high.
-        // Keep only the small visual gap used by the floating pill treatment.
-        8 * (1 - portraitDrawerMorphProgress)
+        // Keep the collapsed pill 8 points above the physical edge, then close
+        // the gap continuously as the drawer is pulled toward midway.
+        8 * (1 - portraitDrawerExpansionProgress)
     }
 
     private var portraitDrawerHorizontalInset: CGFloat {
-        12 * (1 - portraitDrawerMorphProgress)
+        // Preserve the floating pill's side margins at 80pt and continuously
+        // widen the drawer until it becomes full-width at the midway detent.
+        12 * (1 - portraitDrawerExpansionProgress)
     }
 
     private var portraitDrawerTopCornerRadius: CGFloat {
-        40 - (22 * portraitDrawerMorphProgress)
+        40 - (22 * portraitDrawerExpansionProgress)
     }
 
     private var portraitDrawerBottomCornerRadius: CGFloat {
-        40 * (1 - portraitDrawerMorphProgress)
+        40 * (1 - portraitDrawerExpansionProgress)
     }
 
     private var portraitDrawerMaterial: Material {
@@ -639,7 +640,7 @@ struct MainUIView: View {
     }
 
     private var portraitDrawerShadowRadius: CGFloat {
-        8 + (4 * portraitDrawerMorphProgress)
+        8 + (4 * portraitDrawerExpansionProgress)
     }
 
     private var portraitDrawerSurfaceHeight: CGFloat {
