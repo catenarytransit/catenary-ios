@@ -62,6 +62,9 @@ private final class NativeSheetLeadingAnchorController: UIViewController {
     var onSheetWidthChange: ((CGFloat) -> Void)?
     var onSheetHeightChange: ((CGFloat) -> Void)?
     private var delayedUpdate: DispatchWorkItem?
+#if DEBUG || SCREENSHOT_AUTOMATION
+    private var drawerDragHandleLocator: UIView?
+#endif
 
     override func loadView() {
         let view = UIView(frame: .zero)
@@ -97,6 +100,9 @@ private final class NativeSheetLeadingAnchorController: UIViewController {
 
     deinit {
         delayedUpdate?.cancel()
+#if DEBUG || SCREENSHOT_AUTOMATION
+        drawerDragHandleLocator?.removeFromSuperview()
+#endif
     }
 
     func scheduleUpdate() {
@@ -117,6 +123,10 @@ private final class NativeSheetLeadingAnchorController: UIViewController {
               let sheetView = presentationController.presentedView else {
             return
         }
+
+#if DEBUG || SCREENSHOT_AUTOMATION
+        installDrawerDragHandleLocatorIfNeeded(on: sheetView)
+#endif
 
         // Read straight from the presentation controller's own view, which UIKit
         // moves directly under the user's finger during an interactive drag.
@@ -151,6 +161,47 @@ private final class NativeSheetLeadingAnchorController: UIViewController {
         transform.tx = translationX
         sheetView.transform = transform
     }
+
+#if DEBUG || SCREENSHOT_AUTOMATION
+    private func installDrawerDragHandleLocatorIfNeeded(on sheetView: UIView) {
+        guard ProcessInfo.processInfo.arguments.contains("--ci-drawer-video") else {
+            return
+        }
+
+        if let locator = drawerDragHandleLocator, locator.superview === sheetView {
+            // The locator is transparent, but keeping it frontmost ensures its
+            // accessibility frame continues to represent the sheet grabber area.
+            sheetView.bringSubviewToFront(locator)
+            return
+        }
+
+        drawerDragHandleLocator?.removeFromSuperview()
+
+        let locator = UIView(frame: .zero)
+        locator.translatesAutoresizingMaskIntoConstraints = false
+        locator.backgroundColor = .clear
+        locator.isUserInteractionEnabled = false
+        locator.isAccessibilityElement = true
+        locator.accessibilityIdentifier = "catenary.drawer.drag-handle"
+        locator.accessibilityLabel = "Drawer drag handle"
+        locator.accessibilityTraits = .adjustable
+
+        // UISheetPresentationController owns the real sheet view and moves it
+        // continuously during an interactive drag. Anchor the automation locator
+        // to that view instead of guessing screen percentages. A 44-point target
+        // covers the system grabber while still passing touches through to the
+        // native sheet because user interaction is disabled on this helper view.
+        sheetView.addSubview(locator)
+        NSLayoutConstraint.activate([
+            locator.centerXAnchor.constraint(equalTo: sheetView.centerXAnchor),
+            locator.topAnchor.constraint(equalTo: sheetView.topAnchor),
+            locator.widthAnchor.constraint(equalToConstant: 44),
+            locator.heightAnchor.constraint(equalToConstant: 44)
+        ])
+        sheetView.bringSubviewToFront(locator)
+        drawerDragHandleLocator = locator
+    }
+#endif
 
     private var containingPresentedController: UIViewController? {
         var controller: UIViewController? = self
@@ -581,29 +632,21 @@ struct MainUIView: View {
                 .shadow(radius: portraitDrawerShadowRadius, y: 4)
                 .padding(.horizontal, portraitDrawerHorizontalInset)
                 .padding(.bottom, portraitDrawerOuterBottomInset)
-                // The map overlay is aligned to the safe-area bottom. Move the
-                // drawer's layout anchor through the home-indicator inset so its
-                // surface attaches to the physical bottom edge.
-                .alignmentGuide(.bottom) { dimensions in
-                    dimensions[.bottom] - mapBottomSafeAreaInset
-                }
 
-            // The FAB shares this full-screen coordinate space with the drawer,
-            // but does not participate in the drawer's vertical layout. That
-            // means the drawer can expand to exactly the same maximum height as
-            // if the FAB did not exist at all.
+            // portraitDrawer is a full-screen bottom-aligned ZStack and the
+            // caller ignores the bottom safe area. Keep the FAB in that same
+            // coordinate space and move only the FAB above the drawer. Custom
+            // bottom alignment guides here make the ZStack's alignment bounds
+            // taller than the screen, which is what was lifting the drawer up.
             floatingToolBar(attachedToPortraitSheet: true)
                 .padding(.trailing, 15)
+                .padding(
+                    .bottom,
+                    portraitDrawerSurfaceHeight + portraitDrawerOuterBottomInset + 8
+                )
                 .opacity(portraitFABOpacity)
                 .allowsHitTesting(portraitFABOpacity > 0.05)
                 .accessibilityHidden(portraitFABOpacity <= 0.05)
-                .alignmentGuide(.bottom) { dimensions in
-                    dimensions[.bottom]
-                        + portraitDrawerSurfaceHeight
-                        + portraitDrawerOuterBottomInset
-                        + 8
-                        - mapBottomSafeAreaInset
-                }
                 .zIndex(1)
         }
         // Keep the FAB inside a full-screen hit-test region even though it no
