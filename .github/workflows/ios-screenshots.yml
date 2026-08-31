@@ -30,6 +30,9 @@ jobs:
       SOURCE_PACKAGES: ${{ github.workspace }}/SourcePackages-screenshots
       BUILD_LOG: ${{ github.workspace }}/xcodebuild-screenshots.log
       SCREENSHOT_DIR: ${{ github.workspace }}/screenshots
+      VIDEO_DIR: ${{ github.workspace }}/videos
+      MAESTRO_VERSION: "2.9.0"
+      MAESTRO_DRIVER_STARTUP_TIMEOUT: "180000"
       SCREENSHOT_SETTLE_SECONDS: "10"
       DOWNTOWN_LA: "34.0522,-118.2437"
 
@@ -56,6 +59,14 @@ jobs:
 
       - name: Select Xcode
         run: sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+
+      - name: Install Maestro for drawer video
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+          "$HOME/.maestro/bin/maestro" --version
 
       - name: Select latest available iOS simulator
         shell: bash
@@ -248,12 +259,82 @@ jobs:
             fi
           done
 
+      - name: Record drawer transition video
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$VIDEO_DIR"
+          flow_dir="$RUNNER_TEMP/catenary-drawer-video"
+          rm -rf "$flow_dir"
+          mkdir -p "$flow_dir"
+
+          cat > "$flow_dir/hold-two-seconds.js" <<'EOF'
+          const deadline = Date.now() + 2000;
+          while (Date.now() < deadline) {}
+          EOF
+
+          cat > "$flow_dir/drawer-cycle.yaml" <<EOF
+          appId: $BUNDLE_ID
+          ---
+          - launchApp:
+              stopApp: false
+          - startRecording: drawer-state-cycle.mp4
+          - runScript: hold-two-seconds.js
+          - swipe:
+              start: 50%, 61%
+              end: 50%, 94%
+              duration: 700
+              waitToSettleTimeoutMs: 1000
+          - runScript: hold-two-seconds.js
+          - swipe:
+              start: 50%, 92%
+              end: 50%, 8%
+              duration: 900
+              waitToSettleTimeoutMs: 1000
+          - runScript: hold-two-seconds.js
+          - swipe:
+              start: 50%, 8%
+              end: 50%, 94%
+              duration: 900
+              waitToSettleTimeoutMs: 1000
+          - runScript: hold-two-seconds.js
+          - stopRecording
+          EOF
+
+          # Start from the app's normal medium/midway drawer position. Launch it
+          # before Maestro attaches so driver startup is not part of the video.
+          xcrun simctl terminate "$SIMULATOR_UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
+          xcrun simctl launch \
+            "$SIMULATOR_UDID" \
+            "$BUNDLE_ID" \
+            --ci-screenshot-drawer-midway >/dev/null
+          sleep "$SCREENSHOT_SETTLE_SECONDS"
+
+          export PATH="$HOME/.maestro/bin:$PATH"
+          (
+            cd "$flow_dir"
+            maestro --device "$SIMULATOR_UDID" test drawer-cycle.yaml
+          )
+
+          test -s "$flow_dir/drawer-state-cycle.mp4"
+          mv "$flow_dir/drawer-state-cycle.mp4" "$VIDEO_DIR/drawer-state-cycle.mp4"
+
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ios-${{ env.IOS_VERSION }}-screenshots
           path: ${{ env.SCREENSHOT_DIR }}
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload drawer transition video
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-${{ env.IOS_VERSION }}-drawer-transition-video
+          path: ${{ env.VIDEO_DIR }}/drawer-state-cycle.mp4
           if-no-files-found: warn
           retention-days: 14
 
