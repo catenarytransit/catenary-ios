@@ -564,8 +564,13 @@ struct MainUIView: View {
         VStack(alignment: .trailing, spacing: 8) {
             // Keep the FAB and drawer in one SwiftUI layout container so they
             // move together without measuring or recomputing the FAB position.
+            // Fade it quickly once the user starts opening the drawer so it does
+            // not compete with the sheet at the midpoint or expanded states.
             floatingToolBar(attachedToPortraitSheet: true)
                 .padding(.trailing, 15)
+                .opacity(portraitFABOpacity)
+                .allowsHitTesting(portraitFABOpacity > 0.05)
+                .accessibilityHidden(portraitFABOpacity <= 0.05)
                 .zIndex(1)
 
             drawerContent(sheetHeight: drawerVisibleHeight)
@@ -588,59 +593,107 @@ struct MainUIView: View {
                 .padding(.horizontal, portraitDrawerHorizontalInset)
         }
         .padding(.bottom, portraitDrawerOuterBottomInset)
-        // Move the layout alignment itself through the home-indicator inset.
-        // Unlike .offset, this keeps SwiftUI's hit-test geometry in the same
-        // coordinate space as the rendered FAB and drawer controls.
+        // The map overlay is aligned to the safe-area bottom. Move the actual
+        // alignment guide through that inset so the drawer surface attaches to
+        // the physical screen edge while keeping SwiftUI hit testing in layout
+        // coordinates rather than applying a render-only offset.
         .alignmentGuide(.bottom) { dimensions in
             dimensions[.bottom] - mapBottomSafeAreaInset
         }
-        // Morph the floating pill over the complete collapsed -> midway travel.
-        // This makes the surface continuously widen as it is pulled upward,
-        // instead of dropping the horizontal margin within the first 96 points.
         .animation(.easeOut(duration: 0.32), value: viewobject.presDetent)
     }
 
-    private var portraitDrawerExpansionProgress: CGFloat {
-        let expansionDistance = max(drawerMidwayHeight - 80, 1)
+    private var portraitDrawerCollapsedToMidwayProgress: CGFloat {
+        let distance = max(drawerMidwayHeight - 80, 1)
+        return min(max((drawerVisibleHeight - 80) / distance, 0), 1)
+    }
+
+    private var portraitDrawerMidwayToExpandedProgress: CGFloat {
+        let distance = max(drawerMaximumHeight - drawerMidwayHeight, 1)
         return min(
-            max((drawerVisibleHeight - 80) / expansionDistance, 0),
+            max((drawerVisibleHeight - drawerMidwayHeight) / distance, 0),
             1
         )
     }
 
+    private var portraitDrawerBottomAttachmentProgress: CGFloat {
+        // Close the small pill gap almost immediately after an upward drag starts.
+        // The sheet should feel attached to the bottom well before midpoint.
+        let attachmentDistance: CGFloat = 36
+        return min(max((drawerVisibleHeight - 80) / attachmentDistance, 0), 1)
+    }
+
+    private var portraitFABOpacity: CGFloat {
+        // Keep the FAB fully visible only at the collapsed start point, then fade
+        // it out over the first few points of upward travel.
+        let fadeDistance: CGFloat = 56
+        let progress = min(max((drawerVisibleHeight - 80) / fadeDistance, 0), 1)
+        return 1 - progress
+    }
+
     private var portraitDrawerBottomExtension: CGFloat {
-        // Native fixed-height sheets extend through the bottom safe area. Grow
-        // that extension continuously with the rest of the surface geometry so
-        // the pill meets the physical bottom as it approaches the midway state.
-        mapBottomSafeAreaInset * portraitDrawerExpansionProgress
+        // Once opening begins, extend the surface through the home-indicator area.
+        // This makes the visual sheet touch the physical bottom and also restores
+        // the extra vertical travel that the native sheet previously provided.
+        mapBottomSafeAreaInset * portraitDrawerBottomAttachmentProgress
     }
 
     private var portraitDrawerOuterBottomInset: CGFloat {
-        // Keep the collapsed pill 8 points above the physical edge, then close
-        // the gap continuously as the drawer is pulled toward midway.
-        8 * (1 - portraitDrawerExpansionProgress)
+        // Apple Maps-style compact pill: only a very small gap at rest, and no
+        // bottom margin once the drawer starts opening.
+        2 * (1 - portraitDrawerBottomAttachmentProgress)
     }
 
     private var portraitDrawerHorizontalInset: CGFloat {
-        // Preserve the floating pill's side margins at 80pt and continuously
-        // widen the drawer until it becomes full-width at the midway detent.
-        12 * (1 - portraitDrawerExpansionProgress)
+        let collapsedInset: CGFloat = 12
+        let midwayInset: CGFloat = 8
+
+        if drawerVisibleHeight <= drawerMidwayHeight {
+            return collapsedInset
+                - ((collapsedInset - midwayInset) * portraitDrawerCollapsedToMidwayProgress)
+        }
+
+        // Keep an 8-point card margin at midpoint, then remove it progressively
+        // so the fully expanded drawer is edge-to-edge like Apple Maps.
+        return midwayInset * (1 - portraitDrawerMidwayToExpandedProgress)
     }
 
     private var portraitDrawerTopCornerRadius: CGFloat {
-        40 - (22 * portraitDrawerExpansionProgress)
+        let collapsedRadius: CGFloat = 40
+        let midwayRadius: CGFloat = 24
+        let expandedRadius: CGFloat = 18
+
+        if drawerVisibleHeight <= drawerMidwayHeight {
+            return collapsedRadius
+                - ((collapsedRadius - midwayRadius) * portraitDrawerCollapsedToMidwayProgress)
+        }
+
+        return midwayRadius
+            - ((midwayRadius - expandedRadius) * portraitDrawerMidwayToExpandedProgress)
     }
 
     private var portraitDrawerBottomCornerRadius: CGFloat {
-        40 * (1 - portraitDrawerExpansionProgress)
+        let collapsedRadius: CGFloat = 40
+        let midwayRadius: CGFloat = 18
+
+        if drawerVisibleHeight <= drawerMidwayHeight {
+            return collapsedRadius
+                - ((collapsedRadius - midwayRadius) * portraitDrawerCollapsedToMidwayProgress)
+        }
+
+        return midwayRadius * (1 - portraitDrawerMidwayToExpandedProgress)
     }
 
     private var portraitDrawerMaterial: Material {
-        viewobject.presDetent == .height(80) ? .thinMaterial : .regularMaterial
+        drawerVisibleHeight <= 80.5 ? .thinMaterial : .regularMaterial
     }
 
     private var portraitDrawerShadowRadius: CGFloat {
-        8 + (4 * portraitDrawerExpansionProgress)
+        let midwayShadow: CGFloat = 10
+        if drawerVisibleHeight <= drawerMidwayHeight {
+            return 8 + (2 * portraitDrawerCollapsedToMidwayProgress)
+        }
+        return midwayShadow + (2 * portraitDrawerMidwayToExpandedProgress)
     }
 
     private var portraitDrawerSurfaceHeight: CGFloat {
@@ -691,11 +744,12 @@ struct MainUIView: View {
             : UIScreen.main.bounds.height
 
         if usesSwiftUIPortraitDrawer {
-            // drawerVisibleHeight is the logical content height. The portrait
-            // surface adds the bottom safe-area inset separately, matching native
-            // sheet semantics while keeping the top edge deterministic.
+            // Let the expanded surface reach almost the full physical screen.
+            // Bottom safe-area coverage is added by portraitDrawerBottomExtension,
+            // so keep it out of the logical height and leave only a small top gap.
+            let expandedTopGap: CGFloat = 8
             return max(
-                viewportHeight - mapTopSafeAreaInset - mapBottomSafeAreaInset,
+                viewportHeight - mapBottomSafeAreaInset - expandedTopGap,
                 80
             )
         }
@@ -743,6 +797,33 @@ struct MainUIView: View {
     }
 
     private func settleDrawer(translation: CGFloat, predictedTranslation: CGFloat) {
+        if usesSwiftUIPortraitDrawer {
+            // Choose the closest of all three anchors using the projected release
+            // position. A long pull can therefore go directly from collapsed to
+            // expanded instead of being artificially forced to stop at midpoint.
+            let projectedHeight = min(
+                max(drawerBaseHeight - predictedTranslation, 80),
+                drawerMaximumHeight
+            )
+            let collapsedToMidwayBoundary = (80 + drawerMidwayHeight) / 2
+            let midwayToExpandedBoundary = (drawerMidwayHeight + drawerMaximumHeight) / 2
+
+            let nextDetent: PresentationDetent
+            if projectedHeight < collapsedToMidwayBoundary {
+                nextDetent = .height(80)
+            } else if projectedHeight < midwayToExpandedBoundary {
+                nextDetent = .height(350)
+            } else {
+                nextDetent = .large
+            }
+
+            withAnimation(.easeOut(duration: 0.32)) {
+                viewobject.presDetent = nextDetent
+                drawerDragOffset = 0
+            }
+            return
+        }
+
         let effectiveTranslation: CGFloat
         let threshold: CGFloat
         if usesLandscapePhoneDrawer {
@@ -766,10 +847,7 @@ struct MainUIView: View {
             nextDetent = viewobject.presDetent == .large ? .height(350) : .height(80)
         }
 
-        let animation: Animation = usesSwiftUIPortraitDrawer
-            ? .easeOut(duration: 0.32)
-            : .catenaryBouncy
-        withAnimation(animation) {
+        withAnimation(.catenaryBouncy) {
             viewobject.presDetent = nextDetent
             drawerDragOffset = 0
         }
