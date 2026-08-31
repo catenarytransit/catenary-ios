@@ -793,8 +793,8 @@ struct MainUIView: View {
     private var portraitDrawerTopCornerRadius: CGFloat {
         let collapsedRadius: CGFloat = 40
         let midwayRadius: CGFloat = 24
-        // At the full-screen anchor there must be no exposed map in the corners.
-        let expandedRadius: CGFloat = 0
+        // Search uses the regular drawer; never give search a different top shape.
+        let expandedRadius: CGFloat = 18
 
         if drawerVisibleHeight <= drawerMidwayHeight {
             return collapsedRadius
