@@ -254,6 +254,9 @@ struct MainUIView: View {
     @State private var nativeSheetWidth: CGFloat = 0
     @State private var nativeSheetLiveHeight: CGFloat = 0
     @State private var drawerDragOffset: CGFloat = 0
+    @State private var isPortraitDrawerGestureActive = false
+    @State private var isPortraitDrawerInteracting = false
+    @State private var portraitDrawerInteractionGeneration = 0
     @State private var isLandscapeSearchRequested = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -335,7 +338,7 @@ struct MainUIView: View {
                 .overlay(alignment: usesLeadingPaneLayout ? .topLeading : .top) {
                     if isSheetPresented,
                        viewobject.currentStackItem == nil,
-                       viewobject.presDetent != .large {
+                       (viewobject.presDetent != .large || isSearchSheetTransitioning) {
                         SearchLauncher(
                             onSearch: beginSearch,
                             onSettingsClick: { viewobject.push(.settings) }
@@ -344,6 +347,12 @@ struct MainUIView: View {
                         .padding(drawerOuterPadding)
                         .offset(y: landscapeSearchLauncherYOffset)
                         .ignoresSafeArea(.container, edges: .bottom)
+                        // Keep the launcher visible as a visual bridge while the
+                        // real search field rides up with the expanding drawer.
+                        // The active TextField underneath can still become first
+                        // responder immediately without a blank-search-bar frame.
+                        .allowsHitTesting(!isSearchSheetTransitioning)
+                        .accessibilityHidden(isSearchSheetTransitioning)
                         .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
@@ -375,10 +384,33 @@ struct MainUIView: View {
         .task(id: searchFocusRequest) {
             guard searchFocusRequest > 0 else { return }
 
-            try? await Task.sleep(nanoseconds: 450_000_000)
+            // Match the custom drawer's 0.32 s settle animation. Keep the old
+            // launcher painted for that interval so there is never a frame with
+            // no search pill, but do not delay BottomDrawer's keyboard focus.
+            do {
+                try await Task.sleep(nanoseconds: 340_000_000)
+            } catch {
+                return
+            }
+            await Task.yield()
             isSearchSheetTransitioning = false
         }
         .catenaryOnChange(of: viewobject.presDetent) { _, detent in
+            if usesSwiftUIPortraitDrawer {
+                // Programmatic detent changes (especially opening search) animate
+                // the same large glass surface as a drag. Keep that 0.32 s motion
+                // in the lightweight rendering path too, not just finger drags.
+                isPortraitDrawerInteracting = true
+                portraitDrawerInteractionGeneration += 1
+                let interactionGeneration = portraitDrawerInteractionGeneration
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 360_000_000)
+                    guard interactionGeneration == portraitDrawerInteractionGeneration,
+                          !isPortraitDrawerGestureActive else { return }
+                    isPortraitDrawerInteracting = false
+                }
+            }
+
             if usesLandscapePhoneDrawer, detent == .height(350) {
                 viewobject.presDetent = .large
                 return
@@ -618,15 +650,23 @@ struct MainUIView: View {
 
     private var portraitDrawer: some View {
         ZStack(alignment: .bottomTrailing) {
-            drawerContent(sheetHeight: drawerVisibleHeight)
+            // Do not feed every drag sample into the entire BottomDrawer tree.
+            // The selected detent is stable for the duration of an interactive
+            // drag, so content can keep its settled layout while only the outer
+            // surface geometry follows the finger.
+            drawerContent(sheetHeight: drawerBaseHeight)
                 .padding(.top, 6)
                 .frame(maxWidth: .infinity)
                 .frame(height: portraitDrawerSurfaceHeight)
                 .background {
-                    if #available(iOS 26.0, *) {
+                    if #available(iOS 26.0, *), !isPortraitDrawerInteracting {
                         Color.clear
                             .glassEffect(.regular, in: portraitDrawerShape)
                     } else {
+                        // Recomputing Liquid Glass over a large, continuously
+                        // resizing surface is expensive. During the gesture and
+                        // settle animation use the same adaptive drawer material;
+                        // Liquid Glass is restored as soon as motion completes.
                         portraitDrawerShape
                             .fill(portraitDrawerMaterial)
                     }
@@ -635,7 +675,10 @@ struct MainUIView: View {
                 .overlay(alignment: .top) {
                     portraitDrawerDragHandle
                 }
-                .shadow(radius: portraitDrawerShadowRadius, y: 4)
+                .shadow(
+                    radius: isPortraitDrawerInteracting ? 8 : portraitDrawerShadowRadius,
+                    y: 4
+                )
                 .padding(.horizontal, portraitDrawerHorizontalInset)
                 .padding(.bottom, portraitDrawerOuterBottomInset)
 
@@ -816,13 +859,36 @@ struct MainUIView: View {
         // the gesture's reported translation and making the drawer jitter.
         DragGesture(minimumDistance: 5, coordinateSpace: .global)
             .onChanged { value in
-                drawerDragOffset = value.translation.height
+                if usesSwiftUIPortraitDrawer, !isPortraitDrawerGestureActive {
+                    isPortraitDrawerGestureActive = true
+                    isPortraitDrawerInteracting = true
+                    portraitDrawerInteractionGeneration += 1
+                }
+
+                // Half-point quantization drops redundant sub-pixel state writes
+                // without making the handle feel stepped on Retina displays.
+                let nextOffset = (value.translation.height * 2).rounded() / 2
+                guard nextOffset != drawerDragOffset else { return }
+                drawerDragOffset = nextOffset
             }
             .onEnded { value in
+                let interactionGeneration = portraitDrawerInteractionGeneration
+                if usesSwiftUIPortraitDrawer {
+                    isPortraitDrawerGestureActive = false
+                }
+
                 settleDrawer(
                     translation: value.translation.height,
                     predictedTranslation: value.predictedEndTranslation.height
                 )
+
+                guard usesSwiftUIPortraitDrawer else { return }
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 360_000_000)
+                    guard interactionGeneration == portraitDrawerInteractionGeneration,
+                          !isPortraitDrawerGestureActive else { return }
+                    isPortraitDrawerInteracting = false
+                }
             }
     }
 
@@ -945,6 +1011,14 @@ struct MainUIView: View {
         isSearchSheetTransitioning = true
         isLandscapeSearchRequested = usesLandscapePhoneDrawer
         locationOpacity = usesLandscapePhoneDrawer ? 1 : 0
+
+        // Enter the cheap motion renderer before changing the detent so the
+        // first frame of search expansion never asks Liquid Glass to resize.
+        if usesSwiftUIPortraitDrawer {
+            isPortraitDrawerInteracting = true
+            portraitDrawerInteractionGeneration += 1
+        }
+
         viewobject.presDetent = .large
         searchFocusRequest &+= 1
     }
