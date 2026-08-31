@@ -274,51 +274,98 @@ jobs:
           while (Date.now() < deadline) {}
           EOF
 
+          cat > "$flow_dir/verify-drawer-handle.yaml" <<EOF
+          appId: $BUNDLE_ID
+          ---
+          - assertVisible:
+              id: "catenary.drawer.drag-handle"
+          EOF
+
           cat > "$flow_dir/drawer-cycle.yaml" <<EOF
           appId: $BUNDLE_ID
           ---
-          - launchApp:
-              stopApp: false
-          - startRecording: drawer-state-cycle.mp4
+          - assertVisible:
+              id: "catenary.drawer.drag-handle"
           - runScript: hold-two-seconds.js
           - swipe:
-              start: 50%, 61%
-              end: 50%, 94%
+              from:
+                id: "catenary.drawer.drag-handle"
+              direction: DOWN
               duration: 700
-              waitToSettleTimeoutMs: 1000
+              waitToSettleTimeoutMs: 1500
           - runScript: hold-two-seconds.js
           - swipe:
-              start: 50%, 92%
-              end: 50%, 8%
+              from:
+                id: "catenary.drawer.drag-handle"
+              direction: UP
               duration: 900
-              waitToSettleTimeoutMs: 1000
+              waitToSettleTimeoutMs: 1500
           - runScript: hold-two-seconds.js
           - swipe:
-              start: 50%, 8%
-              end: 50%, 94%
+              from:
+                id: "catenary.drawer.drag-handle"
+              direction: DOWN
               duration: 900
-              waitToSettleTimeoutMs: 1000
+              waitToSettleTimeoutMs: 1500
           - runScript: hold-two-seconds.js
-          - stopRecording
           EOF
 
-          # Start from the app's normal medium/midway drawer position. Launch it
-          # before Maestro attaches so driver startup is not part of the video.
+          # Start at the real midway detent and enable the DEBUG-only accessibility
+          # locator that is pinned to UISheetPresentationController's sheet top.
           xcrun simctl terminate "$SIMULATOR_UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
           xcrun simctl launch \
             "$SIMULATOR_UDID" \
             "$BUNDLE_ID" \
+            --ci-drawer-video \
             --ci-screenshot-drawer-midway >/dev/null
           sleep "$SCREENSHOT_SETTLE_SECONDS"
 
           export PATH="$HOME/.maestro/bin:$PATH"
+
+          # Warm Maestro up before recording. This both starts the XCTest driver and
+          # fails early if the native-sheet locator is not present, so driver startup
+          # does not make the actual drawer video unnecessarily long.
+          (
+            cd "$flow_dir"
+            maestro --device "$SIMULATOR_UDID" test verify-drawer-handle.yaml
+          )
+
+          video_path="$VIDEO_DIR/drawer-state-cycle.mp4"
+          video_log="$RUNNER_TEMP/catenary-drawer-recordVideo.log"
+          rm -f "$video_path" "$video_log"
+
+          xcrun simctl io "$SIMULATOR_UDID" recordVideo \
+            --codec h264 \
+            "$video_path" >"$video_log" 2>&1 &
+          video_pid=$!
+
+          stop_recording() {
+            if kill -0 "$video_pid" 2>/dev/null; then
+              kill -INT "$video_pid" 2>/dev/null || true
+              wait "$video_pid" 2>/dev/null || true
+            fi
+          }
+          trap stop_recording EXIT
+
+          # Give simctl enough time to initialize its encoder before the first
+          # two-second hold begins.
+          sleep 0.5
+
           (
             cd "$flow_dir"
             maestro --device "$SIMULATOR_UDID" test drawer-cycle.yaml
           )
 
-          test -s "$flow_dir/drawer-state-cycle.mp4"
-          mv "$flow_dir/drawer-state-cycle.mp4" "$VIDEO_DIR/drawer-state-cycle.mp4"
+          stop_recording
+          trap - EXIT
+
+          if [[ ! -s "$video_path" ]]; then
+            echo "::error::simctl did not create a drawer transition video."
+            cat "$video_log" || true
+            exit 1
+          fi
+
+          echo "Created drawer video: $(stat -f%z "$video_path") bytes"
 
       - name: Upload screenshots
         if: always()
