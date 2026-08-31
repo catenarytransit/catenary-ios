@@ -649,9 +649,16 @@ struct MainUIView: View {
                 .accessibilityHidden(portraitFABOpacity <= 0.05)
                 .zIndex(1)
         }
-        // Keep the FAB inside a full-screen hit-test region even though it no
-        // longer consumes any of the drawer's expansion height.
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // A maxHeight: .infinity frame defaults to CENTER alignment. The
+        // ZStack's .bottomTrailing alignment only aligns the ZStack's children;
+        // it does not control where that intrinsic ZStack is placed inside this
+        // full-screen frame. Explicitly anchor the whole drawer/FAB stack to the
+        // physical bottom-trailing corner.
+        .frame(
+            maxWidth: .infinity,
+            maxHeight: .infinity,
+            alignment: .bottomTrailing
+        )
         .animation(.easeOut(duration: 0.32), value: viewobject.presDetent)
     }
 
