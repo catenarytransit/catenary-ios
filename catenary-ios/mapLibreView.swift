@@ -508,9 +508,9 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         }
 
         if let current = navigator.currentStackItem, case .mapSelectionScreen = current {
-            navigator.replaceTop(with: destination)
+            navigator.replaceTopFromMap(with: destination)
         } else {
-            navigator.push(destination)
+            navigator.pushFromMap(destination)
         }
     }
 

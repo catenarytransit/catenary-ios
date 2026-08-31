@@ -27,6 +27,7 @@ final class FloatingWindow: UIWindow {
 
 private struct NativeSheetLeadingAnchor: UIViewControllerRepresentable {
     @Binding var sheetWidth: CGFloat
+    @Binding var sheetHeight: CGFloat
 
     func makeUIViewController(context: Context) -> NativeSheetLeadingAnchorController {
         let controller = NativeSheetLeadingAnchorController()
@@ -48,11 +49,18 @@ private struct NativeSheetLeadingAnchor: UIViewControllerRepresentable {
             guard abs(widthBinding.wrappedValue - width) > 0.5 else { return }
             widthBinding.wrappedValue = width
         }
+
+        let heightBinding = $sheetHeight
+        controller.onSheetHeightChange = { height in
+            guard abs(heightBinding.wrappedValue - height) > 0.5 else { return }
+            heightBinding.wrappedValue = height
+        }
     }
 }
 
 private final class NativeSheetLeadingAnchorController: UIViewController {
     var onSheetWidthChange: ((CGFloat) -> Void)?
+    var onSheetHeightChange: ((CGFloat) -> Void)?
     private var delayedUpdate: DispatchWorkItem?
 
     override func loadView() {
@@ -110,6 +118,15 @@ private final class NativeSheetLeadingAnchorController: UIViewController {
             return
         }
 
+        // Read straight from the presentation controller's own view, which UIKit
+        // moves directly under the user's finger during an interactive drag.
+        // viewDidLayoutSubviews fires on every one of those layout passes, so this
+        // tracks the true on-screen sheet edge with far less lag than waiting for
+        // SwiftUI to re-run its own layout and report back through a GeometryReader.
+        if sheetView.bounds.height > 0 {
+            onSheetHeightChange?(sheetView.bounds.height)
+        }
+
         let shouldUseLeadingAnchor = traitCollection.userInterfaceIdiom == .pad
             && containerView.bounds.width >= 600
 
@@ -164,6 +181,9 @@ struct MainUIView: View {
     @State private var isSheetPresented = true
     @State private var liveSheetHeight: CGFloat = 350
     @State private var collapsedNativeSheetHeight: CGFloat?
+    @State private var pendingCollapsedNativeSheetHeight: CGFloat?
+    @State private var nativeSheetChromeBias: CGFloat?
+    @State private var pendingNativeSheetChromeBias: CGFloat?
     @State private var locationOpacity: CGFloat = 1
     @State private var text = ""
     @State var tempSheetOpacity: CGFloat = 0
@@ -177,6 +197,7 @@ struct MainUIView: View {
     @State private var searchFocusRequest = 0
     @State private var isSearchSheetTransitioning = false
     @State private var nativeSheetWidth: CGFloat = 0
+    @State private var nativeSheetLiveHeight: CGFloat = 0
     @State private var drawerDragOffset: CGFloat = 0
     @State private var isLandscapeSearchRequested = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -201,9 +222,6 @@ struct MainUIView: View {
                     guard !stack.isEmpty else { return }
                     isLandscapeSearchRequested = false
                     isSheetPresented = true
-                    if viewobject.presDetent != .large {
-                        viewobject.presDetent = .large
-                    }
                 }
                 .sheet(isPresented: nativeSheetPresentationBinding) {
                     bottomDrawerSheet
@@ -230,6 +248,13 @@ struct MainUIView: View {
                             .transition(.move(edge: .leading).combined(with: .opacity))
                     }
                 }
+                .overlay(alignment: .bottom) {
+                    if usesSwiftUIPortraitDrawer, isSheetPresented {
+                        portraitDrawer
+                            .ignoresSafeArea(.container, edges: .bottom)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
                 .overlay {
                     if nearbyPinActive, nearbyPinCoordinate != nil {
                         DraggableNearbyPinOverlay(
@@ -239,7 +264,7 @@ struct MainUIView: View {
                     }
                 }
                 .overlay(alignment: .bottomTrailing) {
-                    if isSheetPresented {
+                    if isSheetPresented, !usesPortraitPhoneDrawer {
                         floatingToolBar()
                             .catenaryOnGeometryChange(for: CGFloat.self) { proxy in
                                 proxy.size.height
@@ -331,6 +356,23 @@ struct MainUIView: View {
             // fixed distance above the drawer instead of jumping at detent settle.
             if usesCustomDrawer {
                 liveSheetHeight = detent == .height(80) ? 80 : 350
+            } else if usesPortraitPhoneDrawer,
+                      let semanticHeight = semanticSheetHeight(for: detent) {
+                // Apply the already-calibrated chrome bias immediately instead of
+                // waiting for the next native-sheet geometry sample. Without this,
+                // liveSheetHeight stays at the previous detent's height for a beat
+                // after expanding, so the FAB renders too low and ends up behind
+                // the sheet until the async measurement catches up.
+                //
+                // Only jump ahead of the measurement when it makes the sheet
+                // look taller. Doing this on a collapse assumes the sheet has
+                // already visually shrunk to match the new detent, which isn't
+                // guaranteed (e.g. rapid detent toggling can desync the two) and
+                // would sink the FAB behind a sheet that's actually still tall.
+                let estimate = semanticHeight + (nativeSheetChromeBias ?? 0)
+                if estimate > liveSheetHeight {
+                    liveSheetHeight = estimate
+                }
             }
         }
         .task {
@@ -370,57 +412,133 @@ struct MainUIView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea(.container, edges: .bottom)
             .interactiveDismissDisabled()
+            .background {
+                if usesPortraitPhoneDrawer {
+                    NativeSheetFloatingToolbarHost {
+                        floatingToolBar(attachedToPortraitSheet: true)
+                    }
+                }
+            }
             .background(
-                NativeSheetLeadingAnchor(sheetWidth: $nativeSheetWidth)
+                NativeSheetLeadingAnchor(sheetWidth: $nativeSheetWidth, sheetHeight: $nativeSheetLiveHeight)
             )
             .catenaryOnGeometryChange(for: CGFloat.self) { proxy in
                 max(proxy.size.height, 0)
             } action: { _, newValue in
-                guard !isSearchSheetTransitioning else { return }
-
-                let maximumHeight = viewobject.largeDetentHeight > 0
-                    ? viewobject.largeDetentHeight
-                    : newValue
-                let boundedHeight = min(newValue, maximumHeight)
-
-                // A fixed detent's SwiftUI geometry can include safe-area/presentation
-                // chrome, so the measured closed height is not guaranteed to be 80.
-                // While the selection still says "collapsed", retain the smallest
-                // geometry value we observe. During an upward drag the height grows,
-                // leaving this as a stable baseline for the compact-pill crossfade.
-                if viewobject.presDetent == .height(80) {
-                    if let collapsedNativeSheetHeight {
-                        self.collapsedNativeSheetHeight = min(
-                            collapsedNativeSheetHeight,
-                            boundedHeight
-                        )
-                    } else {
-                        collapsedNativeSheetHeight = boundedHeight
-                    }
-                }
-
-                if abs(liveSheetHeight - boundedHeight) > 0.5 {
-                    liveSheetHeight = boundedHeight
-                }
-
-                // Match Android's anchored FAB behavior on portrait phones: keep
-                // the toolbar visible while the sheet is moving and hide it only
-                // after the sheet settles at the expanded detent.
-                if !usesPortraitPhoneDrawer {
-                    let progress = max(min((newValue - 400) / 50, 1), 0)
-                    let toolbarOpacity = 1 - progress
-                    if abs(locationOpacity - toolbarOpacity) > 0.005 {
-                        locationOpacity = toolbarOpacity
-                    }
-                }
+                // nativeSheetLiveHeight (below) owns portrait phones: it reads
+                // straight from the presentation controller's own view, so it
+                // tracks the true on-screen edge with far less lag than this
+                // content geometry read, which only reports after our own
+                // content re-lays-out in response to the sheet resizing it.
+                // Letting both paths feed the same calibration state for the
+                // same device class made two independently-timed measurements
+                // fight over the same "did the last two samples agree" check,
+                // so each owns a disjoint set of devices instead.
+                guard !usesPortraitPhoneDrawer else { return }
+                applyMeasuredSheetHeight(newValue, cappedToLargeDetent: true)
             }
+            .catenaryOnChange(of: nativeSheetLiveHeight) { _, newValue in
+                guard usesPortraitPhoneDrawer else { return }
+                applyMeasuredSheetHeight(newValue, cappedToLargeDetent: false)
+            }
+    }
+
+    private func applyMeasuredSheetHeight(_ measuredHeight: CGFloat, cappedToLargeDetent: Bool) {
+        guard !isSearchSheetTransitioning else { return }
+
+        let boundedHeight: CGFloat
+        if cappedToLargeDetent {
+            let maximumHeight = viewobject.largeDetentHeight > 0
+                ? viewobject.largeDetentHeight
+                : measuredHeight
+            boundedHeight = min(measuredHeight, maximumHeight)
+        } else {
+            // nativeSheetLiveHeight is read directly from the real, on-screen
+            // presented view, so it's already bounded by the actual screen —
+            // no need for the largeDetentHeight cap used for the SwiftUI
+            // content-geometry path.
+            boundedHeight = measuredHeight
+        }
+
+        // A fixed detent's SwiftUI geometry can include safe-area/presentation
+        // chrome, so the measured closed height is not guaranteed to be 80.
+        // While the selection still says "collapsed", retain the smallest
+        // geometry value we observe. During an upward drag the height grows,
+        // leaving this as a stable baseline for the compact-pill crossfade.
+        //
+        // presDetent tracks an interactive drag live, so it can briefly read
+        // .height(80) while merely passing through that zone mid-gesture
+        // (e.g. dragging the sheet down and back up). A single in-flight
+        // sample from that pass-through can be spuriously low and would
+        // otherwise get latched in forever via min(). Require the same
+        // reading on two consecutive frames before trusting it as settled.
+        if viewobject.presDetent == .height(80),
+           boundedHeight >= 80 {
+            if let pendingCollapsedNativeSheetHeight,
+               abs(pendingCollapsedNativeSheetHeight - boundedHeight) < 0.5 {
+                if let collapsedNativeSheetHeight {
+                    self.collapsedNativeSheetHeight = min(
+                        collapsedNativeSheetHeight,
+                        boundedHeight
+                    )
+                } else {
+                    collapsedNativeSheetHeight = boundedHeight
+                }
+            } else {
+                pendingCollapsedNativeSheetHeight = boundedHeight
+            }
+        } else {
+            pendingCollapsedNativeSheetHeight = nil
+        }
+
+        // Generalized chrome-bias calibration for the FAB's positioning math,
+        // sampled from whichever fixed detent (.height(80) or .height(350))
+        // we're currently settled at rather than only the collapsed one. The
+        // app's default launch detent is .height(350), so relying solely on
+        // .height(80) left the FAB using an uncalibrated (too-large) gap
+        // until the user happened to collapse the sheet at least once. Same
+        // two-frame stability requirement to reject mid-drag pass-through.
+        if usesPortraitPhoneDrawer,
+           let semanticHeight = semanticSheetHeight(for: viewobject.presDetent),
+           boundedHeight >= semanticHeight {
+            let candidateBias = boundedHeight - semanticHeight
+            if let pendingNativeSheetChromeBias,
+               abs(pendingNativeSheetChromeBias - candidateBias) < 0.5 {
+                if let nativeSheetChromeBias {
+                    self.nativeSheetChromeBias = min(nativeSheetChromeBias, candidateBias)
+                } else {
+                    nativeSheetChromeBias = candidateBias
+                }
+            } else {
+                pendingNativeSheetChromeBias = candidateBias
+            }
+        } else {
+            pendingNativeSheetChromeBias = nil
+        }
+
+        if abs(liveSheetHeight - boundedHeight) > 0.5 {
+            liveSheetHeight = boundedHeight
+        }
+
+        // Match Android's anchored FAB behavior on portrait phones: keep
+        // the toolbar visible while the sheet is moving and hide it only
+        // after the sheet settles at the expanded detent.
+        if !usesPortraitPhoneDrawer {
+            let progress = max(min((measuredHeight - 400) / 50, 1), 0)
+            let toolbarOpacity = 1 - progress
+            if abs(locationOpacity - toolbarOpacity) > 0.005 {
+                locationOpacity = toolbarOpacity
+            }
+        }
     }
 
     private func drawerContent(sheetHeight: CGFloat) -> some View {
         BottomDrawer(
             selectedDetent: $viewobject.presDetent,
             sheetHeight: sheetHeight,
-            collapsedDrawerHeight: usesCustomDrawer ? 80 : collapsedNativeSheetHeight,
+            collapsedDrawerHeight: (usesCustomDrawer || usesSwiftUIPortraitDrawer)
+                ? 80
+                : collapsedNativeSheetHeight,
             locationManager: locationManager,
             searchViewModel: searchViewModel,
             focusRequest: searchFocusRequest,
@@ -440,6 +558,93 @@ struct MainUIView: View {
                 drawerDragHandle
             }
             .shadow(radius: 12, y: 4)
+    }
+
+    private var portraitDrawer: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            // Keep the FAB and drawer in one SwiftUI layout container so they
+            // move together without measuring or recomputing the FAB position.
+            floatingToolBar(attachedToPortraitSheet: true)
+                .padding(.trailing, 15)
+                .zIndex(1)
+
+            drawerContent(sheetHeight: drawerVisibleHeight)
+                .frame(maxWidth: .infinity)
+                .frame(height: portraitDrawerSurfaceHeight)
+                .background(portraitDrawerMaterial)
+                .clipShape(
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: portraitDrawerTopCornerRadius,
+                        bottomLeadingRadius: portraitDrawerBottomCornerRadius,
+                        bottomTrailingRadius: portraitDrawerBottomCornerRadius,
+                        topTrailingRadius: portraitDrawerTopCornerRadius,
+                        style: .continuous
+                    )
+                )
+                .overlay(alignment: .top) {
+                    drawerDragHandle
+                }
+                .shadow(radius: portraitDrawerShadowRadius, y: 4)
+                .padding(.horizontal, portraitDrawerHorizontalInset)
+        }
+        .padding(.bottom, portraitDrawerOuterBottomInset)
+        // Move the layout alignment itself through the home-indicator inset.
+        // Unlike .offset, this keeps SwiftUI's hit-test geometry in the same
+        // coordinate space as the rendered FAB and drawer controls.
+        .alignmentGuide(.bottom) { dimensions in
+            dimensions[.bottom] - mapBottomSafeAreaInset
+        }
+        // Morph the floating pill over the complete collapsed -> midway travel.
+        // This makes the surface continuously widen as it is pulled upward,
+        // instead of dropping the horizontal margin within the first 96 points.
+        .animation(.easeOut(duration: 0.32), value: viewobject.presDetent)
+    }
+
+    private var portraitDrawerExpansionProgress: CGFloat {
+        let expansionDistance = max(drawerMidwayHeight - 80, 1)
+        return min(
+            max((drawerVisibleHeight - 80) / expansionDistance, 0),
+            1
+        )
+    }
+
+    private var portraitDrawerBottomExtension: CGFloat {
+        // Native fixed-height sheets extend through the bottom safe area. Grow
+        // that extension continuously with the rest of the surface geometry so
+        // the pill meets the physical bottom as it approaches the midway state.
+        mapBottomSafeAreaInset * portraitDrawerExpansionProgress
+    }
+
+    private var portraitDrawerOuterBottomInset: CGFloat {
+        // Keep the collapsed pill 8 points above the physical edge, then close
+        // the gap continuously as the drawer is pulled toward midway.
+        8 * (1 - portraitDrawerExpansionProgress)
+    }
+
+    private var portraitDrawerHorizontalInset: CGFloat {
+        // Preserve the floating pill's side margins at 80pt and continuously
+        // widen the drawer until it becomes full-width at the midway detent.
+        12 * (1 - portraitDrawerExpansionProgress)
+    }
+
+    private var portraitDrawerTopCornerRadius: CGFloat {
+        40 - (22 * portraitDrawerExpansionProgress)
+    }
+
+    private var portraitDrawerBottomCornerRadius: CGFloat {
+        40 * (1 - portraitDrawerExpansionProgress)
+    }
+
+    private var portraitDrawerMaterial: Material {
+        viewobject.presDetent == .height(80) ? .thinMaterial : .regularMaterial
+    }
+
+    private var portraitDrawerShadowRadius: CGFloat {
+        8 + (4 * portraitDrawerExpansionProgress)
+    }
+
+    private var portraitDrawerSurfaceHeight: CGFloat {
+        drawerVisibleHeight + portraitDrawerBottomExtension
     }
 
     private var drawerDragHandle: some View {
@@ -484,6 +689,17 @@ struct MainUIView: View {
         let viewportHeight = mapViewportSize.height > 0
             ? mapViewportSize.height
             : UIScreen.main.bounds.height
+
+        if usesSwiftUIPortraitDrawer {
+            // drawerVisibleHeight is the logical content height. The portrait
+            // surface adds the bottom safe-area inset separately, matching native
+            // sheet semantics while keeping the top edge deterministic.
+            return max(
+                viewportHeight - mapTopSafeAreaInset - mapBottomSafeAreaInset,
+                80
+            )
+        }
+
         let bottomPadding = usesLandscapePhoneDrawer ? 0 : drawerOuterPadding
         let availableHeight = viewportHeight - drawerOuterPadding - bottomPadding
         return max(availableHeight, 80)
@@ -550,7 +766,10 @@ struct MainUIView: View {
             nextDetent = viewobject.presDetent == .large ? .height(350) : .height(80)
         }
 
-        withAnimation(.catenaryBouncy) {
+        let animation: Animation = usesSwiftUIPortraitDrawer
+            ? .easeOut(duration: 0.32)
+            : .catenaryBouncy
+        withAnimation(animation) {
             viewobject.presDetent = nextDetent
             drawerDragOffset = 0
         }
@@ -573,10 +792,10 @@ struct MainUIView: View {
     private var nativeSheetPresentationBinding: Binding<Bool> {
         Binding(
             get: {
-                isSheetPresented && !usesCustomDrawer
+                isSheetPresented && !usesCustomDrawer && !usesSwiftUIPortraitDrawer
             },
             set: { presented in
-                guard !usesCustomDrawer else { return }
+                guard !usesCustomDrawer, !usesSwiftUIPortraitDrawer else { return }
                 isSheetPresented = presented
             }
         )
@@ -605,12 +824,46 @@ struct MainUIView: View {
         UIDevice.current.userInterfaceIdiom == .phone && !usesLandscapePhoneDrawer
     }
 
+    private var usesSwiftUIPortraitDrawer: Bool {
+        guard usesPortraitPhoneDrawer else { return false }
+
+        // SwiftUI is the primary implementation. Keeping this launch argument
+        // provides an explicit escape hatch to the existing native/UIKit sheet
+        // if a future OS release exposes a presentation regression.
+        return !CommandLine.arguments.contains("--native-portrait-sheet")
+    }
+
     private var usesTabletLayout: Bool {
         UIDevice.current.userInterfaceIdiom == .pad && mapViewportSize.width >= 600
     }
 
     private var usesLeadingPaneLayout: Bool {
         usesCustomDrawer || usesTabletLayout
+    }
+
+    /// The known logical height for a fixed detent, or nil for `.large` (which
+    /// varies with the viewport and isn't used for this positioning math since
+    /// the FAB is faded out entirely at `.large` on portrait phones).
+    private func semanticSheetHeight(for detent: PresentationDetent) -> CGFloat? {
+        if detent == .height(80) { return 80 }
+        if detent == .height(350) { return 350 }
+        return nil
+    }
+
+    private var effectivePortraitSheetHeight: CGFloat {
+        guard usesPortraitPhoneDrawer else { return liveSheetHeight }
+
+        // SwiftUI's native-sheet geometry can contain a device-dependent constant
+        // amount of safe-area/presentation chrome. Until that bias has been
+        // calibrated from an observed sample, trust the semantic detent height
+        // (when resolvable) instead of raw, chrome-inflated geometry — otherwise
+        // a cold launch (which starts at .height(350), not .height(80)) would
+        // flash an oversized gap before the first sample ever arrives.
+        guard let nativeSheetChromeBias else {
+            return semanticSheetHeight(for: viewobject.presDetent) ?? liveSheetHeight
+        }
+
+        return max(liveSheetHeight - nativeSheetChromeBias, 80)
     }
 
     private var floatingToolbarBottomPadding: CGFloat {
@@ -620,9 +873,9 @@ struct MainUIView: View {
 
     private var floatingToolbarYOffset: CGFloat {
         if usesPortraitPhoneDrawer {
-            // The sheet height already includes the bottom safe-area region.
-            // Offset by the full height so the 8-point padding remains the true gap.
-            return -liveSheetHeight
+            // Use the calibrated logical drawer height rather than raw
+            // native-sheet geometry, which can include presentation chrome.
+            return -effectivePortraitSheetHeight
         }
         return usesLeadingPaneLayout ? 0 : -min(liveSheetHeight, 350)
     }
@@ -635,7 +888,7 @@ struct MainUIView: View {
         }
 
         let toolbarTop = mapViewportSize.height
-            - liveSheetHeight
+            - effectivePortraitSheetHeight
             - floatingToolbarBottomPadding
             - floatingToolbarHeight
         let fadeDistance: CGFloat = 44
@@ -721,7 +974,7 @@ struct MainUIView: View {
     }
 
     @ViewBuilder
-    func floatingToolBar() -> some View {
+    func floatingToolBar(attachedToPortraitSheet: Bool = false) -> some View {
         Group {
             VStack {
                 if viewobject.currentRotation != 0 {
@@ -761,13 +1014,14 @@ struct MainUIView: View {
 
             }
             .font(.title3)
-            .offset(y: floatingToolbarYOffset)
+            .offset(y: attachedToPortraitSheet ? 0 : floatingToolbarYOffset)
             // The native sheet already reports intermediate heights. Avoid adding
             // another animation layer so the toolbar stays locked to its top edge.
             .animation(nil, value: liveSheetHeight)
-            .opacity(floatingToolbarOpacity)
-            .allowsHitTesting(floatingToolbarOpacity > 0.01)
-            .accessibilityHidden(floatingToolbarOpacity <= 0.01)
+            .animation(attachedToPortraitSheet ? .easeOut(duration: 0.18) : nil, value: locationOpacity)
+            .opacity(attachedToPortraitSheet ? locationOpacity : floatingToolbarOpacity)
+            .allowsHitTesting((attachedToPortraitSheet ? locationOpacity : floatingToolbarOpacity) > 0.01)
+            .accessibilityHidden((attachedToPortraitSheet ? locationOpacity : floatingToolbarOpacity) <= 0.01)
         }
 
     }
