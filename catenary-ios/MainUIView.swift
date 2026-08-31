@@ -177,10 +177,14 @@ private final class NativeSheetLeadingAnchorController: UIViewController {
 
         drawerDragHandleLocator?.removeFromSuperview()
 
-        let locator = UIView(frame: .zero)
+        // Use a real, enabled UIControl for the automation target. Maestro's iOS
+        // driver resolves element-relative gestures through XCTest, and a UIView
+        // with user interaction disabled is not a hittable gesture origin.
+        let locator = UIControl(frame: .zero)
         locator.translatesAutoresizingMaskIntoConstraints = false
         locator.backgroundColor = .clear
-        locator.isUserInteractionEnabled = false
+        locator.isEnabled = true
+        locator.isUserInteractionEnabled = true
         locator.isAccessibilityElement = true
         locator.accessibilityIdentifier = "catenary.drawer.drag-handle"
         locator.accessibilityLabel = "Drawer drag handle"
@@ -188,9 +192,9 @@ private final class NativeSheetLeadingAnchorController: UIViewController {
 
         // UISheetPresentationController owns the real sheet view and moves it
         // continuously during an interactive drag. Anchor the automation locator
-        // to that view instead of guessing screen percentages. A 44-point target
-        // covers the system grabber while still passing touches through to the
-        // native sheet because user interaction is disabled on this helper view.
+        // to that view instead of guessing screen percentages. The locator stays
+        // visually clear, while the sheet's ancestor pan recognizer still receives
+        // gestures that begin inside this 44-point accessibility target.
         sheetView.addSubview(locator)
         NSLayoutConstraint.activate([
             locator.centerXAnchor.constraint(equalTo: sheetView.centerXAnchor),
