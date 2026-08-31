@@ -88,6 +88,7 @@ struct StationDeparturesScreen: View {
             await model.reset(source: source, anchor: referenceDate)
             synchronizeFilters()
             updateMapContext()
+            recordStationVisit()
 #if DEBUG || SCREENSHOT_AUTOMATION
             if model.errorMessage == nil {
                 ScreenshotReadiness.shared.markDrawerReady()
@@ -413,6 +414,57 @@ struct StationDeparturesScreen: View {
         return source.explicitChateauID == nil
             ? L10n.string("Station")
             : L10n.string("Stop")
+    }
+
+    private func recordStationVisit() {
+        let coordinate = model.stationCoordinate ?? destinationCoordinate
+
+        switch source {
+        case let .stop(chateauID, stopID):
+            guard let rawName = model.primary?.stopName else { return }
+            let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return }
+
+            SearchHistoryStore.record(
+                SearchHistoryItem(
+                    id: source.id,
+                    kind: .stop,
+                    title: name,
+                    chateauID: chateauID,
+                    gtfsID: stopID,
+                    latitude: coordinate?.latitude,
+                    longitude: coordinate?.longitude
+                )
+            )
+
+        case let .osmStation(id):
+            let destinationName: String?
+            let modeType: String?
+            if case let .osmStation(_, stationName, stationModeType, _, _, _) = destination {
+                destinationName = stationName
+                modeType = stationModeType
+            } else {
+                destinationName = nil
+                modeType = nil
+            }
+
+            guard let rawName = model.primary?.stopName ?? destinationName else { return }
+            let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return }
+
+            SearchHistoryStore.record(
+                SearchHistoryItem(
+                    id: source.id,
+                    kind: .osmStation,
+                    title: name,
+                    subtitle: modeType?.replacingOccurrences(of: "_", with: " ").capitalized,
+                    osmStationID: id,
+                    modeType: modeType,
+                    latitude: coordinate?.latitude,
+                    longitude: coordinate?.longitude
+                )
+            )
+        }
     }
 
     private func synchronizeFilters() {

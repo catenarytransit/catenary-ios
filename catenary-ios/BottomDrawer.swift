@@ -25,7 +25,6 @@ struct BottomDrawer: View {
     @EnvironmentObject var viewObject: viewObject
     @FocusState private var isFocused: Bool
     @State private var isSearchActive = false
-    private let searchFocusDelayNanoseconds: UInt64 = 350_000_000
 
     var body: some View {
         Group {
@@ -56,7 +55,8 @@ struct BottomDrawer: View {
                             onCypressClick: selectCypress,
                             onStopClick: selectStop,
                             onRouteClick: selectRoute,
-                            onOsmStationClick: selectOsmStation
+                            onOsmStationClick: selectOsmStation,
+                            onRecentClick: selectRecent
                         )
                         .transition(.opacity)
                     }
@@ -104,14 +104,9 @@ struct BottomDrawer: View {
                   selectedDetent == .large,
                   viewObject.currentStackItem == nil else { return }
 
-            do {
-                try await Task.sleep(nanoseconds: searchFocusDelayNanoseconds)
-            } catch {
-                return
-            }
-
-            guard selectedDetent == .large,
-                  viewObject.currentStackItem == nil else { return }
+            // Activate the search content immediately, then give SwiftUI one
+            // render pass to install the TextField before making it first responder.
+            // This opens the keyboard with the drawer expansion instead of 350 ms later.
             isSearchActive = true
             await Task.yield()
 
@@ -175,6 +170,42 @@ struct BottomDrawer: View {
                 longitude: station.point?.x
             )
         )
+    }
+
+    private func selectRecent(_ item: SearchHistoryItem) {
+        switch item.kind {
+        case .cypress:
+            guard let latitude = item.latitude, let longitude = item.longitude else { return }
+            finishSearch()
+            viewObject.camera = .center(
+                CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+                zoom: 16
+            )
+            selectedDetent = .height(350)
+
+        case .stop:
+            guard let chateauID = item.chateauID, let stopID = item.gtfsID else { return }
+            finishSearch()
+            viewObject.push(.stop(chateauID: chateauID, stopID: stopID))
+
+        case .route:
+            guard let chateauID = item.chateauID, let routeID = item.gtfsID else { return }
+            finishSearch()
+            viewObject.push(.route(chateauID: chateauID, routeID: routeID))
+
+        case .osmStation:
+            guard let osmStationID = item.osmStationID else { return }
+            finishSearch()
+            viewObject.push(
+                .osmStation(
+                    osmStationID: osmStationID,
+                    stationName: item.title,
+                    modeType: item.modeType,
+                    latitude: item.latitude,
+                    longitude: item.longitude
+                )
+            )
+        }
     }
 
     private func openSettings() {

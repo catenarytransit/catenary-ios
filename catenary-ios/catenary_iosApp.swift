@@ -419,16 +419,31 @@ class PassThroughWindow: UIWindow {
 
 
 extension View {
-    /// Matches the Compose search field's Material surface, pill shape, and 4 dp shadow
-    /// without requiring the newer Liquid Glass SDK.
+    /// High-opacity adaptive search pill. Use the system Liquid Glass treatment on
+    /// iOS 26 while keeping enough material density for legibility over the map.
+    @ViewBuilder
     func catenarySearchBarSurface() -> some View {
-        self
-            .background(Color(uiColor: .systemBackground), in: Capsule())
-            .overlay {
-                Capsule()
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-            }
-            .shadow(color: Color.black.opacity(0.14), radius: 4, x: 0, y: 2)
+        if #available(iOS 26.0, *) {
+            self
+                .background(
+                    Color(uiColor: .secondarySystemBackground).opacity(0.78),
+                    in: Capsule()
+                )
+                .glassEffect(.regular, in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(Color.primary.opacity(0.10), lineWidth: 1)
+                }
+                .shadow(color: Color.black.opacity(0.14), radius: 4, x: 0, y: 2)
+        } else {
+            self
+                .background(.regularMaterial, in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(Color.primary.opacity(0.10), lineWidth: 1)
+                }
+                .shadow(color: Color.black.opacity(0.14), radius: 4, x: 0, y: 2)
+        }
     }
 }
 

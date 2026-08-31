@@ -750,7 +750,8 @@ struct MainUIView: View {
     private var portraitDrawerTopCornerRadius: CGFloat {
         let collapsedRadius: CGFloat = 40
         let midwayRadius: CGFloat = 24
-        let expandedRadius: CGFloat = 18
+        // At the full-screen anchor there must be no exposed map in the corners.
+        let expandedRadius: CGFloat = 0
 
         if drawerVisibleHeight <= drawerMidwayHeight {
             return collapsedRadius
@@ -831,12 +832,11 @@ struct MainUIView: View {
             : UIScreen.main.bounds.height
 
         if usesSwiftUIPortraitDrawer {
-            // Let the expanded surface reach almost the full physical screen.
-            // Bottom safe-area coverage is added by portraitDrawerBottomExtension,
-            // so keep it out of the logical height and leave only a small top gap.
-            let expandedTopGap: CGFloat = 8
+            // Search expands the regular drawer itself. At .large, cover the full
+            // physical screen; portraitDrawerBottomExtension supplies the bottom
+            // safe-area coverage, so there is no extra top gap or side card inset.
             return max(
-                viewportHeight - mapBottomSafeAreaInset - expandedTopGap,
+                viewportHeight - mapBottomSafeAreaInset,
                 80
             )
         }
