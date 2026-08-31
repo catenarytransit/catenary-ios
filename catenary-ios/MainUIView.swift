@@ -700,9 +700,11 @@ struct MainUIView: View {
     }
 
     private var portraitDrawerOuterBottomInset: CGFloat {
-        // Apple Maps-style compact pill: only a very small gap at rest, and no
-        // bottom margin once the drawer starts opening.
-        2 * (1 - portraitDrawerBottomAttachmentProgress)
+        // Match the original/native collapsed placement: keep the floating pill
+        // above both the home-indicator safe area and the 8-point visual margin.
+        // As soon as the drawer opens, collapse that outside gap to zero so the
+        // midway and expanded surfaces stay attached to the physical bottom.
+        (mapBottomSafeAreaInset + 8) * (1 - portraitDrawerBottomAttachmentProgress)
     }
 
     private var portraitDrawerHorizontalInset: CGFloat {
@@ -735,14 +737,12 @@ struct MainUIView: View {
 
     private var portraitDrawerBottomCornerRadius: CGFloat {
         let collapsedRadius: CGFloat = 40
-        let midwayRadius: CGFloat = 18
 
-        if drawerVisibleHeight <= drawerMidwayHeight {
-            return collapsedRadius
-                - ((collapsedRadius - midwayRadius) * portraitDrawerCollapsedToMidwayProgress)
-        }
-
-        return midwayRadius * (1 - portraitDrawerMidwayToExpandedProgress)
+        // The collapsed state remains a pill. Flatten the lower corners over the
+        // collapsed -> midway transition; midway and expanded are bottom-attached
+        // sheets, so their bottom corners must be square.
+        guard drawerVisibleHeight < drawerMidwayHeight else { return 0 }
+        return collapsedRadius * (1 - portraitDrawerCollapsedToMidwayProgress)
     }
 
     private var portraitDrawerMaterial: Material {
