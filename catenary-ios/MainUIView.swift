@@ -257,6 +257,7 @@ struct MainUIView: View {
     @State private var isLandscapeSearchRequested = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.colorScheme) private var colorScheme
 
 
     var body: some View {
@@ -618,6 +619,7 @@ struct MainUIView: View {
     private var portraitDrawer: some View {
         ZStack(alignment: .bottomTrailing) {
             drawerContent(sheetHeight: drawerVisibleHeight)
+                .padding(.top, 6)
                 .frame(maxWidth: .infinity)
                 .frame(height: portraitDrawerSurfaceHeight)
                 .background {
@@ -1177,6 +1179,7 @@ struct MainUIView: View {
 
             }
             .font(.title3)
+            .tint(colorScheme == .dark ? Color.white : nil)
             .offset(y: attachedToPortraitSheet ? 0 : floatingToolbarYOffset)
             // The native sheet already reports intermediate heights. Avoid adding
             // another animation layer so the toolbar stays locked to its top edge.
