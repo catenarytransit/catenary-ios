@@ -620,18 +620,18 @@ struct MainUIView: View {
             drawerContent(sheetHeight: drawerVisibleHeight)
                 .frame(maxWidth: .infinity)
                 .frame(height: portraitDrawerSurfaceHeight)
-                .background(portraitDrawerMaterial)
-                .clipShape(
-                    UnevenRoundedRectangle(
-                        topLeadingRadius: portraitDrawerTopCornerRadius,
-                        bottomLeadingRadius: portraitDrawerBottomCornerRadius,
-                        bottomTrailingRadius: portraitDrawerBottomCornerRadius,
-                        topTrailingRadius: portraitDrawerTopCornerRadius,
-                        style: .continuous
-                    )
-                )
+                .background {
+                    if #available(iOS 26.0, *) {
+                        Color.clear
+                            .glassEffect(.regular, in: portraitDrawerShape)
+                    } else {
+                        portraitDrawerShape
+                            .fill(portraitDrawerMaterial)
+                    }
+                }
+                .clipShape(portraitDrawerShape)
                 .overlay(alignment: .top) {
-                    drawerDragHandle
+                    portraitDrawerDragHandle
                 }
                 .shadow(radius: portraitDrawerShadowRadius, y: 4)
                 .padding(.horizontal, portraitDrawerHorizontalInset)
@@ -664,6 +664,30 @@ struct MainUIView: View {
             alignment: .bottomTrailing
         )
         .animation(.easeOut(duration: 0.32), value: viewobject.presDetent)
+    }
+
+    private var portraitDrawerShape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(
+            topLeadingRadius: portraitDrawerTopCornerRadius,
+            bottomLeadingRadius: portraitDrawerBottomCornerRadius,
+            bottomTrailingRadius: portraitDrawerBottomCornerRadius,
+            topTrailingRadius: portraitDrawerTopCornerRadius,
+            style: .continuous
+        )
+    }
+
+    private var portraitDrawerDragHandle: some View {
+        Capsule()
+            .fill(Color.secondary.opacity(0.45))
+            .frame(width: 36, height: 5)
+            // UISheetPresentationController places its grabber very close to the
+            // top edge. Keep the same visual placement while retaining a larger
+            // invisible gesture target below it.
+            .padding(.top, 5)
+            .frame(width: 112, height: 28, alignment: .top)
+            .contentShape(Rectangle())
+            .gesture(drawerDragGesture)
+            .accessibilityLabel(Text("Resize drawer"))
     }
 
     private var portraitDrawerCollapsedToMidwayProgress: CGFloat {
@@ -700,11 +724,11 @@ struct MainUIView: View {
     }
 
     private var portraitDrawerOuterBottomInset: CGFloat {
-        // Match the original/native collapsed placement: keep the floating pill
-        // above both the home-indicator safe area and the 8-point visual margin.
-        // As soon as the drawer opens, collapse that outside gap to zero so the
-        // midway and expanded surfaces stay attached to the physical bottom.
-        (mapBottomSafeAreaInset + 8) * (1 - portraitDrawerBottomAttachmentProgress)
+        // The portrait overlay already ignores the bottom safe area, so adding
+        // mapBottomSafeAreaInset here double-counts the home-indicator region and
+        // pushes the pill much higher than the native sheet. The iOS sheet in the
+        // reference build used only the small visual gap from the physical edge.
+        8 * (1 - portraitDrawerBottomAttachmentProgress)
     }
 
     private var portraitDrawerHorizontalInset: CGFloat {
