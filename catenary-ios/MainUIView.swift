@@ -561,18 +561,7 @@ struct MainUIView: View {
     }
 
     private var portraitDrawer: some View {
-        VStack(alignment: .trailing, spacing: 8) {
-            // Keep the FAB and drawer in one SwiftUI layout container so they
-            // move together without measuring or recomputing the FAB position.
-            // Fade it quickly once the user starts opening the drawer so it does
-            // not compete with the sheet at the midpoint or expanded states.
-            floatingToolBar(attachedToPortraitSheet: true)
-                .padding(.trailing, 15)
-                .opacity(portraitFABOpacity)
-                .allowsHitTesting(portraitFABOpacity > 0.05)
-                .accessibilityHidden(portraitFABOpacity <= 0.05)
-                .zIndex(1)
-
+        ZStack(alignment: .bottomTrailing) {
             drawerContent(sheetHeight: drawerVisibleHeight)
                 .frame(maxWidth: .infinity)
                 .frame(height: portraitDrawerSurfaceHeight)
@@ -591,15 +580,35 @@ struct MainUIView: View {
                 }
                 .shadow(radius: portraitDrawerShadowRadius, y: 4)
                 .padding(.horizontal, portraitDrawerHorizontalInset)
+                .padding(.bottom, portraitDrawerOuterBottomInset)
+                // The map overlay is aligned to the safe-area bottom. Move the
+                // drawer's layout anchor through the home-indicator inset so its
+                // surface attaches to the physical bottom edge.
+                .alignmentGuide(.bottom) { dimensions in
+                    dimensions[.bottom] - mapBottomSafeAreaInset
+                }
+
+            // The FAB shares this full-screen coordinate space with the drawer,
+            // but does not participate in the drawer's vertical layout. That
+            // means the drawer can expand to exactly the same maximum height as
+            // if the FAB did not exist at all.
+            floatingToolBar(attachedToPortraitSheet: true)
+                .padding(.trailing, 15)
+                .opacity(portraitFABOpacity)
+                .allowsHitTesting(portraitFABOpacity > 0.05)
+                .accessibilityHidden(portraitFABOpacity <= 0.05)
+                .alignmentGuide(.bottom) { dimensions in
+                    dimensions[.bottom]
+                        + portraitDrawerSurfaceHeight
+                        + portraitDrawerOuterBottomInset
+                        + 8
+                        - mapBottomSafeAreaInset
+                }
+                .zIndex(1)
         }
-        .padding(.bottom, portraitDrawerOuterBottomInset)
-        // The map overlay is aligned to the safe-area bottom. Move the actual
-        // alignment guide through that inset so the drawer surface attaches to
-        // the physical screen edge while keeping SwiftUI hit testing in layout
-        // coordinates rather than applying a render-only offset.
-        .alignmentGuide(.bottom) { dimensions in
-            dimensions[.bottom] - mapBottomSafeAreaInset
-        }
+        // Keep the FAB inside a full-screen hit-test region even though it no
+        // longer consumes any of the drawer's expansion height.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.easeOut(duration: 0.32), value: viewobject.presDetent)
     }
 
@@ -624,11 +633,9 @@ struct MainUIView: View {
     }
 
     private var portraitFABOpacity: CGFloat {
-        // Keep the FAB fully visible only at the collapsed start point, then fade
-        // it out over the first few points of upward travel.
-        let fadeDistance: CGFloat = 56
-        let progress = min(max((drawerVisibleHeight - 80) / fadeDistance, 0), 1)
-        return 1 - progress
+        // Stay fully visible through the midpoint. Fade only after the drawer
+        // moves above midpoint, reaching zero at full expansion.
+        1 - portraitDrawerMidwayToExpandedProgress
     }
 
     private var portraitDrawerBottomExtension: CGFloat {
