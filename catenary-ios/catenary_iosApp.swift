@@ -8,6 +8,7 @@ import MapLibre
 import MapLibreSwiftDSL
 import MapLibreSwiftUI
 import SwiftUI
+import Firebase
 
 
 var GlobalViewObject: viewObject = viewObject()
@@ -17,6 +18,14 @@ struct CatenaryMapsApp: App {
     @StateObject var viewobject = GlobalViewObject
     @StateObject private var searchViewModel = SearchViewModel()
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    
+    init() {
+        FirebaseApp.configure()        
+        #if DEBUG
+        let providerFactory = AppCheckDebugProviderFactory()
+        AppCheck.setAppCheckProviderFactory(providerFactory)
+        #endif
+    }
         
     var body: some Scene {
         WindowGroup {
