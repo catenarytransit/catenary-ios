@@ -202,6 +202,7 @@ struct NearbyDeparturesView: View {
     @Binding private var pickedCoordinate: CLLocationCoordinate2D?
 
     @EnvironmentObject private var viewObject: viewObject
+    @Environment(\.colorScheme) private var colorScheme
     @StateObject private var model = NearbyDeparturesViewModel()
     @State private var lockedOrigin: CLLocationCoordinate2D?
     @State private var selectedDate = Date()
@@ -383,6 +384,7 @@ struct NearbyDeparturesView: View {
         }
         .font(.caption)
         .controlSize(.small)
+        .tint(colorScheme == .dark ? Color.white : nil)
     }
 
     private var locationControlButton: some View {
@@ -1084,6 +1086,7 @@ private enum NearbyCompactFormatting {
 
 private struct NearbySortToggle: View {
     @Binding var selection: NearbySortMode
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(spacing: 0) {
@@ -1114,7 +1117,11 @@ private struct NearbySortToggle: View {
         } label: {
             label()
                 .frame(width: 28, height: 28)
-                .foregroundStyle(selection == mode ? Color.accentColor : Color.primary)
+                .foregroundStyle(
+                    colorScheme == .dark
+                        ? Color.white
+                        : (selection == mode ? Color.accentColor : Color.primary)
+                )
                 .background {
                     if selection == mode {
                         Circle().fill(Color.accentColor.opacity(0.2))

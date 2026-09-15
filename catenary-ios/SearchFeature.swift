@@ -423,18 +423,44 @@ struct CatenarySearchResultsView: View {
     let onStopClick: (SearchStopRanking) -> Void
     let onRouteClick: (SearchRouteRanking) -> Void
     let onOsmStationClick: (SearchOsmStationResult) -> Void
+    let onRecentClick: (SearchHistoryItem) -> Void
+
+    @State private var recentItems: [SearchHistoryItem] = []
+
+    private var isShowingHistory: Bool {
+        viewModel.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     var body: some View {
         ZStack {
-            Color(uiColor: .systemBackground)
-                .ignoresSafeArea()
-
+            // No systemBackground here: the drawer itself owns the adaptive
+            // material / Liquid Glass background in both light and dark mode.
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(viewModel.rows) { row in
-                        resultRow(row)
-                        Divider()
-                            .opacity(0.2)
+                    if isShowingHistory {
+                        if !recentItems.isEmpty {
+                            Text("Recent")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 16)
+                                .padding(.top, 8)
+                                .padding(.bottom, 4)
+
+                            ForEach(recentItems) { item in
+                                SearchResultButton(action: { selectRecent(item) }) {
+                                    RecentSearchResultRow(item: item)
+                                }
+                                Divider()
+                                    .opacity(0.2)
+                            }
+                        }
+                    } else {
+                        ForEach(viewModel.rows) { row in
+                            resultRow(row)
+                            Divider()
+                                .opacity(0.2)
+                        }
                     }
                 }
             }
@@ -444,24 +470,41 @@ struct CatenarySearchResultsView: View {
                     .controlSize(.large)
             }
         }
+        .onAppear(perform: reloadRecentItems)
+        .catenaryOnChange(of: viewModel.query) { _, query in
+            if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                reloadRecentItems()
+            }
+        }
     }
 
     @ViewBuilder
     private func resultRow(_ row: SearchRow) -> some View {
         switch row {
         case let .cypress(feature, _):
-            SearchResultButton(action: { onCypressClick(feature) }) {
+            SearchResultButton(action: {
+                recordSearchSelection(row)
+                onCypressClick(feature)
+            }) {
                 CypressSearchResultRow(feature: feature)
             }
         case let .osmStation(station, _):
-            SearchResultButton(action: { onOsmStationClick(station) }) {
+            SearchResultButton(action: {
+                recordSearchSelection(row)
+                onOsmStationClick(station)
+            }) {
                 OsmStationSearchResultRow(station: station)
             }
         case let .route(ranking, route, agency, _):
-            SearchResultButton(action: { onRouteClick(ranking) }) {
+            SearchResultButton(action: {
+                recordSearchSelection(row)
+                onRouteClick(ranking)
+            }) {
                 RouteSearchResultRow(route: route, agency: agency)
             }
         case let .stop(ranking, stop, routes, agencyNames, distanceMetres, _):
+            // A GTFS stop may immediately resolve to an OSM station. Record the
+            // resolved station from StationDeparturesScreen instead of duplicating it.
             SearchResultButton(action: { onStopClick(ranking) }) {
                 StopSearchResultRow(
                     stop: stop,
@@ -470,6 +513,79 @@ struct CatenarySearchResultsView: View {
                     distanceMetres: distanceMetres
                 )
             }
+        }
+    }
+
+    private func recordSearchSelection(_ row: SearchRow) {
+        guard let item = SearchHistoryItem(searchRow: row) else { return }
+        SearchHistoryStore.record(item)
+        reloadRecentItems()
+    }
+
+    private func selectRecent(_ item: SearchHistoryItem) {
+        SearchHistoryStore.record(item)
+        reloadRecentItems()
+        onRecentClick(item)
+    }
+
+    private func reloadRecentItems() {
+        recentItems = SearchHistoryStore.topItems(limit: 10)
+    }
+}
+
+private extension SearchHistoryItem {
+    init?(searchRow row: SearchRow) {
+        switch row {
+        case let .cypress(feature, _):
+            guard let coordinate = feature.coordinate else { return nil }
+            self.init(
+                id: row.id,
+                kind: .cypress,
+                title: feature.properties?.displayName ?? L10n.string("Unknown"),
+                subtitle: feature.properties?.displaySubtitle,
+                latitude: coordinate.latitude,
+                longitude: coordinate.longitude
+            )
+
+        case let .osmStation(station, _):
+            guard let osmStationID = station.osmID else { return nil }
+            let subtitle = station.displaySubtitle.isEmpty
+                ? station.modeType?.replacingOccurrences(of: "_", with: " ").capitalized
+                : station.displaySubtitle
+            self.init(
+                id: row.id,
+                kind: .osmStation,
+                title: station.name ?? L10n.string("Unknown station"),
+                subtitle: subtitle,
+                osmStationID: osmStationID,
+                modeType: station.modeType,
+                latitude: station.point?.y,
+                longitude: station.point?.x
+            )
+
+        case let .route(ranking, route, agency, _):
+            guard let chateauID = ranking.chateau, let routeID = ranking.gtfsID else { return nil }
+            self.init(
+                id: row.id,
+                kind: .route,
+                title: route.displayName,
+                subtitle: agency?.agencyName ?? route.longName,
+                chateauID: chateauID,
+                gtfsID: routeID
+            )
+
+        case let .stop(ranking, stop, _, agencyNames, _, _):
+            guard let chateauID = ranking.chateau, let stopID = ranking.gtfsID else { return nil }
+            self.init(
+                id: row.id,
+                kind: .stop,
+                title: stop.name ?? L10n.string("Unknown stop"),
+                subtitle: agencyNames.isEmpty ? nil : agencyNames.joined(separator: " • "),
+                chateauID: chateauID,
+                gtfsID: stopID,
+                latitude: stop.point?.y,
+                longitude: stop.point?.x
+            )
         }
     }
 }
@@ -490,6 +606,35 @@ private struct SearchResultButton<Content: View>: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct RecentSearchResultRow: View {
+    let item: SearchHistoryItem
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: item.systemImage)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 32, height: 32)
+                .background(Color.primary.opacity(0.08), in: Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.title)
+                    .font(.system(size: 16, weight: .medium))
+                    .lineLimit(1)
+
+                if let subtitle = item.subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
     }
 }
 
