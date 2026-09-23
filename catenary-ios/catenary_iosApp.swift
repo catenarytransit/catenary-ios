@@ -20,17 +20,22 @@ struct CatenaryMapsApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     
     init() {
-        FirebaseApp.configure()        
+        FirebaseApp.configure()
         #if DEBUG
         let providerFactory = AppCheckDebugProviderFactory()
         AppCheck.setAppCheckProviderFactory(providerFactory)
         #endif
     }
-        
+
     var body: some Scene {
         WindowGroup {
             MainUIView(searchViewModel: searchViewModel)
                 .environmentObject(viewobject)
+                .onAppear {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        requestTrackingPermission()
+                    }
+                }
         }
     }
 }

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2D5C7CAD305EEF540054D4B9 /* AppTrackingSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D5C7CAC305EEEF70054D4B9 /* AppTrackingSupport.swift */; };
 		2D7B80DF3059BA0800AAFC1A /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 2D7B80DE3059BA0800AAFC1A /* FirebaseAnalytics */; };
 		2D7B80E13059BA0800AAFC1A /* FirebaseAnalyticsCore in Frameworks */ = {isa = PBXBuildFile; productRef = 2D7B80E03059BA0800AAFC1A /* FirebaseAnalyticsCore */; };
 		2D7B80E33059BA0800AAFC1A /* FirebaseAnalyticsIdentitySupport in Frameworks */ = {isa = PBXBuildFile; productRef = 2D7B80E23059BA0800AAFC1A /* FirebaseAnalyticsIdentitySupport */; };
@@ -26,6 +27,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		2D5C7CAC305EEEF70054D4B9 /* AppTrackingSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTrackingSupport.swift; sourceTree = "<group>"; };
 		F71913C12EC82B7700AAA2A3 /* Catenary.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Catenary.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -68,6 +70,7 @@
 			isa = PBXGroup;
 			children = (
 				F71913C32EC82B7700AAA2A3 /* catenary-ios */,
+				2D5C7CAC305EEEF70054D4B9 /* AppTrackingSupport.swift */,
 				F71913C22EC82B7700AAA2A3 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -200,6 +203,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2D5C7CAD305EEF540054D4B9 /* AppTrackingSupport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -348,6 +352,7 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.navigation";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Catenary needs access to your location to provide you with transit information around you.";
+				INFOPLIST_KEY_NSUserTrackingUsageDescription = "Catenary uses this to measure app usage with Google Analytics, which may link your activity across other apps and websites.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -384,6 +389,7 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.navigation";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Catenary needs access to your location to provide you with transit information around you.";
+				INFOPLIST_KEY_NSUserTrackingUsageDescription = "Catenary uses this to measure app usage with Google Analytics, which may link your activity across other apps and websites.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
