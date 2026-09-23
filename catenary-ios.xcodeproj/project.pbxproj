@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		A55A00012F00000100000001 /* SVGView in Frameworks */ = {isa = PBXBuildFile; productRef = A55A00032F00000100000003 /* SVGView */; };
+		A56F00012F10000100000001 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = A56F00042F10000100000004 /* FirebaseCore */; };
+		A56F00022F10000100000002 /* FirebaseAnalyticsCore in Frameworks */ = {isa = PBXBuildFile; productRef = A56F00052F10000100000005 /* FirebaseAnalyticsCore */; };
 		F7186EED2EE4A8BF00723A13 /* MapLibreSwiftDSL in Frameworks */ = {isa = PBXBuildFile; productRef = F7186EEC2EE4A8BF00723A13 /* MapLibreSwiftDSL */; };
 		F7186EEF2EE4A8BF00723A13 /* MapLibreSwiftMacros in Frameworks */ = {isa = PBXBuildFile; productRef = F7186EEE2EE4A8BF00723A13 /* MapLibreSwiftMacros */; };
 		F7186EF12EE4A8BF00723A13 /* MapLibreSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = F7186EF02EE4A8BF00723A13 /* MapLibreSwiftUI */; };
@@ -34,6 +36,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				A55A00012F00000100000001 /* SVGView in Frameworks */,
+				A56F00012F10000100000001 /* FirebaseCore in Frameworks */,
+				A56F00022F10000100000002 /* FirebaseAnalyticsCore in Frameworks */,
 				F7186EF12EE4A8BF00723A13 /* MapLibreSwiftUI in Frameworks */,
 				F7186EED2EE4A8BF00723A13 /* MapLibreSwiftDSL in Frameworks */,
 				F79FE1A52ED395D6006FFFF5 /* MapLibreSwiftUI in Frameworks */,
@@ -83,6 +87,8 @@
 			name = "catenary-ios";
 			packageProductDependencies = (
 				A55A00032F00000100000003 /* SVGView */,
+				A56F00042F10000100000004 /* FirebaseCore */,
+				A56F00052F10000100000005 /* FirebaseAnalyticsCore */,
 				F79FE1A02ED395D6006FFFF5 /* MapLibreSwiftDSL */,
 				F79FE1A22ED395D6006FFFF5 /* MapLibreSwiftMacros */,
 				F79FE1A42ED395D6006FFFF5 /* MapLibreSwiftUI */,
@@ -145,6 +151,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				A55A00022F00000100000002 /* XCRemoteSwiftPackageReference "SVGView" */,
+				A56F00032F10000100000003 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				F7186EEB2EE4A8BF00723A13 /* XCRemoteSwiftPackageReference "swiftui-dsl" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -407,6 +414,14 @@
 				minimumVersion = 1.0.6;
 			};
 		};
+		A56F00032F10000100000003 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.19.2;
+			};
+		};
 		F7186EEB2EE4A8BF00723A13 /* XCRemoteSwiftPackageReference "swiftui-dsl" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/snagglegrolop/swiftui-dsl";
@@ -422,6 +437,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A55A00022F00000100000002 /* XCRemoteSwiftPackageReference "SVGView" */;
 			productName = SVGView;
+		};
+		A56F00042F10000100000004 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A56F00032F10000100000003 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+		A56F00052F10000100000005 /* FirebaseAnalyticsCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A56F00032F10000100000003 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalyticsCore;
 		};
 		F7186EEC2EE4A8BF00723A13 /* MapLibreSwiftDSL */ = {
 			isa = XCSwiftPackageProductDependency;
