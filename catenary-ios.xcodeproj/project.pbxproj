@@ -7,6 +7,16 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2D5C7CAD305EEF540054D4B9 /* AppTrackingSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D5C7CAC305EEEF70054D4B9 /* AppTrackingSupport.swift */; };
+		2D7B80DF3059BA0800AAFC1A /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 2D7B80DE3059BA0800AAFC1A /* FirebaseAnalytics */; };
+		2D7B80E13059BA0800AAFC1A /* FirebaseAnalyticsCore in Frameworks */ = {isa = PBXBuildFile; productRef = 2D7B80E03059BA0800AAFC1A /* FirebaseAnalyticsCore */; };
+		2D7B80E33059BA0800AAFC1A /* FirebaseAnalyticsIdentitySupport in Frameworks */ = {isa = PBXBuildFile; productRef = 2D7B80E23059BA0800AAFC1A /* FirebaseAnalyticsIdentitySupport */; };
+		2D7B80E53059BA0800AAFC1A /* FirebaseAppCheck in Frameworks */ = {isa = PBXBuildFile; productRef = 2D7B80E43059BA0800AAFC1A /* FirebaseAppCheck */; };
+		2D7B80E73059BA0800AAFC1A /* FirebaseAppDistribution-Beta in Frameworks */ = {isa = PBXBuildFile; productRef = 2D7B80E63059BA0800AAFC1A /* FirebaseAppDistribution-Beta */; };
+		2D7B80E93059BA0800AAFC1A /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 2D7B80E83059BA0800AAFC1A /* FirebaseCore */; };
+		2D7B80EB3059BA0800AAFC1A /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = 2D7B80EA3059BA0800AAFC1A /* FirebaseCrashlytics */; };
+		2D7B80ED3059BA0800AAFC1A /* FirebasePerformance in Frameworks */ = {isa = PBXBuildFile; productRef = 2D7B80EC3059BA0800AAFC1A /* FirebasePerformance */; };
+		2D7B80EF3059BA0800AAFC1A /* FirebaseRemoteConfig in Frameworks */ = {isa = PBXBuildFile; productRef = 2D7B80EE3059BA0800AAFC1A /* FirebaseRemoteConfig */; };
 		A55A00012F00000100000001 /* SVGView in Frameworks */ = {isa = PBXBuildFile; productRef = A55A00032F00000100000003 /* SVGView */; };
 		A56F00012F10000100000001 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = A56F00042F10000100000004 /* FirebaseCore */; };
 		A56F00022F10000100000002 /* FirebaseAnalyticsCore in Frameworks */ = {isa = PBXBuildFile; productRef = A56F00052F10000100000005 /* FirebaseAnalyticsCore */; };
@@ -19,6 +29,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		2D5C7CAC305EEEF70054D4B9 /* AppTrackingSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTrackingSupport.swift; sourceTree = "<group>"; };
 		F71913C12EC82B7700AAA2A3 /* Catenary.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Catenary.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -39,11 +50,20 @@
 				A56F00012F10000100000001 /* FirebaseCore in Frameworks */,
 				A56F00022F10000100000002 /* FirebaseAnalyticsCore in Frameworks */,
 				F7186EF12EE4A8BF00723A13 /* MapLibreSwiftUI in Frameworks */,
+				2D7B80ED3059BA0800AAFC1A /* FirebasePerformance in Frameworks */,
+				2D7B80DF3059BA0800AAFC1A /* FirebaseAnalytics in Frameworks */,
+				2D7B80EB3059BA0800AAFC1A /* FirebaseCrashlytics in Frameworks */,
 				F7186EED2EE4A8BF00723A13 /* MapLibreSwiftDSL in Frameworks */,
+				2D7B80E13059BA0800AAFC1A /* FirebaseAnalyticsCore in Frameworks */,
+				2D7B80EF3059BA0800AAFC1A /* FirebaseRemoteConfig in Frameworks */,
 				F79FE1A52ED395D6006FFFF5 /* MapLibreSwiftUI in Frameworks */,
+				2D7B80E33059BA0800AAFC1A /* FirebaseAnalyticsIdentitySupport in Frameworks */,
 				F7186EEF2EE4A8BF00723A13 /* MapLibreSwiftMacros in Frameworks */,
+				2D7B80E93059BA0800AAFC1A /* FirebaseCore in Frameworks */,
 				F79FE1A12ED395D6006FFFF5 /* MapLibreSwiftDSL in Frameworks */,
 				F79FE1A32ED395D6006FFFF5 /* MapLibreSwiftMacros in Frameworks */,
+				2D7B80E53059BA0800AAFC1A /* FirebaseAppCheck in Frameworks */,
+				2D7B80E73059BA0800AAFC1A /* FirebaseAppDistribution-Beta in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -54,6 +74,7 @@
 			isa = PBXGroup;
 			children = (
 				F71913C32EC82B7700AAA2A3 /* catenary-ios */,
+				2D5C7CAC305EEEF70054D4B9 /* AppTrackingSupport.swift */,
 				F71913C22EC82B7700AAA2A3 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -95,6 +116,15 @@
 				F7186EEC2EE4A8BF00723A13 /* MapLibreSwiftDSL */,
 				F7186EEE2EE4A8BF00723A13 /* MapLibreSwiftMacros */,
 				F7186EF02EE4A8BF00723A13 /* MapLibreSwiftUI */,
+				2D7B80DE3059BA0800AAFC1A /* FirebaseAnalytics */,
+				2D7B80E03059BA0800AAFC1A /* FirebaseAnalyticsCore */,
+				2D7B80E23059BA0800AAFC1A /* FirebaseAnalyticsIdentitySupport */,
+				2D7B80E43059BA0800AAFC1A /* FirebaseAppCheck */,
+				2D7B80E63059BA0800AAFC1A /* FirebaseAppDistribution-Beta */,
+				2D7B80E83059BA0800AAFC1A /* FirebaseCore */,
+				2D7B80EA3059BA0800AAFC1A /* FirebaseCrashlytics */,
+				2D7B80EC3059BA0800AAFC1A /* FirebasePerformance */,
+				2D7B80EE3059BA0800AAFC1A /* FirebaseRemoteConfig */,
 			);
 			productName = "catenary-ios";
 			productReference = F71913C12EC82B7700AAA2A3 /* Catenary.app */;
@@ -153,6 +183,7 @@
 				A55A00022F00000100000002 /* XCRemoteSwiftPackageReference "SVGView" */,
 				A56F00032F10000100000003 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				F7186EEB2EE4A8BF00723A13 /* XCRemoteSwiftPackageReference "swiftui-dsl" */,
+				2D7B80DD3059BA0800AAFC1A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F71913C22EC82B7700AAA2A3 /* Products */;
@@ -179,6 +210,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2D5C7CAD305EEF540054D4B9 /* AppTrackingSupport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -318,7 +350,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "catenary-ios/catenary-ios.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 37;
+				CURRENT_PROJECT_VERSION = 67;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 7LFT4CQ294;
 				ENABLE_PREVIEWS = YES;
@@ -327,6 +359,7 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.navigation";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Catenary needs access to your location to provide you with transit information around you.";
+				INFOPLIST_KEY_NSUserTrackingUsageDescription = "Catenary uses this to measure app usage with Google Analytics, which may link your activity across other apps and websites.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -337,7 +370,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = org.catenarymaps.maps;
 				PRODUCT_NAME = Catenary;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -354,7 +387,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "catenary-ios/catenary-ios.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 37;
+				CURRENT_PROJECT_VERSION = 67;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 7LFT4CQ294;
 				ENABLE_PREVIEWS = YES;
@@ -363,6 +396,7 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.navigation";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Catenary needs access to your location to provide you with transit information around you.";
+				INFOPLIST_KEY_NSUserTrackingUsageDescription = "Catenary uses this to measure app usage with Google Analytics, which may link your activity across other apps and websites.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -373,7 +407,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = org.catenarymaps.maps;
 				PRODUCT_NAME = Catenary;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -406,6 +440,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		2D7B80DD3059BA0800AAFC1A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.19.1;
+			};
+		};
 		A55A00022F00000100000002 /* XCRemoteSwiftPackageReference "SVGView" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/exyte/SVGView.git";
@@ -433,6 +475,51 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		2D7B80DE3059BA0800AAFC1A /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2D7B80DD3059BA0800AAFC1A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
+		};
+		2D7B80E03059BA0800AAFC1A /* FirebaseAnalyticsCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2D7B80DD3059BA0800AAFC1A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalyticsCore;
+		};
+		2D7B80E23059BA0800AAFC1A /* FirebaseAnalyticsIdentitySupport */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2D7B80DD3059BA0800AAFC1A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalyticsIdentitySupport;
+		};
+		2D7B80E43059BA0800AAFC1A /* FirebaseAppCheck */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2D7B80DD3059BA0800AAFC1A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAppCheck;
+		};
+		2D7B80E63059BA0800AAFC1A /* FirebaseAppDistribution-Beta */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2D7B80DD3059BA0800AAFC1A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseAppDistribution-Beta";
+		};
+		2D7B80E83059BA0800AAFC1A /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2D7B80DD3059BA0800AAFC1A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+		2D7B80EA3059BA0800AAFC1A /* FirebaseCrashlytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2D7B80DD3059BA0800AAFC1A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCrashlytics;
+		};
+		2D7B80EC3059BA0800AAFC1A /* FirebasePerformance */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2D7B80DD3059BA0800AAFC1A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebasePerformance;
+		};
+		2D7B80EE3059BA0800AAFC1A /* FirebaseRemoteConfig */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2D7B80DD3059BA0800AAFC1A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseRemoteConfig;
+		};
 		A55A00032F00000100000003 /* SVGView */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A55A00022F00000100000002 /* XCRemoteSwiftPackageReference "SVGView" */;
