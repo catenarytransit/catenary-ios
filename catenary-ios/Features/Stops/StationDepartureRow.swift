@@ -339,12 +339,19 @@ struct StationTrainDepartureRowCompact: View {
     var trainDisplayName: String?
     var showAgencyName = true
     var showTimeDiff = true
+    var onTripClick: (() -> Void)? = nil
 
     @EnvironmentObject private var viewObject: viewObject
     @AppStorage("showCountdownsUnder1h") private var showCountdownsUnder1h = false
 
     var body: some View {
-        Button(action: openTrip) {
+        Button {
+            if let onTripClick {
+                onTripClick()
+            } else {
+                openTrip()
+            }
+        } label: {
             HStack(alignment: .center, spacing: 5) {
                 if layout == .swiss {
                     routeBadge

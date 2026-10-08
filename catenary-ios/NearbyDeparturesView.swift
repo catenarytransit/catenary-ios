@@ -1218,6 +1218,8 @@ private struct NearbyStationDepartureRow: View {
     let timezoneID: String?
     let stationCoordinate: CLLocationCoordinate2D
 
+    @EnvironmentObject private var viewObject: viewObject
+
     var body: some View {
         StationTrainDepartureRowCompact(
             event: stopEvent,
@@ -1231,8 +1233,21 @@ private struct NearbyStationDepartureRow: View {
             ),
             trainDisplayName: departure.tripShortName,
             showAgencyName: false,
-            showTimeDiff: false
+            showTimeDiff: false,
+            onTripClick: openTrip
         )
+    }
+
+    private func openTrip() {
+        viewObject.pushPreservingDrawerDetent(.singleTrip(
+            chateauID: departure.chateauId,
+            tripID: departure.tripId,
+            routeID: departure.routeId,
+            startTime: nil,
+            startDate: departure.serviceDate?.replacingOccurrences(of: "-", with: ""),
+            vehicleID: nil,
+            routeType: routeInfo?.routeType
+        ))
     }
 
     private var effectiveRealtimeDeparture: Int64? {
@@ -1560,7 +1575,7 @@ private struct NearbyLocalDeparturePill: View {
 
     var body: some View {
         Button {
-            viewObject.push(.singleTrip(
+            viewObject.pushPreservingDrawerDetent(.singleTrip(
                 chateauID: group.chateauId,
                 tripID: departure.tripId,
                 routeID: group.routeId,
