@@ -176,6 +176,14 @@ class viewObject: ObservableObject {
         presDetent = .large
     }
 
+    /// Push a destination without changing the current drawer detent.
+    ///
+    /// Nearby Departures uses this to match Compose: selecting a trip changes
+    /// the drawer content without also expanding the drawer.
+    func pushPreservingDrawerDetent(_ item: CatenaryStackItem) {
+        catenaryStack.append(item)
+    }
+
     /// Match the Compose map-tap behavior: reveal a collapsed drawer at the
     /// midway detent, but preserve a drawer that is already midway or expanded.
     func pushFromMap(_ item: CatenaryStackItem) {
