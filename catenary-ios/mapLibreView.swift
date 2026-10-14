@@ -462,6 +462,19 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         LayersPerCategory.Other.LabelStops + "_osm"
     ]
 
+    // Do not synchronously hit-test hundreds of bus and rail shape vectors at
+    // low zoom. Transit points have priority over POIs, POIs over route lines.
+    private let shapeLayerIDs: Set<String> = [
+        LayersPerCategory.Bus.Shapes, LayersPerCategory.Bus.LabelShapes,
+        LayersPerCategory.IntercityRail.Shapes, LayersPerCategory.IntercityRail.LabelShapes,
+        LayersPerCategory.Metro.Shapes, LayersPerCategory.Metro.LabelShapes,
+        LayersPerCategory.Tram.Shapes, LayersPerCategory.Tram.LabelShapes,
+        LayersPerCategory.Other.Shapes, LayersPerCategory.Other.LabelShapes
+    ]
+
+    // Actual style layer identifiers, not the OpenMapTiles source layer 'poi'.
+    private let poiLayerIDs: Set<String> = ["poi_r1", "poi_r7", "poi_r20", "poi_transit"]
+
     func install(on mapView: MLNMapView, navigator: viewObject) {
         self.navigator = navigator
         if self.mapView !== mapView {
@@ -490,21 +503,58 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         guard recognizer.state == .ended, let mapView, let navigator else { return }
         let point = recognizer.location(in: mapView)
         let hitArea = CGRect(x: point.x - 22, y: point.y - 22, width: 44, height: 44)
-        let features = mapView.visibleFeatures(
+        let transitFeatures = mapView.visibleFeatures(
             in: hitArea,
-            inStyleLayersWithIdentifiers: selectableLayerIDs,
+            inStyleLayersWithIdentifiers: selectableLayerIDs.subtracting(shapeLayerIDs),
             predicate: nil
         )
 
         var seen = Set<String>()
-        let options = features.compactMap { makeOption(from: $0) }.filter { seen.insert($0.id).inserted }
-        guard !options.isEmpty else { return }
+        let options = transitFeatures.compactMap { makeOption(from: $0) }
+            .filter { seen.insert($0.id).inserted }
+
+        if options.isEmpty {
+            // A labelled POI icon takes precedence over lines underneath it.
+            let poiFeatures = mapView.visibleFeatures(
+                in: hitArea, inStyleLayersWithIdentifiers: poiLayerIDs, predicate: nil
+            )
+            if let selected = poiFeatures.first(where: {
+                OSMObjectReference.fromPOIFeatureIdentifier($0.identifier) != nil
+            }),
+               let reference = OSMObjectReference.fromPOIFeatureIdentifier(selected.identifier) {
+                let coordinate = (selected as? MLNPointFeature)?.coordinate
+                    ?? mapView.convert(point, toCoordinateFrom: mapView)
+                navigator.pushFromMap(.osmItem(
+                    osmID: reference.osmID,
+                    osmClass: reference.osmClass,
+                    osmType: string(selected, keys: ["subclass", "class"]),
+                    name: string(selected, keys: ["name", "name_en"]),
+                    latitude: coordinate.latitude,
+                    longitude: coordinate.longitude
+                ))
+                return
+            }
+        }
+
+        // Route evaluation happens on Birch, not on the UI thread. This also
+        // means buses aren't queried at country-level zoom or while disabled.
+        let coordinate = mapView.convert(point, toCoordinateFrom: mapView)
+        let candidate = RouteClickLookup(
+            latitude: coordinate.latitude, longitude: coordinate.longitude,
+            zoom: mapView.zoomLevel,
+            bus: layerSettings.bus.shapes || layerSettings.bus.labelshapes,
+            localRail: layerSettings.localrail.shapes || layerSettings.localrail.labelshapes,
+            intercityRail: layerSettings.intercityrail.shapes || layerSettings.intercityrail.labelshapes,
+            other: layerSettings.other.shapes || layerSettings.other.labelshapes
+        )
+        let lookup: RouteClickLookup? = candidate.hasEligibleLayers ? candidate : nil
+        guard !options.isEmpty || lookup != nil else { return }
 
         let destination: CatenaryStackItem
-        if let option = options.first, options.count == 1 {
+        if let option = options.first, options.count == 1 && lookup == nil {
             destination = option.destination
         } else {
-            destination = .mapSelectionScreen(options: options)
+            destination = .mapSelectionScreen(options: options, lookup: lookup)
         }
 
         if let current = navigator.currentStackItem, case .mapSelectionScreen = current {
@@ -2290,7 +2340,8 @@ struct mapLibreView: View, Equatable {
         }
 
         CircleStyleLayer(identifier: "selected-stop-context-circle", source: source)
-            .color(.catenaryBlue)
+            .color(viewobject.selectedStopContext?.id.hasPrefix("osm-item|") == true
+                ? UIColor.systemRed : UIColor.catenaryBlue)
             .radius(interpolatedBy: .zoomLevel, curveType: .linear, parameters: nil,
                     stops: NSExpression(forConstantValue: [8: 5, 14: 8, 18: 11]))
             .strokeColor(.white)

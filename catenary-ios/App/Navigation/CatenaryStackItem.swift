@@ -18,10 +18,17 @@ enum CatenaryStackItem: Hashable, Identifiable {
     case route(chateauID: String, routeID: String)
     case stop(chateauID: String, stopID: String, timeEpochSeconds: Int64? = nil)
     case nearbyDepartures(chateauID: String, latitude: Double, longitude: Double)
-    case mapSelectionScreen(options: [MapSelectionOption])
+    case mapSelectionScreen(options: [MapSelectionOption], lookup: RouteClickLookup? = nil)
     case settings
     case block(chateauID: String, blockID: String, serviceDate: String)
-    case osmItem(osmID: String, osmClass: String, osmType: String?)
+    case osmItem(
+        osmID: String,
+        osmClass: String,
+        osmType: String?,
+        name: String? = nil,
+        latitude: Double? = nil,
+        longitude: Double? = nil
+    )
     case osmStation(
         osmStationID: String,
         stationName: String?,
@@ -45,14 +52,15 @@ enum CatenaryStackItem: Hashable, Identifiable {
             return "stop|\(chateauID)|\(stopID)|\(timeEpochSeconds.map { String($0) } ?? "now")"
         case let .nearbyDepartures(chateauID, latitude, longitude):
             return "nearby|\(chateauID)|\(latitude)|\(longitude)"
-        case let .mapSelectionScreen(options):
-            return "selection|" + options.map(\.id).joined(separator: ",")
+        case let .mapSelectionScreen(options, lookup):
+            let location = lookup.map { "|\($0.latitude)|\($0.longitude)|\($0.zoom)" } ?? ""
+            return "selection|" + options.map(\.id).joined(separator: ",") + location
         case .settings:
             return "settings"
         case let .block(chateauID, blockID, serviceDate):
             return "block|\(chateauID)|\(blockID)|\(serviceDate)"
-        case let .osmItem(osmID, osmClass, osmType):
-            return "osm-item|\(osmID)|\(osmClass)|\(osmType ?? "")"
+        case let .osmItem(osmID, osmClass, _, _, _, _):
+            return "osm-item|\(osmClass)|\(osmID)"
         case let .osmStation(osmStationID, stationName, modeType, latitude, longitude, timeEpochSeconds):
             return "osm-station|\(osmStationID)|\(stationName ?? "")|\(modeType ?? "")|\(latitude.map { String($0) } ?? "")|\(longitude.map { String($0) } ?? "")|\(timeEpochSeconds.map { String($0) } ?? "now")"
         }

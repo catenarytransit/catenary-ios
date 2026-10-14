@@ -6,8 +6,13 @@ import SwiftUI
 /// Back from the destination returns to the map selection screen.
 struct MapOverlappingSelectionScreen: View {
     let options: [MapSelectionOption]
+    let routeLookup: RouteClickLookup?
 
     @EnvironmentObject private var viewObject: viewObject
+    @State private var remoteRoutes: [MapSelectionOption] = []
+    @State private var routesLoading = false
+    @State private var routesFailed = false
+    @State private var routeRetry = 0
 
     var body: some View {
         ScrollView {
@@ -47,6 +52,18 @@ struct MapOverlappingSelectionScreen: View {
                     }
                 }
 
+                if routesLoading {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("Loading routes…")
+                    }
+                    .padding(.vertical, 10)
+                } else if routesFailed {
+                    Button("Retry loading routes") { routeRetry += 1 }
+                        .buttonStyle(.borderedProminent)
+                        .padding(.vertical, 10)
+                }
+
                 if !routes.isEmpty {
                     Text("Lines")
                         .font(.title2)
@@ -73,6 +90,23 @@ struct MapOverlappingSelectionScreen: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 64)
         }
+        .task(id: "\(routeLookup.map { String(describing: $0) } ?? "none")|\(routeRetry)") {
+            guard let routeLookup else { return }
+            routesLoading = true
+            routesFailed = false
+            remoteRoutes = []
+            do {
+                let results = try await RouteClickAPI.fetch(routeLookup)
+                guard !Task.isCancelled else { return }
+                remoteRoutes = results
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else { return }
+                routesFailed = true
+            }
+            routesLoading = false
+        }
     }
 
     private var selectionCountTitle: String {
@@ -96,7 +130,7 @@ struct MapOverlappingSelectionScreen: View {
     }
 
     private var routes: [MapSelectionOption] {
-        unique(options.filter { $0.data.selectionKind == .route })
+        unique((options + remoteRoutes).filter { $0.data.selectionKind == .route })
     }
 
     private func unique(_ candidates: [MapSelectionOption]) -> [MapSelectionOption] {

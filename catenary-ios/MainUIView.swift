@@ -496,6 +496,7 @@ struct MainUIView: View {
         drawerContent(sheetHeight: liveSheetHeight)
             .presentationDetents([.height(80), .height(350), .large], selection: $viewobject.presDetent)
             .presentationDragIndicator(.visible)
+            .presentationContentInteraction(.resizes)
             .presentationBackgroundInteraction(.enabled)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea(.container, edges: .bottom)

@@ -93,8 +93,8 @@ struct BottomDrawer: View {
                         onHome: { viewObject.home() }
                     )
                     .padding(.horizontal, 18)
-                    .frame(height: 64)
-                    .padding(.top, 12)
+                    .frame(height: 48)
+                    .padding(.top, 6)
                 }
             }
             .ignoresSafeArea(.keyboard)
@@ -142,8 +142,19 @@ struct BottomDrawer: View {
     private func selectCypress(_ feature: SearchCypressFeature) {
         guard let coordinate = feature.coordinate else { return }
         finishSearch()
-        viewObject.camera = .center(coordinate, zoom: 16)
-        selectedDetent = .height(350)
+        if let reference = OSMObjectReference.fromCypressIdentifier(feature.properties?.id) {
+            viewObject.push(.osmItem(
+                osmID: reference.osmID,
+                osmClass: reference.osmClass,
+                osmType: feature.properties?.layer,
+                name: feature.properties?.name ?? feature.properties?.names?["default"],
+                latitude: coordinate.latitude,
+                longitude: coordinate.longitude
+            ))
+        } else {
+            viewObject.camera = .center(coordinate, zoom: 16)
+            selectedDetent = .height(350)
+        }
     }
 
     private func selectStop(_ ranking: SearchStopRanking) {
@@ -174,6 +185,15 @@ struct BottomDrawer: View {
 
     private func selectRecent(_ item: SearchHistoryItem) {
         switch item.kind {
+        case .osmItem:
+            guard let osmID = item.osmStationID,
+                  let osmClass = item.osmClass else { return }
+            finishSearch()
+            viewObject.push(.osmItem(
+                osmID: osmID, osmClass: osmClass, osmType: item.osmType,
+                name: item.title, latitude: item.latitude, longitude: item.longitude
+            ))
+
         case .cypress:
             guard let latitude = item.latitude, let longitude = item.longitude else { return }
             finishSearch()
@@ -226,24 +246,38 @@ private struct StackNavigationControls: View {
     let onHome: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            Button(action: onBack) {
-                Image(systemName: "chevron.backward")
-                    .frame(width: 40, height: 40)
-            }
-            .buttonStyle(.bordered)
-            .catenaryCircularButtonBorderShape()
-            .disabled(!canGoBack)
+        HStack(spacing: 4) {
+            compactButton("chevron.backward", label: "Back", action: onBack)
+                .disabled(!canGoBack)
+                .opacity(canGoBack ? 1 : 0.35)
 
-            Button(action: onHome) {
-                Image(systemName: "house.fill")
-                    .frame(width: 40, height: 40)
-            }
-            .buttonStyle(.bordered)
-            .catenaryCircularButtonBorderShape()
-
-            Spacer()
+            compactButton("house.fill", label: "Home", action: onHome)
+            Spacer(minLength: 0)
         }
+    }
+
+    private func compactButton(
+        _ systemName: String,
+        label: LocalizedStringKey,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.primary)
+                // A genuinely smaller 32pt visible button, not a 40pt label
+                // inside a bordered Button (which adds its own extra padding).
+                .frame(width: 32, height: 32)
+                .background(Color(uiColor: .secondarySystemBackground), in: Circle())
+                .overlay {
+                    Circle().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5)
+                }
+                // The surrounding area remains easy to tap without looking huge.
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(label))
     }
 }
 
@@ -298,14 +332,25 @@ private struct CatenaryStackDestinationView: View {
             )
             .id(destination.id)
 
-        case let .mapSelectionScreen(options):
-            MapOverlappingSelectionScreen(options: options)
+        case let .mapSelectionScreen(options, lookup):
+            MapOverlappingSelectionScreen(options: options, routeLookup: lookup)
 
         case .settings:
             SettingsScreen()
 
+        case let .osmItem(osmID, osmClass, osmType, name, latitude, longitude):
+            OSMItemScreen(
+                osmID: osmID,
+                osmClass: osmClass,
+                osmType: osmType,
+                previewName: name,
+                latitude: latitude,
+                longitude: longitude
+            )
+            .id(destination.id)
+
         default:
-            // Vehicle selection, block, and OSM item screens remain placeholders.
+            // Vehicle selection and block screens remain placeholders.
             ScrollView {
                 StackDestinationSummary(destination: destination)
                     .padding()
@@ -374,7 +419,7 @@ private struct StackDestinationSummary: View {
             return [("Chateau", chateauID), ("Latitude", String(latitude)), ("Longitude", String(longitude))]
         case let .block(chateauID, blockID, serviceDate):
             return [("Chateau", chateauID), ("Block", blockID), ("Service date", serviceDate)]
-        case let .osmItem(osmID, osmClass, osmType):
+        case let .osmItem(osmID, osmClass, osmType, _, _, _):
             return compactRows([("OSM ID", osmID), ("Class", osmClass), ("Type", osmType)])
         case let .osmStation(osmStationID, _, modeType, latitude, longitude, time):
             return compactRows([

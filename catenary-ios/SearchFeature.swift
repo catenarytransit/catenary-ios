@@ -75,10 +75,20 @@ struct CatenarySearchBar: View {
                 .lineLimit(1)
                 .submitLabel(.search)
                 .focused(focus)
+                .tint(Color(red: 0.32, green: 0.72, blue: 1.0))
                 .frame(maxWidth: .infinity, minHeight: 48)
                 .padding(.horizontal, 8)
 
-            if viewModel.query.isEmpty && !isActive {
+            if isActive && !viewModel.query.isEmpty {
+                Button {
+                    viewModel.query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 48, height: 48)
+                }
+                .accessibilityLabel("Clear search")
+            } else if viewModel.query.isEmpty && !isActive {
                 Button(action: onSettingsClick) {
                     Image(systemName: "gearshape.fill")
                         .foregroundStyle(.secondary)
@@ -538,14 +548,28 @@ private extension SearchHistoryItem {
         switch row {
         case let .cypress(feature, _):
             guard let coordinate = feature.coordinate else { return nil }
-            self.init(
-                id: row.id,
-                kind: .cypress,
-                title: feature.properties?.displayName ?? L10n.string("Unknown"),
-                subtitle: feature.properties?.displaySubtitle,
-                latitude: coordinate.latitude,
-                longitude: coordinate.longitude
-            )
+            if let reference = OSMObjectReference.fromCypressIdentifier(feature.properties?.id) {
+                self.init(
+                    id: "osm-item|\(reference.osmClass)|\(reference.osmID)",
+                    kind: .osmItem,
+                    title: feature.properties?.displayName ?? L10n.string("Unknown"),
+                    subtitle: feature.properties?.displaySubtitle,
+                    osmStationID: reference.osmID,
+                    osmClass: reference.osmClass,
+                    osmType: feature.properties?.layer,
+                    latitude: coordinate.latitude,
+                    longitude: coordinate.longitude
+                )
+            } else {
+                self.init(
+                    id: row.id,
+                    kind: .cypress,
+                    title: feature.properties?.displayName ?? L10n.string("Unknown"),
+                    subtitle: feature.properties?.displaySubtitle,
+                    latitude: coordinate.latitude,
+                    longitude: coordinate.longitude
+                )
+            }
 
         case let .osmStation(station, _):
             guard let osmStationID = station.osmID else { return nil }

@@ -6,6 +6,7 @@ struct SearchHistoryItem: Codable, Hashable, Identifiable, Sendable {
         case stop
         case route
         case osmStation
+        case osmItem
     }
 
     let id: String
@@ -15,6 +16,8 @@ struct SearchHistoryItem: Codable, Hashable, Identifiable, Sendable {
     var chateauID: String?
     var gtfsID: String?
     var osmStationID: String?
+    var osmClass: String?
+    var osmType: String?
     var modeType: String?
     var latitude: Double?
     var longitude: Double?
@@ -27,6 +30,8 @@ struct SearchHistoryItem: Codable, Hashable, Identifiable, Sendable {
         chateauID: String? = nil,
         gtfsID: String? = nil,
         osmStationID: String? = nil,
+        osmClass: String? = nil,
+        osmType: String? = nil,
         modeType: String? = nil,
         latitude: Double? = nil,
         longitude: Double? = nil
@@ -38,6 +43,8 @@ struct SearchHistoryItem: Codable, Hashable, Identifiable, Sendable {
         self.chateauID = chateauID
         self.gtfsID = gtfsID
         self.osmStationID = osmStationID
+        self.osmClass = osmClass
+        self.osmType = osmType
         self.modeType = modeType
         self.latitude = latitude
         self.longitude = longitude
@@ -53,6 +60,8 @@ struct SearchHistoryItem: Codable, Hashable, Identifiable, Sendable {
             return "point.topleft.down.to.point.bottomright.curvepath"
         case .osmStation:
             return "building.2.fill"
+        case .osmItem:
+            return "mappin.and.ellipse"
         }
     }
 }
