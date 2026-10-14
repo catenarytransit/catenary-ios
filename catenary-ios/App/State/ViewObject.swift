@@ -71,6 +71,7 @@ class viewObject: ObservableObject {
         return persistedMapCameraAtLaunch != nil
     }()
     @Published private(set) var selectedStopContext: SelectedStopMapContext?
+    @Published private(set) var selectedTransitContext: SelectedTransitMapContext?
 
     var preservesScreenshotMapCamera: Bool {
 #if DEBUG || SCREENSHOT_AUTOMATION
@@ -78,6 +79,16 @@ class viewObject: ObservableObject {
 #else
         return false
 #endif
+    }
+
+    func setSelectedTransitContext(_ context: SelectedTransitMapContext) {
+        guard selectedTransitContext != context else { return }
+        selectedTransitContext = context
+    }
+
+    func clearSelectedTransitContext(id: String) {
+        guard selectedTransitContext?.id == id else { return }
+        selectedTransitContext = nil
     }
 
     func setSelectedStopContext(_ context: SelectedStopMapContext) {
@@ -220,6 +231,7 @@ class viewObject: ObservableObject {
     }
 
     func home() {
+        selectedTransitContext = nil
         catenaryStack.removeAll()
         selectedStopContext = nil
         presDetent = .height(350)

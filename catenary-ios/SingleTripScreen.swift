@@ -10,6 +10,7 @@ struct SingleTripScreen: View {
     @AppStorage("singleTripShowCountdown") private var showCountdown = true
     @State private var hasScrolledToCurrentStop = false
     @State private var showAlertsScreen = false
+    private var mapContextID: String { selection.chateauID + "|trip|" + (selection.tripID ?? "") }
 
     init(selection: SingleTripSelection) {
         self.selection = selection
@@ -37,7 +38,11 @@ struct SingleTripScreen: View {
                 model.start()
             }
             .onDisappear {
+                viewObject.clearSelectedTransitContext(id: mapContextID)
                 model.stop()
+            }
+            .catenaryOnChange(of: model.tripData) { _, _ in
+                updateMapContext()
             }
             .catenaryOnChange(of: model.currentAtStopIndex) { _, _ in
                 scrollToCurrentStopIfNeeded(proxy)
@@ -46,6 +51,19 @@ struct SingleTripScreen: View {
                 scrollToCurrentStopIfNeeded(proxy)
             }
         }
+    }
+
+    private func updateMapContext() {
+        guard let data = model.tripData else { return }
+        let line = TransitPolylineDecoder.decode(data.shapePolyline)
+        let stops = model.stopTimes.compactMap { stop -> TransitMapStop? in
+            let coordinate = TransitMapCoordinate(latitude: stop.raw.latitude, longitude: stop.raw.longitude)
+            guard coordinate.isValid else { return nil }
+            return TransitMapStop(id: stop.raw.stopID, name: stop.displayName, coordinate: coordinate)
+        }
+        viewObject.setSelectedTransitContext(SelectedTransitMapContext(
+            id: mapContextID, colorHex: data.color ?? "808080", line: line, stops: stops
+        ))
     }
 
     private var loadingView: some View {
@@ -140,6 +158,7 @@ struct SingleTripScreen: View {
                             currentDate: model.currentDate,
                             isPast: index <= model.lastInactiveStopIndex,
                             isCurrent: index == model.currentAtStopIndex,
+                            routeColor: Color(catenaryHex: data.color) ?? routeTypeColor(data.routeType),
                             movingDotProgress: index == model.movingDotSegmentIndex
                                 ? model.movingDotProgress
                                 : nil,
@@ -441,6 +460,7 @@ private struct SingleTripStopRow: View {
     let currentDate: Date
     let isPast: Bool
     let isCurrent: Bool
+    let routeColor: Color
     let movingDotProgress: Double?
     let showOriginalTimetable: Bool
     let showCountdown: Bool
@@ -515,7 +535,7 @@ private struct SingleTripStopRow: View {
                     } else if isCurrent {
                         Text("At stop")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.green)
+                            .foregroundStyle(routeColor)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -539,6 +559,7 @@ private struct SingleTripStopRow: View {
                     isLast: index == totalStops - 1,
                     isPast: isPast,
                     isCurrent: isCurrent,
+                    routeColor: routeColor,
                     movingProgress: movingDotProgress,
                     isCancelled: stop.isCancelled
                 )
@@ -632,6 +653,7 @@ private struct SingleTripTimelineMarker: View {
     let isLast: Bool
     let isPast: Bool
     let isCurrent: Bool
+    let routeColor: Color
     let movingProgress: Double?
     let isCancelled: Bool
 
@@ -684,7 +706,7 @@ private struct SingleTripTimelineMarker: View {
                 }
 
                 Circle()
-                    .fill(isCurrent ? Color.green : Color(uiColor: .systemBackground))
+                    .fill(isCurrent ? routeColor : Color(uiColor: .systemBackground))
                     .overlay {
                         Circle()
                             .stroke(isCancelled ? Color.red : lineColor, lineWidth: 2)
@@ -699,7 +721,7 @@ private struct SingleTripTimelineMarker: View {
     }
 }
 
-private extension Color {
+extension Color {
     init?(catenaryHex value: String?) {
         guard let value else { return nil }
         let normalized = value.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)

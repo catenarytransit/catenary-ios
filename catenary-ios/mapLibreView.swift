@@ -401,6 +401,7 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
     private weak var realtimeSource: MLNShapeSource?
     private weak var trajectorySource: MLNShapeSource?
     private var persistentLayerDefinitions: [StyleLayerDefinition] = []
+    private var currentTransitContext: SelectedTransitMapContext?
 
     private static let realtimeSourceIdentifier = "realtime-vehicles"
     private static let trajectorySourceIdentifier = "trajectory-vehicles"
@@ -731,6 +732,7 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
 
         reconcilePersistentLayers(in: style)
         publishPersistentSources()
+        publishTransitContext()
     }
 
     /// Refresh paint/layout properties in place. This creates configured
@@ -803,6 +805,15 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         destination.minimumZoomLevel = source.minimumZoomLevel
         destination.maximumZoomLevel = source.maximumZoomLevel
 
+        if let source = source as? MLNLineStyleLayer,
+           let destination = destination as? MLNLineStyleLayer {
+            destination.lineColor = source.lineColor
+            destination.lineWidth = source.lineWidth
+            destination.lineOpacity = source.lineOpacity
+            destination.lineDashPattern = source.lineDashPattern
+            destination.predicate = source.predicate
+            return
+        }
         if let source = source as? MLNCircleStyleLayer,
            let destination = destination as? MLNCircleStyleLayer {
             destination.circleRadius = source.circleRadius
@@ -945,6 +956,52 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
             && lhs.startDate == rhs.startDate
             && lhs.startTime == rhs.startTime
     }
+    func updateTransitContext(_ context: SelectedTransitMapContext?) {
+        currentTransitContext = context
+        publishTransitContext()
+    }
+
+    private func publishTransitContext() {
+        guard let style = mapView?.style else { return }
+        let context = currentTransitContext
+        let mainSource = style.source(withIdentifier: "selected-transit-line") as? MLNShapeSource
+        let stopsSource = style.source(withIdentifier: "selected-transit-stops") as? MLNShapeSource
+        if let mainSource {
+            let points = context?.line ?? []
+            if points.count >= 2 {
+                var coords = points.map(\.coordinate)
+                mainSource.shape = MLNPolylineFeature(coordinates: &coords, count: UInt(coords.count))
+            } else {
+                mainSource.shape = MLNShapeCollectionFeature(shapes: [])
+            }
+        }
+        if let stopsSource {
+            let stops: [MLNShape & MLNFeature] = (context?.stops ?? []).map { stop in
+                let feature = MLNPointFeature()
+                feature.coordinate = stop.coordinate.coordinate
+                feature.attributes = ["name": stop.name, "stop_id": stop.id]
+                return feature
+            }
+            stopsSource.shape = MLNShapeCollectionFeature(shapes: stops)
+        }
+        let colorText = (context?.colorHex ?? "808080").trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        let rgb = Int(colorText, radix: 16)
+        let color: UIColor
+        if colorText.count == 6, let rgb {
+            color = UIColor(red: CGFloat((rgb >> 16) & 255) / 255,
+                            green: CGFloat((rgb >> 8) & 255) / 255,
+                            blue: CGFloat(rgb & 255) / 255, alpha: 1)
+        } else {
+            color = .gray
+        }
+        if let layer = style.layer(withIdentifier: "selected-transit-line-layer") as? MLNLineStyleLayer {
+            layer.lineColor = NSExpression(forConstantValue: color)
+        }
+        if let layer = style.layer(withIdentifier: "selected-transit-stops-layer") as? MLNCircleStyleLayer {
+            layer.circleStrokeColor = NSExpression(forConstantValue: color)
+        }
+    }
+
     func updateSelectedStop(_ context: SelectedStopMapContext?) {
         guard let source = mapView?.style?.source(
             withIdentifier: "selected-stop-context"
@@ -1004,6 +1061,7 @@ struct mapLibreView: View, Equatable {
     let cameraRevision: UInt64
     let layerSettings: AllLayerSettings
     let selectedStopContext: SelectedStopMapContext?
+    let selectedTransitContext: SelectedTransitMapContext?
     let viewobject: viewObject
     @StateObject private var realtimeVM = RealtimeVehicles()
     @StateObject private var trajectoryVM = RealtimeTrajectories()
@@ -1019,6 +1077,7 @@ struct mapLibreView: View, Equatable {
             && lhs.cameraRevision == rhs.cameraRevision
             && lhs.layerSettings == rhs.layerSettings
             && lhs.selectedStopContext == rhs.selectedStopContext
+            && lhs.selectedTransitContext == rhs.selectedTransitContext
             && lhs.viewobject === rhs.viewobject
     }
 
@@ -2358,6 +2417,25 @@ struct mapLibreView: View, Equatable {
             .textHaloWidth(1)
     }
 
+    @MapViewContentBuilder
+    var selectedTransitLayer: some StyleLayerCollection {
+        let line = ShapeSource(identifier: "selected-transit-line") {}
+        let stops = ShapeSource(identifier: "selected-transit-stops") {}
+
+        LineStyleLayer(identifier: "selected-transit-line-layer", source: line)
+            .lineColor(.gray)
+            .lineWidth(5)
+            .lineOpacity(0.95)
+            .renderAbove(.all)
+
+        CircleStyleLayer(identifier: "selected-transit-stops-layer", source: stops)
+            .color(colorScheme == .dark ? .black : .white)
+            .radius(5)
+            .strokeColor(.gray)
+            .strokeWidth(2.5)
+            .renderAbove(.all)
+    }
+
     private var persistentMapLayerDefinitions: [StyleLayerDefinition] {
         shapeLayer.layers
             + stationFeaturesLayer.layers
@@ -2371,6 +2449,7 @@ struct mapLibreView: View, Equatable {
             + userLocationLayer.layers
             + nearbyPinLayer.layers
             + selectedStopLayer.layers
+            + selectedTransitLayer.layers
     }
 
     var body: some View {
@@ -2401,6 +2480,7 @@ struct mapLibreView: View, Equatable {
                 persistentMapLayerDefinitions
             )
             featureTapCoordinator.updateUserLocation(locationManager.lastKnownLocation)
+            featureTapCoordinator.updateTransitContext(selectedTransitContext)
 
             let sourceCoordinator = featureTapCoordinator
             realtimeVM.onVehiclesChanged = { [weak sourceCoordinator] vehicles in
@@ -2438,6 +2518,8 @@ struct mapLibreView: View, Equatable {
                 style: style,
                 layerDefinitions: persistentMapLayerDefinitions
             )
+            featureTapCoordinator.updateTransitContext(selectedTransitContext)
+            featureTapCoordinator.updateSelectedStop(selectedStopContext)
         }
         .task {
             featureTapCoordinator.updateLayerSettings(layerSettings)
@@ -2458,6 +2540,9 @@ struct mapLibreView: View, Equatable {
             )
             realtimeVM.updateLayerSettings(settings)
             trajectoryVM.updateLayerSettings(settings)
+        }
+        .catenaryOnChange(of: selectedTransitContext) { _, context in
+            featureTapCoordinator.updateTransitContext(context)
         }
         .catenaryOnChange(of: selectedStopContext) { _, context in
             featureTapCoordinator.updateSelectedStop(context)
@@ -2486,6 +2571,7 @@ struct mapLibreView: View, Equatable {
         cameraRevision: 0,
         layerSettings: previewViewObject.allLayerSettings,
         selectedStopContext: previewViewObject.selectedStopContext,
+        selectedTransitContext: previewViewObject.selectedTransitContext,
         viewobject: previewViewObject
     )
 }

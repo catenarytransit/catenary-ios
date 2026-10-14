@@ -487,6 +487,7 @@ struct MainUIView: View {
             cameraRevision: mapCameraRevision,
             layerSettings: viewobject.allLayerSettings,
             selectedStopContext: viewobject.selectedStopContext,
+                selectedTransitContext: viewobject.selectedTransitContext,
             viewobject: viewobject
         )
         .equatable()
