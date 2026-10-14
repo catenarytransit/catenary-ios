@@ -985,7 +985,15 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
             stopsSource.shape = MLNShapeCollectionFeature(shapes: stops)
         }
         let colorText = (context?.colorHex ?? "808080").trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        let color = UIColor(catenaryHex: colorText) ?? UIColor.gray
+        let rgb = Int(colorText, radix: 16)
+        let color: UIColor
+        if colorText.count == 6, let rgb {
+            color = UIColor(red: CGFloat((rgb >> 16) & 255) / 255,
+                            green: CGFloat((rgb >> 8) & 255) / 255,
+                            blue: CGFloat(rgb & 255) / 255, alpha: 1)
+        } else {
+            color = .gray
+        }
         if let layer = style.layer(withIdentifier: "selected-transit-line-layer") as? MLNLineStyleLayer {
             layer.lineColor = NSExpression(forConstantValue: color)
         }
