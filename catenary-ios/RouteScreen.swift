@@ -2,6 +2,52 @@ import Combine
 import Foundation
 import SwiftUI
 
+private struct RoutePatternStop: Decodable, Sendable {
+    let name: String
+    let latitude: Double
+    let longitude: Double
+    let parentStation: String?
+    enum CodingKeys: String, CodingKey {
+        case name, latitude, longitude
+        case parentStation = "parent_station"
+    }
+}
+
+private struct RoutePatternRow: Decodable, Sendable {
+    let stopID: String
+    let stopSequence: Int
+    enum CodingKeys: String, CodingKey {
+        case stopID = "stop_id"
+        case stopSequence = "stop_sequence"
+    }
+}
+
+private struct RouteDirectionMetadata: Decodable, Sendable {
+    let directionPatternID: String
+    let parentID: String?
+    let headsign: String
+    let shapeID: String?
+    enum CodingKeys: String, CodingKey {
+        case directionPatternID = "direction_pattern_id"
+        case parentID = "direction_pattern_id_parents"
+        case headsign = "headsign_or_destination"
+        case shapeID = "gtfs_shape_id"
+    }
+}
+
+private struct RoutePattern: Decodable, Sendable {
+    let directionPattern: RouteDirectionMetadata
+    let rows: [RoutePatternRow]
+    enum CodingKeys: String, CodingKey {
+        case directionPattern = "direction_pattern"
+        case rows
+    }
+}
+
+private struct RouteShapeResponse: Decodable, Sendable {
+    let polyline: String?
+}
+
 private struct RouteScreenResponse: Decodable, Sendable {
     let color: String
     let textColor: String
@@ -12,6 +58,9 @@ private struct RouteScreenResponse: Decodable, Sendable {
     let routeType: Int?
     let gtfsDescription: String?
     let alerts: [String: SingleTripAlert]
+    let directionPatterns: [String: RoutePattern]
+    let shapesPolyline: [String: String]
+    let stops: [String: RoutePatternStop]
 
     enum CodingKeys: String, CodingKey {
         case color
@@ -23,6 +72,9 @@ private struct RouteScreenResponse: Decodable, Sendable {
         case routeType = "route_type"
         case gtfsDescription = "gtfs_desc"
         case alerts = "alert_id_to_alert"
+        case directionPatterns = "direction_patterns"
+        case shapesPolyline = "shapes_polyline"
+        case stops
     }
 
     init(from decoder: Decoder) throws {
@@ -36,6 +88,9 @@ private struct RouteScreenResponse: Decodable, Sendable {
         routeType = try container.decodeIfPresent(Int.self, forKey: .routeType)
         gtfsDescription = try container.decodeIfPresent(String.self, forKey: .gtfsDescription)
         alerts = try container.decodeIfPresent([String: SingleTripAlert].self, forKey: .alerts) ?? [:]
+        directionPatterns = try container.decodeIfPresent([String: RoutePattern].self, forKey: .directionPatterns) ?? [:]
+        shapesPolyline = try container.decodeIfPresent([String: String].self, forKey: .shapesPolyline) ?? [:]
+        stops = try container.decodeIfPresent([String: RoutePatternStop].self, forKey: .stops) ?? [:]
     }
 }
 
@@ -44,6 +99,7 @@ private final class RouteScreenViewModel: ObservableObject {
     @Published private(set) var route: RouteScreenResponse?
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
+    @Published private(set) var loadedShapes: [String: String] = [:]
 
     private let chateauID: String
     private let routeID: String
@@ -51,6 +107,21 @@ private final class RouteScreenViewModel: ObservableObject {
     init(chateauID: String, routeID: String) {
         self.chateauID = chateauID
         self.routeID = routeID
+    }
+
+    func loadShape(_ shapeID: String) async {
+        guard loadedShapes[shapeID] == nil else { return }
+        var url = URLComponents(string: "https://birch.catenarymaps.org/get_shape")!
+        url.queryItems = [URLQueryItem(name: "chateau", value: chateauID),
+                          URLQueryItem(name: "shape_id", value: shapeID),
+                          URLQueryItem(name: "format", value: "polyline")]
+        guard let endpoint = url.url else { return }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: endpoint)
+            if let value = try JSONDecoder().decode(RouteShapeResponse.self, from: data).polyline {
+                loadedShapes[shapeID] = value
+            }
+        } catch { /* Keep stops usable when optional shape fetch fails. */ }
     }
 
     func load() async {
@@ -91,6 +162,9 @@ struct RouteScreen: View {
 
     @StateObject private var model: RouteScreenViewModel
     @State private var alertsPresented = false
+    @EnvironmentObject private var viewObject: viewObject
+    @State private var activePatternID: String?
+    private var mapContextID: String { chateauID + "|route|" + routeID }
 
     init(chateauID: String, routeID: String) {
         self.chateauID = chateauID
@@ -115,6 +189,58 @@ struct RouteScreen: View {
                         chateauID: chateauID,
                         isCompact: false
                     )
+
+                    if !route.directionPatterns.isEmpty {
+                        Text("Directions")
+                            .font(.headline)
+                        ForEach(Array(route.directionPatterns.keys.sorted()), id: \.self) { key in
+                            if let pattern = route.directionPatterns[key] {
+                                Button {
+                                    activePatternID = key
+                                    updateRouteContext()
+                                } label: {
+                                    HStack {
+                                        VStack(alignment: .leading) {
+                                            Text(pattern.directionPattern.headsign)
+                                            Text("\(pattern.rows.count) stops")
+                                                .font(.caption)
+                                        }
+                                        Spacer()
+                                        if activePatternID == key {
+                                            Image(systemName: "checkmark.circle.fill")
+                                        }
+                                    }
+                                    .padding(10)
+                                    .background(.quaternary.opacity(activePatternID == key ? 1 : 0.35),
+                                                in: RoundedRectangle(cornerRadius: 9))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        if let activePatternID,
+                           let pattern = route.directionPatterns[activePatternID] {
+                            Text("Stops").font(.headline).padding(.top, 8)
+                            ForEach(Array(pattern.rows.sorted(by: { $0.stopSequence < $1.stopSequence }).enumerated()), id: \.offset) { index, row in
+                                if let stop = route.stops[row.stopID] {
+                                    Button {
+                                        viewObject.push(.stop(chateauID: chateauID, stopID: row.stopID))
+                                    } label: {
+                                        HStack(spacing: 10) {
+                                            Image(systemName: index == 0 || index == pattern.rows.count - 1
+                                                  ? "largecircle.fill.circle" : "circle")
+                                                .foregroundStyle(Color(catenaryHex: route.color) ?? .accentColor)
+                                            Text(stop.name)
+                                                .foregroundStyle(.primary)
+                                            Spacer()
+                                            Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                                        }
+                                        .frame(minHeight: 44)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
 
                     if !route.alerts.isEmpty {
                         ServiceAlertsLink(alerts: route.alerts) {
@@ -151,7 +277,14 @@ struct RouteScreen: View {
         }
         .task(id: "\(chateauID)|\(routeID)") {
             await model.load()
+            if activePatternID == nil {
+                activePatternID = model.route?.directionPatterns.keys.sorted().first
+            }
+            updateRouteContext()
         }
+        .catenaryOnChange(of: activePatternID) { _, _ in updateRouteContext() }
+        .catenaryOnChange(of: model.loadedShapes) { _, _ in updateRouteContext() }
+        .onDisappear { viewObject.clearSelectedTransitContext(id: mapContextID) }
         .fullScreenCover(isPresented: $alertsPresented) {
             ServiceAlertsScreen(
                 alerts: model.route?.alerts ?? [:],
@@ -160,4 +293,26 @@ struct RouteScreen: View {
             )
         }
     }
+    private func updateRouteContext() {
+        guard let route = model.route,
+              let id = activePatternID,
+              let pattern = route.directionPatterns[id] else { return }
+        let rows = pattern.rows.sorted { $0.stopSequence < $1.stopSequence }
+        let stops = rows.compactMap { row -> TransitMapStop? in
+            guard let stop = route.stops[row.stopID] else { return nil }
+            let coordinate = TransitMapCoordinate(latitude: stop.latitude, longitude: stop.longitude)
+            guard coordinate.isValid else { return nil }
+            return TransitMapStop(id: row.stopID, name: stop.name, coordinate: coordinate)
+        }
+        let shapeID = pattern.directionPattern.shapeID
+        let encoded = shapeID.flatMap { route.shapesPolyline[$0] ?? model.loadedShapes[$0] }
+        viewObject.setSelectedTransitContext(SelectedTransitMapContext(
+            id: mapContextID, colorHex: route.color,
+            line: TransitPolylineDecoder.decode(encoded), stops: stops
+        ))
+        if let shapeID, encoded == nil {
+            Task { await model.loadShape(shapeID) }
+        }
+    }
+
 }
