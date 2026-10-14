@@ -721,7 +721,7 @@ private struct SingleTripTimelineMarker: View {
     }
 }
 
-private extension Color {
+extension Color {
     init?(catenaryHex value: String?) {
         guard let value else { return nil }
         let normalized = value.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
