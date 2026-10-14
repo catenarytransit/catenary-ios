@@ -246,7 +246,7 @@ private struct StackNavigationControls: View {
     let onHome: () -> Void
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 6) {
             compactButton("chevron.backward", label: "Back", action: onBack)
                 .disabled(!canGoBack)
                 .opacity(canGoBack ? 1 : 0.35)
@@ -263,17 +263,17 @@ private struct StackNavigationControls: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(.primary)
-                // A genuinely smaller 32pt visible button, not a 40pt label
-                // inside a bordered Button (which adds its own extra padding).
-                .frame(width: 32, height: 32)
+                // Keep the visible circle slightly smaller than the hit target,
+                // without the automatic padding of a bordered button.
+                .frame(width: 38, height: 38)
                 .background(Color(uiColor: .secondarySystemBackground), in: Circle())
                 .overlay {
                     Circle().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5)
                 }
-                // The surrounding area remains easy to tap without looking huge.
-                .frame(width: 44, height: 44)
+                // Preserve at least a 48pt touch target around each control.
+                .frame(width: 48, height: 48)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

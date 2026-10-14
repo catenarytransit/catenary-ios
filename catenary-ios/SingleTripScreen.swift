@@ -9,6 +9,8 @@ struct SingleTripScreen: View {
     @AppStorage("singleTripShowOriginalTimetable") private var showOriginalTimetable = false
     @AppStorage("singleTripShowCountdown") private var showCountdown = true
     @State private var hasScrolledToCurrentStop = false
+    @State private var tripContentHeight: CGFloat = 0
+    @State private var tripViewportHeight: CGFloat = 0
     @State private var showAlertsScreen = false
     private var mapContextID: String { selection.chateauID + "|trip|" + (selection.tripID ?? "") }
 
@@ -175,10 +177,26 @@ struct SingleTripScreen: View {
                     }
                 }
                 .padding(.horizontal)
+                .catenaryOnGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { _, height in
+                    tripContentHeight = height
+                }
                 .padding(.bottom, 84)
             }
+            .catenaryOnGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { _, height in
+                tripViewportHeight = height
+            }
+            .catenaryOnChange(of: tripContentHeight) { _, _ in
+                scrollToCurrentStopIfNeeded(proxy)
+            }
+            .catenaryOnChange(of: tripViewportHeight) { _, _ in
+                scrollToCurrentStopIfNeeded(proxy)
+            }
 
-            if currentStopTarget != nil {
+            if currentStopTarget != nil && canScrollTripContent {
                 Button {
                     scrollToCurrentStop(proxy, animated: true)
                 } label: {
@@ -352,8 +370,17 @@ struct SingleTripScreen: View {
         return index
     }
 
+    // Keep short trips top-aligned. Centering a stop in content that already
+    // fits in the viewport can shift the whole timetable down unnecessarily.
+    // Exclude the bottom clearance for the floating button from this measurement.
+    private var canScrollTripContent: Bool {
+        tripViewportHeight > 0 && tripContentHeight > tripViewportHeight + 1
+    }
+
     private func scrollToCurrentStopIfNeeded(_ proxy: ScrollViewProxy) {
-        guard !hasScrolledToCurrentStop, currentStopTarget != nil else { return }
+        guard !hasScrolledToCurrentStop,
+              currentStopTarget != nil,
+              canScrollTripContent else { return }
         hasScrolledToCurrentStop = true
         DispatchQueue.main.async {
             scrollToCurrentStop(proxy, animated: false)
@@ -361,7 +388,7 @@ struct SingleTripScreen: View {
     }
 
     private func scrollToCurrentStop(_ proxy: ScrollViewProxy, animated: Bool) {
-        guard let target = currentStopTarget else { return }
+        guard canScrollTripContent, let target = currentStopTarget else { return }
         let action = { proxy.scrollTo(target, anchor: .center) }
         if animated {
             withAnimation(.easeInOut(duration: 0.25), action)
