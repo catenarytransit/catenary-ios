@@ -211,7 +211,7 @@ struct RouteScreen: View {
                                         }
                                     }
                                     .padding(10)
-                                    .background(.quaternary.opacity(activePatternID == key ? 1 : 0.35),
+                                    .background(Color.secondary.opacity(activePatternID == key ? 0.18 : 0.07),
                                                 in: RoundedRectangle(cornerRadius: 9))
                                 }
                                 .buttonStyle(.plain)
