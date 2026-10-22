@@ -112,13 +112,16 @@ final class SearchViewModel: ObservableObject {
     @Published private(set) var isLoading = false
 
     private let worker = SearchWorker()
+    // Set to .cypress to restore the previous geocoder.
+    private static let geocoderProvider: GeocoderProvider = .photon
     private var searchTask: Task<Void, Never>?
     private var generation = UUID()
 
     func search(
         query: String,
         userLocation: CLLocationCoordinate2D?,
-        mapCenter: CLLocationCoordinate2D
+        mapCenter: CLLocationCoordinate2D,
+        mapZoom: Double = 12
     ) {
         searchTask?.cancel()
 
@@ -143,7 +146,8 @@ final class SearchViewModel: ObservableObject {
         let request = SearchRequestContext(
             query: trimmedQuery,
             userLocation: userLocation.map(SearchCoordinate.init),
-            mapCenter: SearchCoordinate(mapCenter)
+            mapCenter: SearchCoordinate(mapCenter),
+            mapZoom: mapZoom
         )
         let worker = self.worker
 
@@ -214,6 +218,52 @@ final class SearchViewModel: ObservableObject {
         return response?.features ?? []
     }
 
+    nonisolated fileprivate static func fetchPhoton(
+        _ request: SearchRequestContext
+    ) async -> [SearchCypressFeature] {
+        let url = PhotonAPI.searchURL(
+            query: request.query,
+            latitude: request.mapCenter.latitude,
+            longitude: request.mapCenter.longitude,
+            zoom: request.mapZoom
+        )
+        guard let response = await fetch(PhotonResponse.self, url: url),
+              response.type == "FeatureCollection" else { return [] }
+        return response.features.compactMap { feature in
+            guard let point = feature.coordinate else { return nil }
+            let properties = feature.properties
+            let reference = feature.osmReference
+            let identity = reference.map { "\($0.osmClass):\($0.osmID)" }
+            let category = [properties.osmKey, properties.osmValue]
+                .compactMap { $0 }.joined(separator: ":")
+            let displayLayer = properties.osmValue ?? properties.type ?? "place"
+            let translated = SearchCypressProperties(
+                id: identity,
+                layer: displayLayer,
+                name: properties.name,
+                names: nil,
+                housenumber: properties.housenumber,
+                street: properties.street,
+                postcode: properties.postcode,
+                country: properties.country,
+                region: properties.state,
+                county: properties.county,
+                locality: properties.city ?? properties.locality,
+                neighbourhood: properties.district,
+                categories: category.isEmpty ? [] : [category],
+                confidence: nil
+            )
+            return SearchCypressFeature(
+                type: "Feature",
+                geometry: SearchCypressGeometry(
+                    type: "Point",
+                    coordinates: [point.longitude, point.latitude]
+                ),
+                properties: translated
+            )
+        }
+    }
+
     nonisolated fileprivate static func fetchOsmStations(
         _ request: SearchRequestContext
     ) async -> [SearchOsmStationResult] {
@@ -253,9 +303,16 @@ final class SearchViewModel: ObservableObject {
             rows.append(.osmStation(station, score: rankToUnitScore(index: index, total: osmTotal) * 2.0))
         }
 
-        for feature in cypressResults.prefix(10) {
-            let confidence = feature.properties?.confidence ?? 0
-            let score = min(max(confidence / 1_000, 0), 1) * 2.0
+        let geocoderTotal = max(cypressResults.count, 1)
+        for (index, feature) in cypressResults.prefix(10).enumerated() {
+            let score: Double
+            if geocoderProvider == .photon {
+                // Photon ranks matches in response order; no confidence is supplied.
+                score = rankToUnitScore(index: index, total: geocoderTotal) * 2.0
+            } else {
+                let confidence = feature.properties?.confidence ?? 0
+                score = min(max(confidence / 1_000, 0), 1) * 2.0
+            }
             rows.append(.cypress(feature, score: score))
         }
 
@@ -350,7 +407,8 @@ final class SearchViewModel: ObservableObject {
 private actor SearchWorker {
     func perform(_ request: SearchRequestContext) async -> [SearchRow] {
         async let catenary = SearchViewModel.fetchCatenary(request)
-        async let cypress = SearchViewModel.fetchCypress(request)
+        async let cypress: [SearchCypressFeature] = SearchViewModel.geocoderProvider == .photon
+            ? SearchViewModel.fetchPhoton(request) : SearchViewModel.fetchCypress(request)
         async let osmStations = SearchViewModel.fetchOsmStations(request)
 
         let results = await (catenary, cypress, osmStations)
@@ -369,6 +427,12 @@ private struct SearchRequestContext: Sendable {
     let query: String
     let userLocation: SearchCoordinate?
     let mapCenter: SearchCoordinate
+    let mapZoom: Double
+}
+
+private enum GeocoderProvider {
+    case photon
+    case cypress
 }
 
 private struct SearchCoordinate: Sendable {
