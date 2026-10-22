@@ -430,7 +430,7 @@ private struct SearchRequestContext: Sendable {
     let mapZoom: Double
 }
 
-private enum GeocoderProvider {
+fileprivate enum GeocoderProvider: Sendable {
     case photon
     case cypress
 }
