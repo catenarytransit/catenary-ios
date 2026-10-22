@@ -113,7 +113,7 @@ final class SearchViewModel: ObservableObject {
 
     private let worker = SearchWorker()
     // Set to .cypress to restore the previous geocoder.
-    private static let geocoderProvider: GeocoderProvider = .photon
+    fileprivate static let geocoderProvider: GeocoderProvider = .photon
     private var searchTask: Task<Void, Never>?
     private var generation = UUID()
 
