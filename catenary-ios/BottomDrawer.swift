@@ -135,7 +135,8 @@ struct BottomDrawer: View {
         searchViewModel.search(
             query: query,
             userLocation: locationManager.lastKnownLocation,
-            mapCenter: viewObject.visibleCoordinateBounds.catenarySearchCenter
+            mapCenter: viewObject.visibleCoordinateBounds.catenarySearchCenter,
+            mapZoom: viewObject.currZoom
         )
     }
 
