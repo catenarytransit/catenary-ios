@@ -198,18 +198,28 @@ enum TransitFormatting {
         formatter.numberFormatter.maximumFractionDigits = 1
         formatter.numberFormatter.minimumFractionDigits = 0
 
+        let measurement = Measurement(value: meters, unit: UnitLength.meters)
         if useImperial {
-            let feet = Measurement(value: meters, unit: UnitLength.meters)
-                .converted(to: .feet)
-            return formatter.string(from: feet.value < 5_280
-                ? feet
-                : Measurement(value: meters, unit: UnitLength.meters).converted(to: .miles))
+            // Show miles for normal walking distances rather than thousands of feet.
+            // A tenth of a mile is 160.9344 metres.
+            if meters < 160.9344 {
+                formatter.numberFormatter.maximumFractionDigits = 0
+                return formatter.string(from: measurement.converted(to: .feet))
+            }
+            return formatter.string(from: measurement.converted(to: .miles))
         }
 
-        let measurement = Measurement(value: meters, unit: UnitLength.meters)
-        return formatter.string(from: meters < 1_000
-            ? measurement
-            : measurement.converted(to: .kilometers))
+        if meters < 1_000 {
+            formatter.numberFormatter.maximumFractionDigits = 0
+            return formatter.string(from: measurement)
+        }
+        return formatter.string(from: measurement.converted(to: .kilometers))
+    }
+
+    static func speed(_ metersPerSecond: Double, useImperial: Bool = false) -> String {
+        let measurement = Measurement(value: metersPerSecond, unit: UnitSpeed.metersPerSecond)
+        let converted = measurement.converted(to: useImperial ? .milesPerHour : .kilometersPerHour)
+        return String(format: useImperial ? "%.1f mph" : "%.1f km/h", converted.value)
     }
 
     static func delay(scheduled: Int64?, realtime: Int64?) -> String? {

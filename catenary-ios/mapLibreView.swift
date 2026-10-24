@@ -24,7 +24,11 @@ private enum VehicleFeatureBuilder {
         let l: Double
     }
 
-    static func realtime(_ vehicle: RealtimeVehicle, settings: AllLayerSettings) -> MLNPointFeature {
+    static func realtime(
+        _ vehicle: RealtimeVehicle,
+        settings: AllLayerSettings,
+        useImperial: Bool
+    ) -> MLNPointFeature {
         let feature = MLNPointFeature()
         feature.coordinate = vehicle.coordinate
 
@@ -43,7 +47,7 @@ private enum VehicleFeatureBuilder {
         let vehicleLabel = cleanedVehicleLabel(vehicle.vehicleLabel ?? vehicle.vehicleID ?? "")
         let headsign = cleanedHeadsign(vehicle.headsign ?? "", chateauID: vehicle.chateauID)
         let speed = vehicle.speedMetresPerSecond.map {
-            String(format: "%.1f km/h", $0 * 3.6)
+            TransitFormatting.speed($0, useImperial: useImperial)
         } ?? ""
         let crowd = occupancySymbol(vehicle.occupancyStatus)
         let delay = delayLabel(vehicle.delay)
@@ -392,6 +396,7 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
     private weak var navigator: viewObject?
     private var recognizer: UITapGestureRecognizer?
     private var layerSettings = AllLayerSettings()
+    private var useImperialUnits = false
     private var realtimeVehicles: [RealtimeVehicle] = []
     private var trajectoryVehicles: [RealtimeTrajectoryVehicle] = []
     private var userLocationCoordinate: CLLocationCoordinate2D?
@@ -638,6 +643,13 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         return nil
     }
 
+    func updateDistanceUnits(_ useImperial: Bool) {
+        guard useImperialUnits != useImperial else { return }
+        useImperialUnits = useImperial
+        // Cached features retain the old label until they are rebuilt.
+        rebuildRealtimeSource()
+    }
+
     func updateLayerSettings(_ settings: AllLayerSettings) {
         guard settings != layerSettings else { return }
         layerSettings = settings
@@ -661,7 +673,8 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         where previousByID[vehicle.id] != vehicle || realtimeFeatureCache[vehicle.id] == nil {
             realtimeFeatureCache[vehicle.id] = VehicleFeatureBuilder.realtime(
                 vehicle,
-                settings: layerSettings
+                settings: layerSettings,
+                useImperial: useImperialUnits
             )
         }
         publishRealtimeSource()
@@ -894,7 +907,8 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         for vehicle in realtimeVehicles {
             realtimeFeatureCache[vehicle.id] = VehicleFeatureBuilder.realtime(
                 vehicle,
-                settings: layerSettings
+                settings: layerSettings,
+                useImperial: useImperialUnits
             )
         }
         publishRealtimeSource()
@@ -1063,6 +1077,7 @@ struct mapLibreView: View, Equatable {
     let selectedStopContext: SelectedStopMapContext?
     let selectedTransitContext: SelectedTransitMapContext?
     let viewobject: viewObject
+    @AppStorage("usUnits") private var usUnits = false
     @StateObject private var realtimeVM = RealtimeVehicles()
     @StateObject private var trajectoryVM = RealtimeTrajectories()
     @StateObject private var wildfireVM = WildfireMapData()
@@ -1076,6 +1091,7 @@ struct mapLibreView: View, Equatable {
             && insetsEqual(lhs.contentInset, rhs.contentInset)
             && lhs.cameraRevision == rhs.cameraRevision
             && lhs.layerSettings == rhs.layerSettings
+            && lhs.usUnits == rhs.usUnits
             && lhs.selectedStopContext == rhs.selectedStopContext
             && lhs.selectedTransitContext == rhs.selectedTransitContext
             && lhs.viewobject === rhs.viewobject
@@ -2522,6 +2538,7 @@ struct mapLibreView: View, Equatable {
             featureTapCoordinator.updateSelectedStop(selectedStopContext)
         }
         .task {
+            featureTapCoordinator.updateDistanceUnits(usUnits)
             featureTapCoordinator.updateLayerSettings(layerSettings)
             realtimeVM.updateLayerSettings(layerSettings)
             await realtimeVM.run()
@@ -2540,6 +2557,9 @@ struct mapLibreView: View, Equatable {
             )
             realtimeVM.updateLayerSettings(settings)
             trajectoryVM.updateLayerSettings(settings)
+        }
+        .catenaryOnChange(of: usUnits) { _, useImperial in
+            featureTapCoordinator.updateDistanceUnits(useImperial)
         }
         .catenaryOnChange(of: selectedTransitContext) { _, context in
             featureTapCoordinator.updateTransitContext(context)

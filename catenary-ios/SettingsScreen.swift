@@ -37,7 +37,7 @@ struct SettingsScreen: View {
 
                 SettingsToggleRow(
                     title: "Use imperial units",
-                    description: "Display distances in miles and feet instead of kilometres and metres.",
+                    description: "Display distances in miles and feet, and vehicle speeds in mph.",
                     isOn: $usUnits
                 )
 
