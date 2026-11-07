@@ -52,6 +52,7 @@ final class TripPlannerModel: ObservableObject {
             originText = session.origin.name; destinationText = session.destination.name
             options = session.options; arriveBy = session.arriveBy; now = session.now; time = session.time
             itineraries = session.itineraries; selected = min(max(0, session.selected), session.itineraries.count - 1)
+            details = session.details ?? false; showTransfers = session.showTransfers ?? false
             searched = true
         }
     }
@@ -121,11 +122,12 @@ final class TripPlannerModel: ObservableObject {
         var origin: DirectionsLocation; var destination: DirectionsLocation
         var options: DirectionsOptions; var arriveBy: Bool; var now: Bool; var time: Date
         var itineraries: [DirectionsItinerary]; var selected: Int
+        var details: Bool?; var showTransfers: Bool?
     }
     private func saveSession() {
         guard !loading, searched, error == nil, !itineraries.isEmpty, let origin, let destination else { return }
         let session = Session(origin: origin, destination: destination, options: options, arriveBy: arriveBy,
-            now: now, time: time, itineraries: itineraries, selected: selected)
+            now: now, time: time, itineraries: itineraries, selected: selected, details: details, showTransfers: showTransfers)
         if let data = try? JSONEncoder().encode(session), data.count < 4_000_000 {
             UserDefaults.standard.set(data, forKey: sessionKey)
         }

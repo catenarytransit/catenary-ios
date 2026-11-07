@@ -505,9 +505,12 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
         let point = recognizer.location(in: mapView)
         if navigator.currentStackItem == .tripPlanner,
            let origin = navigator.tripPlanner.mapPicking ?? navigator.tripPlanner.editing {
-            let coordinate = mapView.convert(point, toCoordinateFrom: mapView)
             let features = mapView.visibleFeatures(at: point)
-            let name = features.compactMap { $0.attribute(forKey: "name") as? String }.first
+            let namedPoint = features.compactMap { $0 as? MLNPointFeature }.first {
+                $0.attribute(forKey: "name") as? String != nil
+            }
+            let coordinate = namedPoint?.coordinate ?? mapView.convert(point, toCoordinateFrom: mapView)
+            let name = namedPoint?.attribute(forKey: "name") as? String
             navigator.tripPlanner.choose(origin, location: DirectionsLocation(
                 name: name ?? String(format: "%.6f, %.6f", coordinate.latitude, coordinate.longitude), coordinate: coordinate))
             navigator.presDetent = .height(350)
@@ -2528,13 +2531,13 @@ struct mapLibreView: View, Equatable {
             }
         })
         .onMapStyleLoaded { style in
-            plannerMapCoordinator.styleLoaded(state: plannerMapState)
             featureTapCoordinator.installPersistentMapContent(
                 style: style,
                 layerDefinitions: persistentMapLayerDefinitions
             )
             featureTapCoordinator.updateTransitContext(selectedTransitContext)
             featureTapCoordinator.updateSelectedStop(selectedStopContext)
+            plannerMapCoordinator.styleLoaded(state: plannerMapState)
         }
         .task {
             featureTapCoordinator.updateLayerSettings(layerSettings)
