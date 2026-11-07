@@ -53,6 +53,9 @@ jobs:
           xcodebuild -showsdks
           echo "Deployment target: iOS ${{ matrix.deployment_target }}"
 
+      - name: Verify trip planner contracts and geometry
+        run: Tests/TripPlanner/run.sh
+
       - name: Clear Xcode and SwiftPM state
         shell: bash
         run: |

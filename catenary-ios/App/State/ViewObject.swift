@@ -3,6 +3,7 @@
 //  catenary-ios
 //
 
+import Combine
 import CoreLocation
 import Foundation
 import MapLibre
@@ -48,6 +49,11 @@ private enum MapCameraPersistence {
 private let persistedMapCameraAtLaunch = MapCameraPersistence.load()
 
 class viewObject: ObservableObject {
+    let tripPlanner = TripPlannerModel()
+    @Published var plannerMapState = DirectionsMapState()
+    var userCoordinate: CLLocationCoordinate2D?
+    private var plannerSubscription: AnyCancellable?
+
     @Published var camera: MapViewCamera = {
 #if DEBUG || SCREENSHOT_AUTOMATION
         if let mapCamera = ScreenshotLaunchConfiguration.current.mapCamera {
@@ -143,6 +149,10 @@ class viewObject: ObservableObject {
     @Published var currentRotation: CLLocationDirection = 0
 
     init() {
+        plannerSubscription = tripPlanner.$mapState.sink { [weak self] state in
+            self?.plannerMapState = state
+        }
+
 #if DEBUG || SCREENSHOT_AUTOMATION
         let configuration = ScreenshotLaunchConfiguration.current
         if let deepLink = configuration.deepLink {

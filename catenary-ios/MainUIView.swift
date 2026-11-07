@@ -315,6 +315,11 @@ struct MainUIView: View {
                     }
                 }
                 .overlay {
+                    if viewobject.currentStackItem == .tripPlanner, viewobject.plannerMapState.picking != nil {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 30)).foregroundStyle(.purple)
+                            .allowsHitTesting(false)
+                    }
                     if nearbyPinActive, nearbyPinCoordinate != nil {
                         DraggableNearbyPinOverlay(
                             coordinate: $nearbyPinCoordinate,
@@ -487,7 +492,8 @@ struct MainUIView: View {
             cameraRevision: mapCameraRevision,
             layerSettings: viewobject.allLayerSettings,
             selectedStopContext: viewobject.selectedStopContext,
-                selectedTransitContext: viewobject.selectedTransitContext,
+            selectedTransitContext: viewobject.selectedTransitContext,
+            plannerMapState: viewobject.plannerMapState,
             viewobject: viewobject
         )
         .equatable()
@@ -1027,6 +1033,7 @@ struct MainUIView: View {
 
     private func useInitialUserLocationIfNeeded() {
         guard let coordinate = locationManager.lastKnownLocation else { return }
+        viewobject.userCoordinate = coordinate
         viewobject.useInitialUserLocationIfNeeded(coordinate)
     }
 
@@ -1241,6 +1248,16 @@ struct MainUIView: View {
                         Image(systemName: "square.3.layers.3d")
                     }
                     .padding(.bottom)
+                    Button {
+                        nearbyPinActive = false
+                        viewobject.push(.tripPlanner)
+                        viewobject.presDetent = .height(350)
+                    } label: {
+                        Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                    }
+                    .accessibilityLabel("Directions")
+                    .disabled(viewobject.currentStackItem == .tripPlanner)
+                    .padding(.vertical, 8)
                     Button {
                         locationManager.checkLocationAuthorization()
                         viewobject.camera = .trackUserLocation(zoom: 15)

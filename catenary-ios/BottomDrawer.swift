@@ -335,6 +335,9 @@ private struct CatenaryStackDestinationView: View {
         case let .mapSelectionScreen(options, lookup):
             MapOverlappingSelectionScreen(options: options, routeLookup: lookup)
 
+        case .tripPlanner:
+            TripPlannerScreen(model: viewObject.tripPlanner, locationManager: locationManager)
+
         case .settings:
             SettingsScreen()
 
@@ -389,6 +392,7 @@ private struct StackDestinationSummary: View {
         case .stop: return L10n.string("Stop")
         case .nearbyDepartures: return L10n.string("Nearby departures")
         case .mapSelectionScreen: return L10n.string("Selection")
+        case .tripPlanner: return L10n.string("Directions")
         case .settings: return L10n.string("Settings")
         case .block: return L10n.string("Block")
         case .osmItem: return L10n.string("Map item")
@@ -427,7 +431,7 @@ private struct StackDestinationSummary: View {
                 ("Latitude", latitude.map { String($0) }), ("Longitude", longitude.map { String($0) }),
                 ("Time", time.map { String($0) })
             ])
-        case .mapSelectionScreen, .settings:
+        case .mapSelectionScreen, .settings, .tripPlanner:
             return []
         }
     }

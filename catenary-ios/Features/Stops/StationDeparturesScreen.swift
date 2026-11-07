@@ -44,6 +44,9 @@ struct StationDeparturesScreen: View {
         ScrollViewReader { proxy in
             VStack(alignment: .leading, spacing: 8) {
                 header
+                if let coordinate = model.stationCoordinate ?? destinationCoordinate {
+                    TripPlannerLocationActions(name: stationName, coordinate: coordinate)
+                }
 
                 StationTimeSelector(
                     selectedDate: $selectedDate,

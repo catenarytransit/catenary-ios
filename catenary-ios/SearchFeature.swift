@@ -662,7 +662,7 @@ private struct RecentSearchResultRow: View {
     }
 }
 
-private struct CypressSearchResultRow: View {
+struct CypressSearchResultRow: View {
     let feature: SearchCypressFeature
 
     var body: some View {
@@ -687,7 +687,7 @@ private struct CypressSearchResultRow: View {
     }
 }
 
-private struct StopSearchResultRow: View {
+struct StopSearchResultRow: View {
     let stop: SearchStopInfo
     let routes: [SearchRouteInfo]
     let agencyNames: [String]
@@ -774,7 +774,7 @@ private struct RouteSearchResultRow: View {
     }
 }
 
-private struct OsmStationSearchResultRow: View {
+struct OsmStationSearchResultRow: View {
     let station: SearchOsmStationResult
 
     var body: some View {
