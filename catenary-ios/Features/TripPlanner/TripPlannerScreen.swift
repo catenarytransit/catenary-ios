@@ -127,6 +127,8 @@ struct TripPlannerScreen: View {
                     if let location = row.directionsLocation {
                         Button { choose(origin, location) } label: {
                             HStack {
+                                Image(systemName: row.directionsSystemImage)
+                                    .frame(width: 24).foregroundStyle(.secondary)
                                 plannerSearchRow(row)
                                 Spacer(minLength: 4)
                                 if let current = locationManager.lastKnownLocation {
@@ -178,11 +180,12 @@ struct TripPlannerScreen: View {
                 Spacer()
                 Toggle("Transfer stops", isOn: $model.showTransfers).font(.caption).fixedSize()
             }
-            JourneyPreview(itinerary: itinerary)
+            JourneyPreview(itinerary: itinerary, compact: navigator.presDetent == .large)
             ScrollView {
+                let legs = itinerary.detailLegs
                 LazyVStack(alignment: .leading, spacing: 12) {
-                    ForEach(itinerary.legs.indices, id: \.self) { index in
-                        DirectionsLegView(leg: itinerary.legs[index])
+                    ForEach(legs.indices, id: \.self) { index in
+                        DirectionsLegView(leg: legs[index])
                     }
                 }.padding(.bottom)
             }
@@ -217,6 +220,14 @@ struct TripPlannerScreen: View {
 }
 
 extension SearchRow {
+    var directionsSystemImage: String {
+        switch self {
+        case .cypress: return "mappin.and.ellipse"
+        case .stop: return "tram.fill"
+        case .osmStation: return "building.2.fill"
+        case .route: return "point.topleft.down.to.point.bottomright.curvepath"
+        }
+    }
     var directionsLocation: DirectionsLocation? {
         let result: DirectionsLocation?
         switch self {
@@ -245,33 +256,81 @@ func directionsClock(_ time: String?) -> String {
 
 struct JourneyPreview: View {
     let itinerary: DirectionsItinerary
+    var compact = false
     var body: some View {
-        VStack(spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(directionsClock(itinerary.startTime))
-                Spacer()
-                Text("\(Int(ceil(itinerary.seconds / 60))) min").font(.headline)
-                Spacer()
-                Text(directionsClock(itinerary.endTime))
+        let times = itinerary.previewTimeGroups
+        VStack(spacing: compact ? 0 : 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                timeGroup(times.departure)
+                Spacer(minLength: 2)
+                Text(directionsDurationLabel(itinerary.seconds)).font(.subheadline.weight(.medium))
+                    .lineLimit(1).minimumScaleFactor(0.7)
+                Spacer(minLength: 2)
+                timeGroup(times.arrival)
             }.monospacedDigit()
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    ForEach(itinerary.legs.indices, id: \.self) { index in
-                        let leg = itinerary.legs[index]
-                        VStack(spacing: 3) {
-                            HStack(spacing: 4) {
-                                Image(systemName: leg.systemImage)
-                                if !leg.street { leg.badge }
-                            }.font(.subheadline)
-                            Capsule().fill(leg.color).frame(minWidth: 42, idealWidth: max(42, CGFloat(leg.seconds / max(1, itinerary.seconds)) * 230), maxWidth: 150, minHeight: 4, maxHeight: 4)
-                            Text("\(Int(ceil(leg.seconds / 60))) min").font(.caption)
+            if !compact {
+                GeometryReader { proxy in
+                    let legs = itinerary.previewLegs
+                    let width = max(proxy.size.width, CGFloat(legs.count) * 64)
+                    let widths = directionsTimelineWidths(legs, width: Double(width), minimum: 64)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 0) {
+                            ForEach(legs.indices, id: \.self) { index in
+                                DirectionsTimelineSegment(leg: legs[index], trailing: index == legs.count - 1 && index > 0)
+                                    .frame(width: CGFloat(widths[index]))
+                            }
                         }
-                        if index < itinerary.legs.count - 1 { Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.secondary) }
                     }
-                }
+                }.frame(height: 58).transition(.opacity)
             }
-        }.padding(10).background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+        }
+        .padding(10)
+        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+        .animation(.easeInOut(duration: 0.22), value: compact)
     }
+    private func timeGroup(_ markers: [DirectionsTimeMarker]) -> some View {
+        HStack(spacing: 4) {
+            ForEach(markers.indices, id: \.self) { index in
+                Text(directionsClock(markers[index].time))
+                    .font(markers[index].transit ? .subheadline.bold() : .caption)
+                    .foregroundStyle(markers[index].transit ? Color.primary : Color.secondary)
+                    .lineLimit(1).minimumScaleFactor(0.6)
+            }
+        }
+    }
+}
+
+private struct DirectionsTimelineSegment: View {
+    let leg: DirectionsLeg
+    let trailing: Bool
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                if !(trailing && leg.street) { Image(systemName: leg.systemImage).font(.caption) }
+                Rectangle().fill(leg.color).frame(height: 2)
+                    .mask {
+                        if leg.street {
+                            Canvas { context, size in
+                                var path = Path()
+                                path.move(to: CGPoint(x: 0, y: 1)); path.addLine(to: CGPoint(x: size.width, y: 1))
+                                context.stroke(path, with: .color(.primary), style: StrokeStyle(lineWidth: 2, dash: [2, 4]))
+                            }
+                        } else { Rectangle() }
+                    }
+                if trailing && leg.street { Image(systemName: leg.systemImage).font(.caption) }
+            }.frame(height: 22)
+            if leg.street {
+                Text("\(Int(ceil(leg.seconds / 60)))′" + (directionsDistance(leg).map { " · " + directionsFormattedDistance($0) } ?? ""))
+                    .font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+            } else { leg.badge }
+            Spacer(minLength: 0)
+        }.padding(.trailing, 4)
+    }
+}
+
+func directionsDurationLabel(_ seconds: Double) -> String {
+    let minutes = Int(ceil(seconds / 60))
+    return minutes >= 60 ? "\(minutes / 60) h \(minutes % 60) min" : "\(minutes) min"
 }
 
 private struct DirectionsLegView: View {

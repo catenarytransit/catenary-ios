@@ -44,8 +44,18 @@ expect(plan.journeys.count == 2 && plan.journeys[0].seconds == 3600, "Optional f
 let clipped = directionsCoordinates(plan.journeys[0].legs[0])
 expect(clipped.count == 2 && abs(clipped[0].lon - 0.25) < 0.0001 && abs(clipped[1].lon - 0.75) < 0.0001, "Clip within a single shape segment")
 var reversed = plan.journeys[0].legs[0]
-swap(&reversed.from, &reversed.to)
+let oldFrom = reversed.from
+reversed.from = reversed.to
+reversed.to = oldFrom
 let reverseCoordinates = directionsCoordinates(reversed)
 expect(reverseCoordinates.first == clipped.last && reverseCoordinates.last == clipped.first, "Reversed shape")
 expect(directionsDistance(plan.journeys[0].legs[0])! > 55_000, "Distance uses clipped geometry")
+let points = [DirectionsCoordinate(lat: 34, lon: -118), DirectionsCoordinate(lat: 34.1, lon: -118.1)]
+expect(decodeDirectionsPolyline(encodeDirectionsPolyline(points)) == points, "Geometry round trip")
+let widths = directionsTimelineWidths(plan.journeys[0].legs + plan.journeys[1].legs, width: 160)
+expect(widths.count == 2 && widths.allSatisfy { $0 >= 48 } && abs(widths.reduce(0, +) - 160) < 0.001, "Minimum timeline widths and total")
+expect(plan.journeys[0].previewTimeGroups.departure.count == 1, "No duplicate boarding time when starting at a stop")
+var consecutive = plan.journeys[1]
+consecutive.legs = [DirectionsLeg(mode: "WALK", duration: 60), DirectionsLeg(mode: "WALK", duration: 120)]
+expect(consecutive.detailLegs.count == 1 && consecutive.detailLegs[0].seconds == 180, "Consecutive walks combined")
 print("Trip planner contract, geometry, and presentation fixtures passed")
