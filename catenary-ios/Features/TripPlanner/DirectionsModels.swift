@@ -1,7 +1,7 @@
 import Foundation
 
 // Ported from catenary-compose TripPlannerModels.kt. Keep Edelweiss field names and units.
-struct DirectionsLocation: Codable, Equatable {
+struct DirectionsLocation: Codable, Equatable, Sendable {
     var name: String
     var lat: Double
     var lon: Double
@@ -9,7 +9,7 @@ struct DirectionsLocation: Codable, Equatable {
     var isValid: Bool { lat.isFinite && lon.isFinite && (-90...90).contains(lat) && (-180...180).contains(lon) }
 }
 
-struct DirectionsPoint: Codable, Equatable {
+struct DirectionsPoint: Codable, Equatable, Sendable {
     var name: String?
     var lat: Double?
     var lon: Double?
@@ -21,18 +21,18 @@ struct DirectionsPoint: Codable, Equatable {
         return result.isValid ? result : nil
     }
 }
-struct DirectionsStop: Codable, Equatable {
+struct DirectionsStop: Codable, Equatable, Sendable {
     var name: String?
     var arrival: String?
     var departure: String?
     var scheduledArrival: String?
     var scheduledDeparture: String?
 }
-struct DirectionsGeometry: Codable, Equatable {
+struct DirectionsGeometry: Codable, Equatable, Sendable {
     var points: String?
     var precision: Int?
 }
-struct DirectionsLeg: Codable, Equatable {
+struct DirectionsLeg: Codable, Equatable, Sendable {
     var mode: String
     var duration: Double?
     var startTime: String?
@@ -56,7 +56,7 @@ struct DirectionsLeg: Codable, Equatable {
     var label: String { routeShortName ?? routeLongName ?? routeId ?? mode.capitalized }
     var seconds: Double { directionsDuration(duration, startTime, endTime) }
 }
-struct DirectionsItinerary: Codable, Equatable {
+struct DirectionsItinerary: Codable, Equatable, Sendable {
     var startTime: String
     var endTime: String
     var duration: Double?
@@ -64,7 +64,7 @@ struct DirectionsItinerary: Codable, Equatable {
     var legs: [DirectionsLeg]
     var seconds: Double { directionsDuration(duration, startTime, endTime) }
 }
-struct DirectionsPlan: Codable {
+struct DirectionsPlan: Codable, Sendable {
     var itineraries: [DirectionsItinerary]?
     var direct: [DirectionsItinerary]?
     var journeys: [DirectionsItinerary] {
@@ -73,7 +73,7 @@ struct DirectionsPlan: Codable {
         }
     }
 }
-struct DirectionsOptions: Codable, Equatable {
+struct DirectionsOptions: Codable, Equatable, Sendable {
     var cycling = false
     var walkingPace = 840.0 // seconds per kilometre
     var cyclingKmh = 16.0

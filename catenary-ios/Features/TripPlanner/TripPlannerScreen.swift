@@ -47,8 +47,8 @@ struct TripPlannerScreen: View {
         VStack(spacing: 6) {
             HStack(spacing: 8) {
                 VStack(spacing: 12) {
-                    Image(systemName: "circle.circle")
-                    Image(systemName: "record.circle")
+                    DirectionsEndpointGlyph(origin: true)
+                    DirectionsEndpointGlyph(origin: false)
                 }.foregroundStyle(.secondary)
                 VStack(spacing: 4) {
                     endpointField(true)

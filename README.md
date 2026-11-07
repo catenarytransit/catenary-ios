@@ -7,3 +7,29 @@
 - Kyler Chin - University of California, Irvine - United States of America
 - snagglegrolop - United States of America
 - Nathan Sheng - University of Toronto - Canada
+
+## Trip planning
+
+Open Directions from the map toolbar, or choose **As origin** / **As destination**
+from a station or map item. The SwiftUI planner uses the same Edelweiss request
+contract and defaults as catenary-compose (`471f579`). It supports place and stop
+search, current location, decimal/DMS coordinates, map picking, departure/arrival
+times, walking/cycling options, journey previews, and detailed transit legs.
+Successful searches are retained on the device and restored when Directions opens.
+
+On a machine with Swift installed, run `Tests/TripPlanner/run.sh` to check the API
+contract, coordinate handling, shape clipping, and timeline presentation. The iOS
+build workflow runs these checks before building the app for the simulator.
+
+Manual simulator/device checks:
+
+- Search for both endpoints, swap them, and change an endpoint while a request is
+  running. The previous response must not replace the new search.
+- Choose a map location with the fixed crosshair, then test station and POI
+  shortcuts with location permission granted and denied.
+- Compare departure and arrive-by queries, walking and cycling limits, no-results
+  and network-error states. Open a journey and expand intermediate stops.
+- Expand and collapse the drawer: the same summary card changes height above the
+  leg list. Check light/dark mode, landscape, VoiceOver, and larger text sizes.
+- Leave Directions: planner lines and endpoint markers disappear. Reopen it to
+  restore the completed journey search.

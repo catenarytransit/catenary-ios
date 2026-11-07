@@ -146,12 +146,12 @@ struct TripPlannerLocationActions: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack {
-                action(true, title: "As origin", icon: "circle.circle")
-                action(false, title: "As destination", icon: "record.circle")
+                action(true, title: "As origin")
+                action(false, title: "As destination")
             }
         }
     }
-    private func action(_ origin: Bool, title: String, icon: String) -> some View {
+    private func action(_ origin: Bool, title: String) -> some View {
         Button {
             let planner = navigator.tripPlanner
             let location = DirectionsLocation(name: name, coordinate: coordinate)
@@ -163,7 +163,31 @@ struct TripPlannerLocationActions: View {
             }
             navigator.push(.tripPlanner)
             navigator.presDetent = .height(350)
-        } label: { Label(title, systemImage: icon).font(.subheadline) }
+        } label: {
+            HStack(spacing: 6) {
+                DirectionsEndpointGlyph(origin: origin)
+                Text(title)
+            }.font(.subheadline)
+        }
         .buttonStyle(.bordered)
+    }
+}
+
+/// Adaptive vector glyph matching the Android origin/destination action icons.
+struct DirectionsEndpointGlyph: View {
+    let origin: Bool
+    var body: some View {
+        Canvas { context, _ in
+            let center = origin ? 8.0 : 16.0
+            let ring = Path(ellipseIn: CGRect(x: center - 6, y: 4, width: 12, height: 12))
+            context.stroke(ring, with: .foreground, lineWidth: 1.5)
+            let inner = Path(ellipseIn: CGRect(x: center - 2, y: 8, width: 4, height: 4))
+            if origin { context.stroke(inner, with: .foreground, lineWidth: 1.2) }
+            else { context.fill(inner, with: .foreground) }
+            var stem = Path()
+            stem.move(to: CGPoint(x: origin ? 14 : 0, y: 10))
+            stem.addLine(to: CGPoint(x: origin ? 24 : 10, y: 10))
+            context.stroke(stem, with: .foreground, lineWidth: 1.5)
+        }.frame(width: 24, height: 20).accessibilityHidden(true)
     }
 }
