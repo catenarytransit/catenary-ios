@@ -58,6 +58,7 @@ final class TripPlannerModel: ObservableObject {
     }
     func appear() { visible = true; publishMap(fit: true) }
     func leave() {
+        if loading { searched = false }
         visible = false; request?.cancel(); generation = UUID(); loading = false
         editing = nil; mapPicking = nil; publishMap()
     }

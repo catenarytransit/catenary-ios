@@ -8,6 +8,7 @@ struct TripPlannerScreen: View {
     @StateObject private var search = SearchViewModel()
     @FocusState private var focused: Bool?
     @State private var showsOptions = false
+    @AppStorage("usUnits") private var usUnits = false
 
     var body: some View {
         VStack(spacing: 8) {
@@ -94,7 +95,11 @@ struct TripPlannerScreen: View {
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
         .submitLabel(.search)
-        .onSubmit { if model.canSearch { focused = nil; model.search() } }
+        .onSubmit {
+            if model.canSearch {
+                focused = nil; model.search(); navigator.presDetent = .height(350)
+            }
+        }
         .frame(minHeight: 40)
     }
     private func performSearch(_ origin: Bool) {
@@ -147,8 +152,8 @@ struct TripPlannerScreen: View {
         switch row {
         case let .cypress(feature, _): CypressSearchResultRow(feature: feature)
         case let .osmStation(station, _): OsmStationSearchResultRow(station: station)
-        case let .stop(_, stop, routes, agencies, distance, _):
-            StopSearchResultRow(stop: stop, routes: routes, agencyNames: agencies, distanceMetres: distance)
+        case let .stop(_, stop, routes, agencies, _, _):
+            StopSearchResultRow(stop: stop, routes: routes, agencyNames: agencies, distanceMetres: nil)
         case .route: EmptyView()
         }
     }
@@ -244,10 +249,7 @@ extension SearchRow {
 }
 
 func directionsFormattedDistance(_ meters: Double) -> String {
-    let formatter = MeasurementFormatter()
-    formatter.unitOptions = .naturalScale
-    formatter.numberFormatter.maximumFractionDigits = 1
-    return formatter.string(from: Measurement(value: meters, unit: UnitLength.meters))
+    TransitFormatting.distance(meters, useImperial: UserDefaults.standard.bool(forKey: "usUnits"))
 }
 func directionsClock(_ time: String?) -> String {
     guard let date = directionsDate(time) else { return "—" }
