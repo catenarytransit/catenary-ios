@@ -158,3 +158,10 @@ do {
     fatalError("Missing authoritative final response accepted")
 } catch let error as URLError { expect(error.code == .cannotParseResponse, "Malformed completion is a transport failure") }
 print("Compact transfers, save eligibility, and malformed completion checks passed")
+expect(directionsPageAtEdge(direction: nil, firstVisible: 0, lastVisible: 7, count: 8) == nil, "Initial layout never auto-pages")
+expect(directionsPageAtEdge(direction: .before, firstVisible: 1, lastVisible: 3, count: 8) == .before, "Scrolling up near the top loads earlier")
+expect(directionsPageAtEdge(direction: .after, firstVisible: 4, lastVisible: 6, count: 8) == .after, "Scrolling down near the bottom loads later")
+expect(directionsPageAtEdge(direction: .before, firstVisible: 4, lastVisible: 7, count: 8) == nil, "Scrolling up at the bottom never loads later")
+expect(directionsPageAtEdge(direction: .after, firstVisible: nil, lastVisible: nil, count: 8) == nil, "Offscreen results never page")
+expect(directionsPageAtEdge(direction: .after, firstVisible: 0, lastVisible: 0, count: 0) == nil, "Empty results never page")
+print("Scroll direction and pagination edge checks passed")

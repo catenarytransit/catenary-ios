@@ -3,6 +3,13 @@ import Foundation
 // Ported from catenary-compose TripPlannerStreaming.kt. Keep the wire contract shared with Edelweiss.
 enum ConnectionDirection { case before, after }
 
+func directionsPageAtEdge(direction: ConnectionDirection?, firstVisible: Int?, lastVisible: Int?, count: Int) -> ConnectionDirection? {
+    guard count > 0 else { return nil }
+    if direction == .before, let firstVisible, firstVisible <= 1 { return .before }
+    if direction == .after, let lastVisible, lastVisible >= count - 2 { return .after }
+    return nil
+}
+
 struct DirectionsRouteEnvelope: Codable {
     let type: String
     let requestId: String

@@ -292,7 +292,7 @@ struct TripPlannerScreen: View {
             LazyVStack(spacing: 8) {
                 if let error = model.error {
                     Text(error).foregroundStyle(.secondary).padding()
-                    Button("Try again") { model.search() }
+                    if model.itineraries.isEmpty { Button("Try again") { model.search() } }
                 } else if model.searched, !model.loading, model.itineraries.isEmpty {
                     Label("No journeys found. Try another time or increase the access limits.", systemImage: "tram")
                         .padding()
@@ -332,7 +332,7 @@ struct TripPlannerScreen: View {
             pagingDirection = gesture.translation.height > 0 ? .before : .after
             requestVisiblePage()
         })
-        .catenaryOnChange(of: model.itineraries.first?.identity) { _, _ in
+        .catenaryOnChange(of: model.itineraries.map(\.identity)) { _, _ in
             if let pagingAnchor {
                 proxy.scrollTo(pagingAnchor, anchor: .top)
                 self.pagingAnchor = nil
@@ -346,11 +346,13 @@ struct TripPlannerScreen: View {
             guard let frame = visibleJourneys[model.itineraries[$0].identity] else { return false }
             return frame.maxY > 0 && frame.minY < resultsHeight
         }
-        if pagingDirection == .before, (visible.first ?? Int.max) <= 1, model.canLoadEarlier {
+        let edge = directionsPageAtEdge(direction: pagingDirection, firstVisible: visible.first,
+            lastVisible: visible.last, count: model.itineraries.count)
+        if edge == .before, model.canLoadEarlier {
             pagingAnchor = visible.first.map { model.itineraries[$0].identity }
             pagingDirection = nil
             model.loadConnections(earlier: true)
-        } else if pagingDirection == .after, (visible.last ?? -1) >= model.itineraries.count - 2, model.canLoadLater {
+        } else if edge == .after, model.canLoadLater {
             pagingDirection = nil
             model.loadConnections(earlier: false)
         }
@@ -404,7 +406,7 @@ struct TripPlannerScreen: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text("\(model.originText) → \(model.destinationText)")
                     .font(.headline).lineLimit(2).padding(.horizontal, 12).padding(.top, 12)
-                JourneyPreview(itinerary: itinerary)
+                JourneyPreview(itinerary: itinerary, embedded: true)
                 Color.clear.frame(height: 12)
             }
             .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
@@ -438,7 +440,7 @@ struct TripPlannerScreen: View {
                     }
                     DirectionsJourneyEndpoint(name: model.destinationText, first: false)
                 }.padding(12)
-            }
+            }.id(itinerary.identity)
         }
     }
     private var optionsSheet: some View {
@@ -505,6 +507,7 @@ func directionsClock(_ time: String?) -> String {
 struct JourneyPreview: View {
     let itinerary: DirectionsItinerary
     var compact = false
+    var embedded = false
     var body: some View {
         let times = itinerary.previewTimeGroups
         VStack(spacing: compact ? 0 : 8) {
@@ -533,7 +536,7 @@ struct JourneyPreview: View {
             }
         }
         .padding(10)
-        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+        .background(embedded ? Color.clear : Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
         .animation(.easeInOut(duration: 0.22), value: compact)
     }
     private func timeGroup(_ markers: [DirectionsTimeMarker]) -> some View {
@@ -611,24 +614,25 @@ private struct DirectionsConnectionRow<Content: View>: View {
             Text(time).font(.system(size: 14, weight: .bold)).monospacedDigit()
                 .frame(width: 60, alignment: .trailing)
             Color.clear.frame(width: 20)
-                .overlay(GeometryReader { geometry in
-                    Canvas { context, size in
-                        let x = size.width / 2
-                        var path = Path()
-                        path.move(to: CGPoint(x: x, y: first ? size.height / 2 : 0))
-                        path.addLine(to: CGPoint(x: x, y: last ? size.height / 2 : size.height))
-                        context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: 2, dash: dotted ? [2, 4] : []))
-                        if pearl {
-                            context.fill(Path(ellipseIn: CGRect(x: x - 4, y: size.height / 2 - 4, width: 8, height: 8)), with: .color(color))
-                        }
-                    }.frame(height: geometry.size.height)
-                })
             content().frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 3)
             if let platform, !platform.isEmpty {
                 Text(platform).font(.caption).frame(maxWidth: 48, alignment: .trailing)
                     .accessibilityLabel("Platform \(platform)")
             }
         }.fixedSize(horizontal: false, vertical: true).frame(minHeight: 28)
+        .background {
+            Canvas { context, size in
+                // 60-point time column + 8-point spacing + half the 20-point rail column.
+                let x: CGFloat = 78
+                var path = Path()
+                path.move(to: CGPoint(x: x, y: first ? size.height / 2 : 0))
+                path.addLine(to: CGPoint(x: x, y: last ? size.height / 2 : size.height))
+                context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: 2, dash: dotted ? [2, 4] : []))
+                if pearl {
+                    context.fill(Path(ellipseIn: CGRect(x: x - 4, y: size.height / 2 - 4, width: 8, height: 8)), with: .color(color))
+                }
+            }
+        }
     }
 }
 
