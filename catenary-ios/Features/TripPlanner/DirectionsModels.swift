@@ -6,6 +6,7 @@ struct DirectionsLocation: Codable, Equatable, Sendable {
     var lat: Double
     var lon: Double
     var isCurrentLocation = false
+    var isMapLocation = false
     var isValid: Bool { lat.isFinite && lon.isFinite && (-90...90).contains(lat) && (-180...180).contains(lon) }
 }
 
@@ -62,11 +63,22 @@ struct DirectionsItinerary: Codable, Equatable, Sendable {
     var duration: Double?
     var transfers: Int?
     var legs: [DirectionsLeg]
+    var id: String?
     var seconds: Double { directionsDuration(duration, startTime, endTime) }
+    /// Stable key for dedup/selection across pages; falls back to a structural fingerprint when the backend omits `id`.
+    var identity: String {
+        if let id, !id.isEmpty { return id }
+        let legsPart = legs.map {
+            "\($0.mode)|\($0.startTime ?? "")|\($0.endTime ?? "")|\($0.routeId ?? "")|\($0.from?.name ?? "")|\($0.to?.name ?? "")"
+        }.joined(separator: ";")
+        return "\(startTime)|\(endTime)|\(legsPart)"
+    }
 }
 struct DirectionsPlan: Codable, Sendable {
     var itineraries: [DirectionsItinerary]?
     var direct: [DirectionsItinerary]?
+    var previousPageCursor: String?
+    var nextPageCursor: String?
     var journeys: [DirectionsItinerary] {
         ((itineraries ?? []) + (direct ?? [])).filter {
             directionsDate($0.startTime) != nil && directionsDate($0.endTime) != nil
@@ -81,8 +93,8 @@ struct DirectionsOptions: Codable, Equatable, Sendable {
     var egressSeconds = 900.0
     var directSeconds = 1800.0
 }
-struct DirectionsRequest: Encodable {
-    struct Point: Encodable { let lat: Double; let lon: Double }
+struct DirectionsRequest: Codable {
+    struct Point: Codable { let lat: Double; let lon: Double }
     let from: Point
     let to: Point
     let departure_unix_seconds: Int64?
@@ -95,14 +107,22 @@ struct DirectionsRequest: Encodable {
     let maxPostTransitTime: Int
     let maxDirectTime: Int
     let detailed_legs = true
+    let timetable_view = true
+    let timeout_seconds = 8
+    var page_cursor: String?
+    var number_of_results_before = 0
+    var number_of_results_after = 0
+    var request_id: String?
 
     init(from: DirectionsLocation, to: DirectionsLocation, date: Date, arriveBy: Bool, options: DirectionsOptions) throws {
         guard from.isValid, to.isValid,
               options.walkingPace.isFinite, options.walkingPace > 0,
               options.cyclingKmh.isFinite, options.cyclingKmh > 0,
-              [options.accessSeconds, options.egressSeconds, options.directSeconds].allSatisfy({ $0.isFinite && (0...86400).contains($0) }) else {
+              [options.accessSeconds, options.egressSeconds, options.directSeconds].allSatisfy({ $0.isFinite }) else {
             throw DirectionsError.invalidRequest
         }
+        // Match Edelweiss's 1...3600-second contract for every travel-time budget.
+        func budget(_ seconds: Double) -> Int { Int(seconds).clamped(to: 1...3600) }
         self.from = Point(lat: from.lat, lon: from.lon)
         self.to = Point(lat: to.lat, lon: to.lon)
         let epoch = Int64(date.timeIntervalSince1970)
@@ -112,10 +132,13 @@ struct DirectionsRequest: Encodable {
         postTransitModes = preTransitModes
         pedestrianSpeed = 1000 / options.walkingPace
         cyclingSpeed = options.cyclingKmh / 3.6
-        maxPreTransitTime = Int(options.accessSeconds)
-        maxPostTransitTime = Int(options.egressSeconds)
-        maxDirectTime = Int(options.directSeconds)
+        maxPreTransitTime = budget(options.accessSeconds)
+        maxPostTransitTime = budget(options.egressSeconds)
+        maxDirectTime = budget(options.directSeconds)
     }
+}
+private extension Int {
+    func clamped(to range: ClosedRange<Int>) -> Int { Swift.min(Swift.max(self, range.lowerBound), range.upperBound) }
 }
 enum DirectionsError: LocalizedError {
     case invalidRequest

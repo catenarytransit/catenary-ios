@@ -512,7 +512,7 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
             let coordinate = namedPoint?.coordinate ?? mapView.convert(point, toCoordinateFrom: mapView)
             let name = namedPoint?.attribute(forKey: "name") as? String
             navigator.tripPlanner.choose(origin, location: DirectionsLocation(
-                name: name ?? String(format: "%.6f, %.6f", coordinate.latitude, coordinate.longitude), coordinate: coordinate))
+                name: name ?? String(format: "%.6f, %.6f", coordinate.latitude, coordinate.longitude), coordinate: coordinate, mapPicked: namedPoint == nil))
             navigator.presDetent = .height(350)
             return
         }

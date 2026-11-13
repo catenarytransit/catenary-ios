@@ -59,3 +59,62 @@ var consecutive = plan.journeys[1]
 consecutive.legs = [DirectionsLeg(mode: "WALK", duration: 60), DirectionsLeg(mode: "WALK", duration: 120)]
 expect(consecutive.detailLegs.count == 1 && consecutive.detailLegs[0].seconds == 180, "Consecutive walks combined")
 print("Trip planner contract, geometry, and presentation fixtures passed")
+
+// Pagination/streaming parity with catenary-compose TripPlannerStreamingTest.kt.
+func streamJourney(id: String, hour: Int, mode: String = "BUS") -> DirectionsItinerary {
+    DirectionsItinerary(startTime: "2026-11-09T\(hour):00:00Z", endTime: "2026-11-09T\(hour):30:00Z",
+        legs: [DirectionsLeg(mode: mode)], id: id)
+}
+
+var cyclingPageOptions = DirectionsOptions(); cyclingPageOptions.cycling = true
+let pageBase = try DirectionsRequest(from: DirectionsLocation(name: "A", lat: 34.0, lon: -118.0),
+    to: DirectionsLocation(name: "B", lat: 35.0, lon: -117.0), date: Date(timeIntervalSince1970: 1793642246),
+    arriveBy: true, options: cyclingPageOptions)
+let initialQuery = directionsPageQuery(base: pageBase, direction: .before, requestId: "r")
+let earlierQuery = directionsPageQuery(base: pageBase, direction: .before, cursor: "opaque-before", requestId: "r")
+let laterQuery = directionsPageQuery(base: pageBase, direction: .after, cursor: "opaque-after", requestId: "r")
+expect(initialQuery.number_of_results_before == 8 && initialQuery.number_of_results_after == 0, "Initial page uses the full web page size")
+expect(earlierQuery.number_of_results_before == 4 && earlierQuery.number_of_results_after == 0, "Earlier follow-up page is smaller")
+expect(laterQuery.number_of_results_before == 0 && laterQuery.number_of_results_after == 5, "Later follow-up page is smaller")
+expect(laterQuery.page_cursor == "opaque-after", "Cursor carried onto the page query")
+expect(initialQuery.pedestrianSpeed == pageBase.pedestrianSpeed && initialQuery.cyclingSpeed == pageBase.cyclingSpeed, "Base query fields preserved")
+
+let earlierPage = DirectionsPlan(itineraries: [streamJourney(id: "earlier", hour: 10)])
+let firstPage = DirectionsPlan(itineraries: [streamJourney(id: "initial", hour: 11)], direct: [streamJourney(id: "walk", hour: 10, mode: "WALK")])
+let laterPage = DirectionsPlan(itineraries: [streamJourney(id: "later", hour: 12), streamJourney(id: "initial", hour: 11)],
+    direct: [streamJourney(id: "walk", hour: 10, mode: "WALK")])
+let merged = mergeDirectionsPages([firstPage, laterPage, earlierPage])
+expect(merged.map(\.identity) == ["earlier", "walk", "initial", "later"], "Snapshots dedupe and connections stay chronological")
+
+let streamState = DirectionsStreamState(requestId: "request-1")
+let finalPage = DirectionsPlan(itineraries: [streamJourney(id: "final", hour: 12)], previousPageCursor: "older", nextPageCursor: "newer")
+let partialPage = DirectionsPlan(itineraries: [streamJourney(id: "partial", hour: 11)])
+if case .ignored = try streamState.accept(DirectionsStreamMessage(type: "accepted", requestId: "request-1", sequence: nil, response: nil, message: nil)) {} else { fatalError("Unknown frame type must be ignored") }
+if case .ignored = try streamState.accept(DirectionsStreamMessage(type: "snapshot", requestId: "other", sequence: 10, response: finalPage, message: nil)) {} else { fatalError("Other request's frame must be ignored") }
+guard case .page(let firstAccepted) = try streamState.accept(DirectionsStreamMessage(type: "snapshot", requestId: "request-1", sequence: 2, response: partialPage, message: nil)) else { fatalError("First snapshot must be accepted") }
+expect(firstAccepted.itineraries?.first?.id == "partial", "First snapshot's page is returned")
+if case .ignored = try streamState.accept(DirectionsStreamMessage(type: "snapshot", requestId: "request-1", sequence: 1, response: finalPage, message: nil)) {} else { fatalError("Stale sequence must be ignored") }
+if case .ignored = try streamState.accept(DirectionsStreamMessage(type: "snapshot", requestId: "request-1", sequence: 2, response: finalPage, message: nil)) {} else { fatalError("Non-increasing sequence must be ignored") }
+guard case .complete(let completedPage) = try streamState.accept(DirectionsStreamMessage(type: "complete", requestId: "request-1", sequence: nil, response: finalPage, message: nil)) else { fatalError("Complete must terminate the stream") }
+expect(completedPage?.itineraries?.first?.id == "final", "Complete always wins over the last snapshot")
+do {
+    _ = try streamState.accept(DirectionsStreamMessage(type: "error", requestId: "request-1", sequence: nil, response: nil, message: "boom"))
+    fatalError("Backend error frame must throw")
+} catch DirectionsStreamError.backend(let message) { expect(message == "boom", "Backend error message propagated") }
+
+let wireData = Data(#"""
+{"type":"complete","requestId":"r","response":{"itineraries":[
+  {"id":"stable","startTime":"2026-11-09T10:00:00Z","endTime":"2026-11-09T10:30:00Z","legs":[]}],
+  "previousPageCursor":"before","nextPageCursor":"after","metadata":{}}}
+"""#.utf8)
+let wireMessage = try JSONDecoder().decode(DirectionsStreamMessage.self, from: wireData)
+expect(wireMessage.response?.itineraries?.first?.identity == "stable", "Stable id decoded from camelCase wire fields")
+expect(wireMessage.response?.previousPageCursor == "before" && wireMessage.response?.nextPageCursor == "after", "Pagination cursors decoded")
+
+var outOfRangeOptions = DirectionsOptions(); outOfRangeOptions.accessSeconds = 9000; outOfRangeOptions.egressSeconds = 0
+let unclamped = try DirectionsRequest(from: origin, to: destination, date: date, arriveBy: false, options: outOfRangeOptions)
+expect(unclamped.maxPreTransitTime == 3600 && unclamped.maxPostTransitTime == 1, "Access/egress budgets clamp to Edelweiss's 1...3600 contract")
+let unclampedJSON = try JSONSerialization.jsonObject(with: JSONEncoder().encode(unclamped)) as! [String: Any]
+expect(unclampedJSON["timetable_view"] as? Bool == true && unclampedJSON["timeout_seconds"] as? Int == 8, "New Edelweiss contract fields are always sent")
+
+print("Trip planner pagination, streaming, and wire-contract fixtures passed")
