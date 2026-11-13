@@ -52,7 +52,11 @@ struct TripPlannerScreen: View {
             }
         }
         .padding(.horizontal, 12)
-        .onAppear { model.open(currentLocation: locationManager.lastKnownLocation); loadRecent() }
+        .onAppear {
+            model.open(currentLocation: locationManager.lastKnownLocation); loadRecent()
+            markScreenshotReady()
+        }
+        .catenaryOnChange(of: model.loading) { _, _ in markScreenshotReady() }
         .onDisappear { model.leave(); search.reset() }
         .catenaryOnChange(of: focused) { _, endpoint in
             if let endpoint { model.beginEditing(endpoint); navigator.presDetent = .large; performSearch(endpoint) }
@@ -80,6 +84,19 @@ struct TripPlannerScreen: View {
             .presentationDetents([.height(480)])
         }
     }
+    private func markScreenshotReady() {
+#if DEBUG || SCREENSHOT_AUTOMATION
+        guard let screen = ScreenshotLaunchConfiguration.current.plannerScreen,
+              !model.loading, model.error == nil, model.itineraries.count >= 3,
+              screen == "results" ? !model.details : model.details && model.selected == (Int(screen) ?? 0) - 1
+        else { return }
+        // Route layers and the camera fit are installed on the next SwiftUI update.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            ScreenshotReadiness.shared.markPlannerReady()
+        }
+#endif
+    }
+
     private var inputCard: some View {
         VStack(spacing: 6) {
             HStack(spacing: 8) {
@@ -268,6 +285,7 @@ struct TripPlannerScreen: View {
                         .buttonStyle(.plain)
                     }
                     .onAppear {
+                        guard !model.screenshotAutomation else { return }
                         if index <= 1, model.canLoadEarlier { model.loadConnections(earlier: true) }
                         if index >= model.itineraries.count - 2, model.canLoadLater { model.loadConnections(earlier: false) }
                     }

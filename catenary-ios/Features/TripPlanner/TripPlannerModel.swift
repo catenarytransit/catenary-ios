@@ -65,7 +65,22 @@ final class TripPlannerModel: ObservableObject {
     private var initialPage: DirectionsPlan?
     private var earlierPages: [(id: String, page: DirectionsPlan)] = []
     private var laterPages: [(id: String, page: DirectionsPlan)] = []
-    private let store = TripPlannerSessionStore()
+    private let store: TripPlannerSessionStore = {
+#if DEBUG || SCREENSHOT_AUTOMATION
+        if ScreenshotLaunchConfiguration.current.plannerScreen != nil {
+            return TripPlannerSessionStore(filename: "tripPlanner.ci-screenshots.json")
+        }
+#endif
+        return TripPlannerSessionStore()
+    }()
+
+    var screenshotAutomation: Bool {
+#if DEBUG || SCREENSHOT_AUTOMATION
+        return ScreenshotLaunchConfiguration.current.plannerScreen != nil
+#else
+        return false
+#endif
+    }
 
     var chosen: DirectionsItinerary? { itineraries.indices.contains(selected) ? itineraries[selected] : nil }
     var canSearch: Bool { origin?.isValid == true && destination?.isValid == true }
@@ -192,7 +207,10 @@ final class TripPlannerModel: ObservableObject {
                 } catch {
                     if token == self.generation { self.error = error.localizedDescription }
                 }
-                if token == self.generation { self.loading = false }
+                if token == self.generation {
+                    self.loading = false
+                    self.saveSession()
+                }
             }
         } catch {
             self.error = error.localizedDescription; loading = false
@@ -239,6 +257,9 @@ final class TripPlannerModel: ObservableObject {
         publishMap(fit: true); saveSession()
     }
     private func publishMap(fit: Bool = false) {
+#if DEBUG || SCREENSHOT_AUTOMATION
+        if fit, screenshotAutomation { ScreenshotReadiness.shared.invalidateMapReady() }
+#endif
         mapState = DirectionsMapState(visible: visible, origin: origin, destination: destination,
             itineraries: itineraries, selected: selected, details: details, showTransfers: showTransfers, picking: mapPicking,
             fitRevision: fit ? UUID() : mapState.fitRevision)

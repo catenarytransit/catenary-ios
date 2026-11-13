@@ -155,7 +155,17 @@ class viewObject: ObservableObject {
 
 #if DEBUG || SCREENSHOT_AUTOMATION
         let configuration = ScreenshotLaunchConfiguration.current
-        if let deepLink = configuration.deepLink {
+        if let screen = configuration.plannerScreen {
+            if screen == "results" {
+                tripPlanner.choose(true, location: DirectionsLocation(name: "Los Angeles Union Station", lat: 34.0562, lon: -118.2365))
+                tripPlanner.choose(false, location: DirectionsLocation(name: "Santa Monica Pier", lat: 34.0100, lon: -118.4960))
+                tripPlanner.search()
+            } else if let rank = Int(screen), tripPlanner.itineraries.indices.contains(rank - 1) {
+                tripPlanner.selectJourney(tripPlanner.itineraries[rank - 1])
+            }
+            push(.tripPlanner)
+            presDetent = .large
+        } else if let deepLink = configuration.deepLink {
             openDeepLink(deepLink)
 
             // `push` expands the drawer. Restore the requested screenshot detent

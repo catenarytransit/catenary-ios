@@ -33,3 +33,21 @@ Manual simulator/device checks:
   leg list. Check light/dark mode, landscape, VoiceOver, and larger text sizes.
 - Leave Directions: planner lines and endpoint markers disappear. Reopen it to
   restore the completed journey search.
+
+
+### Development routing screenshots
+
+The **iOS Screenshots** workflow runs on pull requests to `main`/`dev`, pushes to
+`dev`, and manual dispatches (select the development branch). Its screenshot
+artifact includes `routing/01-trip-planning.png` and three journey detail PNGs.
+The run summary links to the artifact. These use a live Los Angeles Union Station
+→ Santa Monica Pier search, wait for routing completion and map rendering, and
+reopen the same saved results for ranks 1–3. Automatic pagination is suspended
+for this capture so the ranks stay fixed. A backend error or fewer than three
+journeys fails the capture instead of producing loading/empty-state images.
+
+Debug/screenshot builds accept `--ci-screenshot-planner results` to start the
+search and `--ci-screenshot-planner 1` (or `2`/`3`) to reopen its journey details.
+This capture uses a separate cached session and the normal SwiftUI planner,
+route service, and map layers. Release builds without `SCREENSHOT_AUTOMATION`
+do not expose these launch controls.

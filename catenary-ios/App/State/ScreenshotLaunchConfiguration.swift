@@ -29,6 +29,8 @@ struct ScreenshotLaunchConfiguration {
     let deepLink: URL?
     let drawerState: ScreenshotDrawerState?
     let readyToken: String?
+    // "results" starts a fresh live search; 1...3 reopen that exact saved result set.
+    let plannerScreen: String?
 
     init(arguments: [String]) {
         userCoordinate = Self.coordinate(
@@ -39,6 +41,8 @@ struct ScreenshotLaunchConfiguration {
         )
         deepLink = Self.value(after: "--ci-screenshot-deep-link", in: arguments)
             .flatMap { URL(string: $0) }
+        plannerScreen = Self.value(after: "--ci-screenshot-planner", in: arguments)
+            .flatMap { ["results", "1", "2", "3"].contains($0) ? $0 : nil }
         readyToken = Self.value(after: "--ci-screenshot-ready-token", in: arguments)
 
         if arguments.contains("--ci-screenshot-drawer-expanded") {
@@ -103,6 +107,11 @@ final class ScreenshotReadiness {
     private init() {}
 
     func markDrawerReady() {
+        guard ScreenshotLaunchConfiguration.current.plannerScreen == nil else { return }
+        update { drawerReady = true }
+    }
+
+    func markPlannerReady() {
         update { drawerReady = true }
     }
 

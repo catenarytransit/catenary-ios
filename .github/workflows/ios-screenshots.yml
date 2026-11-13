@@ -8,6 +8,7 @@ on:
   pull_request:
     branches:
       - dev
+      - main
 
 permissions:
   contents: read
@@ -259,6 +260,44 @@ jobs:
             fi
           done
 
+      - name: Capture trip planner and top three journey details
+        shell: bash
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          mkdir -p "$SCREENSHOT_DIR/routing"
+          data_container="$(xcrun simctl get_app_container "$SIMULATOR_UDID" "$BUNDLE_ID" data)"
+
+          capture_routing() {
+            local screen="$1" filename="$2" token ready_file deadline
+            token="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+            ready_file="$data_container/tmp/catenary-screenshot-ready-$token"
+            xcrun simctl terminate "$SIMULATOR_UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
+            xcrun simctl launch "$SIMULATOR_UDID" "$BUNDLE_ID" \
+              --ci-screenshot-planner "$screen" \
+              --ci-screenshot-ready-token "$token" \
+              --ci-screenshot-drawer expanded
+
+            deadline=$((SECONDS + 180))
+            while [[ ! -f "$ready_file" ]]; do
+              if (( SECONDS >= deadline )); then
+                echo "::error::Routing screenshot $screen did not become ready (requires a successful search with at least three journeys and a rendered map)."
+                return 1
+              fi
+              sleep 0.5
+            done
+            xcrun simctl io "$SIMULATOR_UDID" screenshot "$SCREENSHOT_DIR/routing/$filename"
+            rm -f "$ready_file"
+          }
+
+          # The first launch saves one completed live LA Union Station → Santa Monica
+          # Pier search. Detail launches reuse it, preserving the displayed ranking.
+          capture_routing results 01-trip-planning.png
+          for rank in 1 2 3; do
+            capture_routing "$rank" "0$((rank + 1))-journey-$rank-details.png"
+          done
+          test "$(find "$SCREENSHOT_DIR/routing" -name '*.png' | wc -l | tr -d ' ')" = 4
+
       - name: Record drawer transition video
         shell: bash
         run: |
@@ -368,6 +407,7 @@ jobs:
           echo "Created drawer video: $(stat -f%z "$video_path") bytes"
 
       - name: Upload screenshots
+        id: screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -375,6 +415,15 @@ jobs:
           path: ${{ env.SCREENSHOT_DIR }}
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Link screenshots in run summary
+        if: always() && steps.screenshots.outputs.artifact-url != ''
+        env:
+          ARTIFACT_URL: ${{ steps.screenshots.outputs.artifact-url }}
+        run: |
+          echo "### iOS development screenshots" >> "$GITHUB_STEP_SUMMARY"
+          echo "[Download screenshots]($ARTIFACT_URL)" >> "$GITHUB_STEP_SUMMARY"
+          echo "The routing folder contains the trip planner and details for its first three results (LA Union Station → Santa Monica Pier)." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload drawer transition video
         if: always()
