@@ -86,7 +86,9 @@ struct TripPlannerTimeSheet: View {
             } label: {
                 Text("Now").font(.subheadline.weight(.semibold))
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.plain)
+            .padding(10)
+            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 10))
             Spacer(minLength: 0)
             HStack {
                 Button("Cancel") { dismiss() }
@@ -95,10 +97,15 @@ struct TripPlannerTimeSheet: View {
                     onConfirm(lockToNow ? Date() : combinedDate, lockToNow, arriveBy)
                     dismiss()
                 } label: { Text(doneLabel) }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.plain)
+                .padding(10)
+                .foregroundStyle(.white)
+                .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 10))
             }
         }
         .padding()
+        .buttonStyle(.plain)
+        .background(Color(uiColor: .systemGroupedBackground))
     }
 
     private var dayOptions: [Date] {

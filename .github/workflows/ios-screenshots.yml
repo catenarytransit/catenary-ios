@@ -260,9 +260,9 @@ jobs:
             fi
           done
 
-      - name: Capture trip planner and top three journey details
+      - name: Capture fullscreen planner and verify bidirectional scrolling
         shell: bash
-        timeout-minutes: 8
+        timeout-minutes: 10
         run: |
           set -euo pipefail
           mkdir -p "$SCREENSHOT_DIR/routing"
@@ -302,12 +302,60 @@ jobs:
             done
             xcrun simctl io "$SIMULATOR_UDID" screenshot "$SCREENSHOT_DIR/routing/$filename"
             cp "$status_file" "$SCREENSHOT_DIR/routing/$screen-status.txt"
+            if [[ "$screen" = results ]]; then results_status_file="$status_file"; fi
             rm -f "$ready_file"
           }
 
           # Inject the checked-in Santa Monica → UCLA query, including its fixed
           # departure time. Detail launches reuse the exact completed result set.
           capture_routing results 01-trip-planning.png
+
+          # Exercise the real ScrollView on the simulator, with fixed result ranks.
+          # Compare settled content offsets: a bounce or a drawer resize cannot pass.
+          flow_dir="$RUNNER_TEMP/catenary-planner-scroll"
+          mkdir -p "$flow_dir"
+          cat > "$flow_dir/down.yaml" <<EOF
+          appId: $BUNDLE_ID
+          ---
+          - assertVisible:
+              id: "planner.back"
+          - assertVisible:
+              id: "planner.results"
+          - swipe:
+              start: "50%, 85%"
+              end: "50%, 45%"
+              duration: 900
+              waitToSettleTimeoutMs: 2500
+          EOF
+          cat > "$flow_dir/up.yaml" <<EOF
+          appId: $BUNDLE_ID
+          ---
+          - swipe:
+              start: "50%, 45%"
+              end: "50%, 85%"
+              duration: 900
+              waitToSettleTimeoutMs: 2500
+          - assertVisible:
+              id: "planner.back"
+          EOF
+          cp "$results_status_file" "$flow_dir/before.txt"
+          maestro --device "$SIMULATOR_UDID" test "$flow_dir/down.yaml"
+          cp "$results_status_file" "$flow_dir/after-down.txt"
+          maestro --device "$SIMULATOR_UDID" test "$flow_dir/up.yaml"
+          cp "$results_status_file" "$flow_dir/after-up.txt"
+          python3 - "$flow_dir" <<'PYTHON'
+          import pathlib, sys
+          root = pathlib.Path(sys.argv[1])
+          def offset(name):
+              status = (root / name).read_text()
+              assert "fullscreen=true" in status, status
+              return float(next(line.split("=", 1)[1] for line in status.splitlines() if line.startswith("plannerScrollOffset=")))
+          before, down, up = map(offset, ["before.txt", "after-down.txt", "after-up.txt"])
+          assert down > before + 20, f"Results did not scroll down: {before} -> {down}"
+          assert up < down - 20, f"Results did not scroll back up: {down} -> {up}"
+          print(f"Fullscreen scrolling passed: {before} -> {down} -> {up}")
+          PYTHON
+          cp "$flow_dir/"*.txt "$SCREENSHOT_DIR/routing/"
           for rank in 1 2 3; do
             capture_routing "$rank" "0$((rank + 1))-journey-$rank-details.png"
           done

@@ -336,7 +336,7 @@ private struct CatenaryStackDestinationView: View {
             MapOverlappingSelectionScreen(options: options, routeLookup: lookup)
 
         case .tripPlanner:
-            TripPlannerScreen(model: viewObject.tripPlanner, locationManager: locationManager)
+            TripPlannerPresentation(model: viewObject.tripPlanner, locationManager: locationManager)
 
         case .settings:
             SettingsScreen()

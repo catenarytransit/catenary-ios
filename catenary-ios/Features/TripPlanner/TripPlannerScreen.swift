@@ -10,9 +10,40 @@ private struct SearchDebounceKey: Equatable {
     let options: DirectionsOptions
 }
 
+/// The drawer only hosts map interactions; the complete planning flow owns an opaque screen.
+struct TripPlannerPresentation: View {
+    @ObservedObject var model: TripPlannerModel
+    @ObservedObject var locationManager: LocationManager
+    @EnvironmentObject private var navigator: viewObject
+
+    private var fullscreen: Bool { model.mapPicking == nil && !model.usingMap }
+    var body: some View {
+        Group {
+            if fullscreen {
+                Color(uiColor: .systemGroupedBackground)
+            } else {
+                TripPlannerScreen(model: model, locationManager: locationManager)
+                    .background(Color(uiColor: .systemGroupedBackground))
+            }
+        }
+        .onAppear { model.open(currentLocation: locationManager.lastKnownLocation) }
+        .onDisappear {
+            if navigator.currentStackItem != .tripPlanner { model.leave() }
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { fullscreen && navigator.currentStackItem == .tripPlanner },
+            set: { _ in } // Presentation is controlled by navigation and the map/list action.
+        )) {
+            TripPlannerScreen(model: model, locationManager: locationManager, fullscreen: true)
+                .interactiveDismissDisabled()
+        }
+    }
+}
+
 struct TripPlannerScreen: View {
     @ObservedObject var model: TripPlannerModel
     @ObservedObject var locationManager: LocationManager
+    var fullscreen = false
     @EnvironmentObject private var navigator: viewObject
     @StateObject private var search = SearchViewModel()
     @FocusState private var focused: Bool?
@@ -25,11 +56,6 @@ struct TripPlannerScreen: View {
     @State private var resultsHeight: CGFloat = 0
     @State private var pagingAnchor: String?
 
-    private var fullscreenDetails: Binding<Bool> {
-        Binding(get: { model.details && !model.usingMap }, set: { presented in
-            if !presented && !model.usingMap { model.details = false }
-        })
-    }
     @AppStorage("usUnits") private var usUnits = false
     private let recentKey = "tripPlanner.recent.v1"
 
@@ -40,7 +66,10 @@ struct TripPlannerScreen: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            if !model.details { inputCard }
+            if !model.details {
+                if fullscreen { plannerNavigation }
+                inputCard
+            }
             if let picking = model.mapPicking {
                 Label("Move the map to choose a location", systemImage: "mappin")
                     .font(.subheadline)
@@ -51,19 +80,26 @@ struct TripPlannerScreen: View {
                         let center = navigator.visibleCoordinateBounds.catenarySearchCenter
                         model.choose(picking, location: DirectionsLocation(name: String(format: "%.6f, %.6f", center.latitude, center.longitude), coordinate: center, mapPicked: true))
                         navigator.presDetent = .height(350)
-                    }.buttonStyle(.borderedProminent)
+                    }.buttonStyle(.plain).padding(10)
+                        .foregroundStyle(.white)
+                        .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 10))
                 }
             } else if let editing = model.editing {
                 endpointSearch(editing)
             } else if model.details, let itinerary = model.chosen {
-                mapModeHeader(itinerary)
+                if model.usingMap { mapModeHeader(itinerary) } else { details(itinerary) }
             } else {
                 results
             }
         }
         .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .foregroundStyle(Color.primary)
+        .buttonStyle(.plain)
+        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+        .accessibilityIdentifier(fullscreen ? "planner.fullscreen" : "planner.map-controls")
         .onAppear {
-            model.open(currentLocation: locationManager.lastKnownLocation); loadRecent()
+            loadRecent()
             markScreenshotReady()
         }
         .catenaryOnChange(of: model.loading) { _, loading in
@@ -92,25 +128,33 @@ struct TripPlannerScreen: View {
             guard !Task.isCancelled, model.canSearch, !model.searched else { return }
             model.search()
         }
-        .fullScreenCover(isPresented: fullscreenDetails) {
-            if let itinerary = model.chosen {
-                details(itinerary)
-                    .foregroundStyle(Color.primary)
-                    .background(Color(uiColor: .systemGroupedBackground))
-            }
+        .sheet(isPresented: $showsOptions) {
+            optionsSheet.presentationBackground(Color(uiColor: .systemGroupedBackground))
         }
-        .sheet(isPresented: $showsOptions) { optionsSheet }
         .sheet(isPresented: $showsTimeSheet) {
             TripPlannerTimeSheet(time: model.time, isNow: model.now, arriveBy: model.arriveBy) { time, isNow, arriveBy in
                 model.arriveBy = arriveBy; model.now = isNow; model.time = time
             }
             .presentationDetents([.height(480)])
+            .presentationBackground(Color(uiColor: .systemGroupedBackground))
+        }
+    }
+    private var plannerNavigation: some View {
+        HStack(spacing: 12) {
+            Button { focused = nil; navigator.pop() } label: {
+                Image(systemName: "arrow.backward").frame(width: 44, height: 44)
+            }.accessibilityLabel("Back").accessibilityIdentifier("planner.back")
+            Text("Directions").font(.headline)
+            Spacer()
+            Button { focused = nil; navigator.home() } label: {
+                Image(systemName: "house").frame(width: 44, height: 44)
+            }.accessibilityLabel("Home")
         }
     }
     private func markScreenshotReady() {
 #if DEBUG || SCREENSHOT_AUTOMATION
         guard let screen = ScreenshotLaunchConfiguration.current.plannerScreen else { return }
-        ScreenshotReadiness.shared.setPlannerStatus("screen=\(screen) loading=\(model.loading) journeys=\(model.itineraries.count) details=\(model.details) selected=\(model.selected) error=\(model.error ?? "none")")
+        ScreenshotReadiness.shared.setPlannerStatus("screen=\(screen) fullscreen=\(fullscreen) loading=\(model.loading) journeys=\(model.itineraries.count) details=\(model.details) selected=\(model.selected) error=\(model.error ?? "none")")
         guard !model.loading else { return }
         if let error = model.error {
             ScreenshotReadiness.shared.failPlanner("Routing failed: \(error)")
@@ -188,6 +232,7 @@ struct TripPlannerScreen: View {
             set: { model.edit(origin, text: $0); performSearch(origin) }
         ))
         .focused($focused, equals: origin)
+        .textFieldStyle(.plain)
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
         .submitLabel(.search)
@@ -324,21 +369,28 @@ struct TripPlannerScreen: View {
                 connectionEdge(earlier: false)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .scrollBounceBehavior(.always)
+        .accessibilityIdentifier("planner.results")
         .coordinateSpace(name: "connections")
         .catenaryOnGeometryChange(for: CGFloat.self) { $0.size.height } action: { _, height in resultsHeight = height }
         .onPreferenceChange(JourneyBoundsKey.self) { bounds in
             visibleJourneys = bounds
             requestVisiblePage()
         }
-        .simultaneousGesture(DragGesture().onChanged { gesture in
-            guard abs(gesture.translation.height) > 20 else { return }
-            pagingDirection = gesture.translation.height > 0 ? .before : .after
+        .modifier(DirectionsResultsScrollObserver { delta in
+            guard !model.earlierLoading, !model.laterLoading else { return }
+            pagingDirection = delta > 0 ? .after : .before
             requestVisiblePage()
         })
         .catenaryOnChange(of: model.itineraries.map(\.identity)) { _, _ in
             if let pagingAnchor {
-                proxy.scrollTo(pagingAnchor, anchor: .top)
                 self.pagingAnchor = nil
+                pagingDirection = nil
+                Task { @MainActor in
+                    await Task.yield()
+                    proxy.scrollTo(pagingAnchor, anchor: .top)
+                }
             }
         }
         }
@@ -447,7 +499,12 @@ struct TripPlannerScreen: View {
         }
     }
     private var optionsSheet: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Travel options").font(.headline)
+                Spacer()
+                Button("Done") { showsOptions = false }.buttonStyle(.plain)
+            }.padding()
             Form {
                 Toggle("Cycle to and from transit", isOn: $model.options.cycling)
                 Section("Speed") {
@@ -462,9 +519,8 @@ struct TripPlannerScreen: View {
                     limit("Direct walk or cycle", value: $model.options.directSeconds)
                 }
             }
-            .navigationTitle("Travel options")
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showsOptions = false } } }
-        }
+            .scrollContentBackground(.hidden)
+        }.background(Color(uiColor: .systemGroupedBackground))
     }
     private func limit(_ title: String, value: Binding<Double>) -> some View {
         VStack(alignment: .leading) {
@@ -593,6 +649,37 @@ private struct DirectionsTimelineSegment: View {
 func directionsDurationLabel(_ seconds: Double) -> String {
     let minutes = Int(ceil(seconds / 60))
     return minutes >= 60 ? "\(minutes / 60) h \(minutes % 60) min" : "\(minutes) min"
+}
+
+/// Observe native scrolling (including momentum and pointer input), excluding programmatic anchoring.
+private struct DirectionsResultsScrollObserver: ViewModifier {
+    let onMovement: (CGFloat) -> Void
+    @State private var userScrolling = false
+    @State private var lastDragTranslation: CGFloat = 0
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content
+                .onScrollPhaseChange { _, phase in
+                    userScrolling = phase == .interacting || phase == .decelerating
+                }
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.contentOffset.y
+                } action: { oldOffset, newOffset in
+#if DEBUG || SCREENSHOT_AUTOMATION
+                    ScreenshotReadiness.shared.recordPlannerScrollOffset(Double(newOffset))
+#endif
+                    guard userScrolling, abs(newOffset - oldOffset) > 0.5 else { return }
+                    onMovement(newOffset - oldOffset)
+                }
+        } else {
+            content.simultaneousGesture(DragGesture().onChanged { gesture in
+                let delta = lastDragTranslation - gesture.translation.height
+                lastDragTranslation = gesture.translation.height
+                if abs(delta) > 0.5 { onMovement(delta) }
+            }.onEnded { _ in lastDragTranslation = 0 })
+        }
+    }
 }
 
 private struct JourneyBoundsKey: PreferenceKey {

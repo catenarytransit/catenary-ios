@@ -106,6 +106,14 @@ final class ScreenshotReadiness {
     private var signalScheduled = false
     private var signalSent = false
     private var plannerStatus = "Waiting for planner"
+    private var plannerScrollOffset = 0.0
+
+    func recordPlannerScrollOffset(_ offset: Double) {
+        lock.lock()
+        plannerScrollOffset = offset
+        writeStatusLocked()
+        lock.unlock()
+    }
 
     private init() {}
 
@@ -127,7 +135,7 @@ final class ScreenshotReadiness {
     private func writeStatusLocked() {
         guard ScreenshotLaunchConfiguration.current.plannerScreen != nil,
               let token = ScreenshotLaunchConfiguration.current.readyToken else { return }
-        let status = "\(plannerStatus)\ndrawerReady=\(drawerReady) mapReady=\(mapReady) signalSent=\(signalSent)\n"
+        let status = "\(plannerStatus)\nplannerScrollOffset=\(plannerScrollOffset)\ndrawerReady=\(drawerReady) mapReady=\(mapReady) signalSent=\(signalSent)\n"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("catenary-screenshot-status-\(token)")
         try? Data(status.utf8).write(to: url, options: .atomic)
     }

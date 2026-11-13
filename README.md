@@ -29,6 +29,9 @@ Manual simulator/device checks:
   shortcuts with location permission granted and denied.
 - Compare departure and arrive-by queries, walking and cycling limits, no-results
   and network-error states. Open a journey and expand intermediate stops.
+- Open Directions: endpoint search and results take over the full screen with an
+  opaque background and plain controls. Scroll in both directions; the map drawer
+  must not resize or intercept the gesture. Back/Home leave the planner.
 - Open a transit journey: details take over the full screen, with the journey summary,
   star and map buttons at the top. Switch to Map and back to List; the same selected
   journey and summary remain. Back returns to the result list.
@@ -55,7 +58,9 @@ The run summary links to the artifact. These inject the live Santa Monica → UC
 `Tests/TripPlanner/screenshot-route.json` (fixed departure epoch `1794598300`),
 wait for routing completion and map rendering, and
 reopen the same saved results for ranks 1–3. Automatic pagination is suspended
-for this capture so the ranks stay fixed. A backend error or fewer than three
+for this capture so the ranks stay fixed. The simulator also swipes the fullscreen
+results in both directions and verifies that the settled content offset changes
+downward and then upward, rather than merely bouncing or resizing the drawer. A backend error or fewer than three
 journeys fails the capture instead of producing loading/empty-state images.
 
 Debug/screenshot builds accept `--ci-screenshot-planner results` together with
