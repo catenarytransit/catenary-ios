@@ -86,10 +86,18 @@ struct TripPlannerScreen: View {
     }
     private func markScreenshotReady() {
 #if DEBUG || SCREENSHOT_AUTOMATION
-        guard let screen = ScreenshotLaunchConfiguration.current.plannerScreen,
-              !model.loading, model.error == nil, model.itineraries.count >= 3,
-              screen == "results" ? !model.details : model.details && model.selected == (Int(screen) ?? 0) - 1
-        else { return }
+        guard let screen = ScreenshotLaunchConfiguration.current.plannerScreen else { return }
+        ScreenshotReadiness.shared.setPlannerStatus("screen=\(screen) loading=\(model.loading) journeys=\(model.itineraries.count) details=\(model.details) selected=\(model.selected) error=\(model.error ?? "none")")
+        guard !model.loading else { return }
+        if let error = model.error {
+            ScreenshotReadiness.shared.failPlanner("Routing failed: \(error)")
+            return
+        }
+        guard model.itineraries.count >= 3 else {
+            ScreenshotReadiness.shared.failPlanner("Routing returned \(model.itineraries.count) journeys; need at least three")
+            return
+        }
+        guard screen == "results" ? !model.details : model.details && model.selected == (Int(screen) ?? 0) - 1 else { return }
         // Route layers and the camera fit are installed on the next SwiftUI update.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             ScreenshotReadiness.shared.markPlannerReady()

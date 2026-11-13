@@ -3,6 +3,21 @@ import Foundation
 // Ported from catenary-compose TripPlannerStreaming.kt. Keep the wire contract shared with Edelweiss.
 enum ConnectionDirection { case before, after }
 
+struct DirectionsRouteEnvelope: Codable {
+    let type: String
+    let requestId: String
+    var query: DirectionsRequest
+
+    static func decode(_ data: Data) throws -> Self {
+        let envelope = try JSONDecoder().decode(Self.self, from: data)
+        guard envelope.type == "route", !envelope.requestId.isEmpty,
+              envelope.query.request_id == nil || envelope.query.request_id == envelope.requestId else {
+            throw DirectionsError.invalidRequest
+        }
+        return envelope
+    }
+}
+
 /// Copies `base` with cursor/count fields for one page. Matches the web's page sizes: 8 on the
 /// first call, 4 earlier / 5 later on follow-up pages.
 func directionsPageQuery(base: DirectionsRequest, direction: ConnectionDirection, cursor: String? = nil, requestId: String) -> DirectionsRequest {
@@ -127,7 +142,12 @@ enum DirectionsStreaming {
                 try await Task.sleep(nanoseconds: 45_000_000_000)
                 throw DirectionsStreamError.timeout
             }
-            defer { group.cancelAll() }
+            // URLSession receive can remain suspended after Task cancellation.
+            // Close the socket before the group waits for its cancelled children.
+            defer {
+                group.cancelAll()
+                task.cancel(with: .goingAway, reason: nil)
+            }
             return try await group.next() ?? false
         }
         guard completed else { throw DirectionsStreamError.timeout }
@@ -152,10 +172,8 @@ enum DirectionsStreaming {
     }
 
     private static func buildEnvelope(query: DirectionsRequest, requestId: String) throws -> String {
-        let queryData = try JSONEncoder().encode(query)
-        let queryObject = try JSONSerialization.jsonObject(with: queryData)
-        let envelope: [String: Any] = ["type": "route", "requestId": requestId, "query": queryObject]
-        let data = try JSONSerialization.data(withJSONObject: envelope)
+        let envelope = DirectionsRouteEnvelope(type: "route", requestId: requestId, query: query)
+        let data = try JSONEncoder().encode(envelope)
         return String(decoding: data, as: UTF8.self)
     }
 }

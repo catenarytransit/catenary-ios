@@ -3,6 +3,26 @@ import Foundation
 func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
     precondition(condition(), message)
 }
+// Exercise the exact CI injection fixture, including every query field after re-encoding.
+let screenshotData = try Data(contentsOf: URL(fileURLWithPath: "Tests/TripPlanner/screenshot-route.json"))
+let screenshotEnvelope = try DirectionsRouteEnvelope.decode(screenshotData)
+let screenshotRoundTrip = try JSONSerialization.jsonObject(with: JSONEncoder().encode(screenshotEnvelope)) as! NSDictionary
+let screenshotOriginal = try JSONSerialization.jsonObject(with: screenshotData) as! NSDictionary
+expect(screenshotRoundTrip == screenshotOriginal, "Screenshot injection preserves the complete wire request")
+expect(screenshotEnvelope.query.departure_unix_seconds == 1794598300, "Fixed screenshot departure")
+var invalidEnvelope = screenshotOriginal as! [String: Any]
+invalidEnvelope["type"] = "cancel"
+do {
+    _ = try DirectionsRouteEnvelope.decode(JSONSerialization.data(withJSONObject: invalidEnvelope))
+    fatalError("Non-route screenshot envelope accepted")
+} catch DirectionsError.invalidRequest { }
+invalidEnvelope["type"] = "route"
+invalidEnvelope["requestId"] = "mismatched-id"
+do {
+    _ = try DirectionsRouteEnvelope.decode(JSONSerialization.data(withJSONObject: invalidEnvelope))
+    fatalError("Mismatched screenshot request IDs accepted")
+} catch DirectionsError.invalidRequest { }
+
 let origin = DirectionsLocation(name: "Irvine", lat: 33.64, lon: -117.84)
 let destination = DirectionsLocation(name: "Los Angeles", lat: 34.05, lon: -118.24)
 let date = Date(timeIntervalSince1970: 1794000000)

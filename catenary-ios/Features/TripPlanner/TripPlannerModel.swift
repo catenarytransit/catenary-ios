@@ -180,16 +180,16 @@ final class TripPlannerModel: ObservableObject {
         details = true
         editing = nil
     }
-    func search(session: URLSession = .shared) {
+    func search(session: URLSession = .shared, queryOverride: DirectionsRequest? = nil) {
         guard let origin, let destination else { return }
         invalidate(); searched = true; loading = true; editing = nil
         let token = generation
         do {
-            let base = try DirectionsRequest(from: origin, to: destination, date: now ? Date() : time, arriveBy: arriveBy, options: options)
+            let base = try queryOverride ?? DirectionsRequest(from: origin, to: destination, date: now ? Date() : time, arriveBy: arriveBy, options: options)
             baseQuery = base
             let direction: ConnectionDirection = arriveBy ? .before : .after
-            let requestId = "catenary-ios-\(UUID().uuidString)"
-            let query = directionsPageQuery(base: base, direction: direction, requestId: requestId)
+            let requestId = queryOverride?.request_id ?? "catenary-ios-\(UUID().uuidString)"
+            let query = queryOverride ?? directionsPageQuery(base: base, direction: direction, requestId: requestId)
             request = Task { @MainActor [weak self] in
                 guard let self else { return }
                 do {

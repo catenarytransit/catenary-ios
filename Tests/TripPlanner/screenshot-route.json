@@ -1,0 +1,32 @@
+{
+  "type": "route",
+  "requestId": "catenary-web-1794598300999-1",
+  "query": {
+    "from": {
+      "lat": 34.019470399999996,
+      "lon": -118.491227
+    },
+    "to": {
+      "lat": 34.070157271985906,
+      "lon": -118.44577993421532
+    },
+    "departure_unix_seconds": 1794598300,
+    "preTransitModes": [
+      "WALK"
+    ],
+    "postTransitModes": [
+      "WALK"
+    ],
+    "pedestrianSpeed": 1.1904761904761905,
+    "cyclingSpeed": 4.444444444444445,
+    "maxPreTransitTime": 900,
+    "maxPostTransitTime": 900,
+    "maxDirectTime": 1800,
+    "detailed_legs": true,
+    "timetable_view": true,
+    "timeout_seconds": 8,
+    "number_of_results_before": 0,
+    "number_of_results_after": 8,
+    "request_id": "catenary-web-1794598300999-1"
+  }
+}

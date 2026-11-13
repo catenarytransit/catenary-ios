@@ -31,6 +31,7 @@ struct ScreenshotLaunchConfiguration {
     let readyToken: String?
     // "results" starts a fresh live search; 1...3 reopen that exact saved result set.
     let plannerScreen: String?
+    let plannerQueryPath: String?
 
     init(arguments: [String]) {
         userCoordinate = Self.coordinate(
@@ -41,6 +42,7 @@ struct ScreenshotLaunchConfiguration {
         )
         deepLink = Self.value(after: "--ci-screenshot-deep-link", in: arguments)
             .flatMap { URL(string: $0) }
+        plannerQueryPath = Self.value(after: "--ci-screenshot-planner-query", in: arguments)
         plannerScreen = Self.value(after: "--ci-screenshot-planner", in: arguments)
             .flatMap { ["results", "1", "2", "3"].contains($0) ? $0 : nil }
         readyToken = Self.value(after: "--ci-screenshot-ready-token", in: arguments)
@@ -103,8 +105,32 @@ final class ScreenshotReadiness {
     private var mapReady = false
     private var signalScheduled = false
     private var signalSent = false
+    private var plannerStatus = "Waiting for planner"
 
     private init() {}
+
+    func failPlanner(_ message: String) {
+        guard let token = ScreenshotLaunchConfiguration.current.readyToken else { return }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("catenary-screenshot-error-\(token)")
+        try? Data(message.utf8).write(to: url, options: .atomic)
+        setPlannerStatus("Failed: \(message)")
+    }
+
+    func setPlannerStatus(_ message: String) {
+        lock.lock()
+        plannerStatus = message
+        writeStatusLocked()
+        lock.unlock()
+    }
+
+    // Called under the readiness lock; the atomic file is read by the CI runner.
+    private func writeStatusLocked() {
+        guard ScreenshotLaunchConfiguration.current.plannerScreen != nil,
+              let token = ScreenshotLaunchConfiguration.current.readyToken else { return }
+        let status = "\(plannerStatus)\ndrawerReady=\(drawerReady) mapReady=\(mapReady) signalSent=\(signalSent)\n"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("catenary-screenshot-status-\(token)")
+        try? Data(status.utf8).write(to: url, options: .atomic)
+    }
 
     func markDrawerReady() {
         guard ScreenshotLaunchConfiguration.current.plannerScreen == nil else { return }
@@ -122,6 +148,7 @@ final class ScreenshotReadiness {
     func invalidateMapReady() {
         lock.lock()
         mapReady = false
+        writeStatusLocked()
         lock.unlock()
     }
 
@@ -130,6 +157,7 @@ final class ScreenshotReadiness {
 
         lock.lock()
         mutation()
+        writeStatusLocked()
         let shouldSchedule = drawerReady && mapReady && !signalScheduled && !signalSent
         if shouldSchedule {
             signalScheduled = true

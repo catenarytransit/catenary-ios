@@ -156,12 +156,29 @@ class viewObject: ObservableObject {
 #if DEBUG || SCREENSHOT_AUTOMATION
         let configuration = ScreenshotLaunchConfiguration.current
         if let screen = configuration.plannerScreen {
-            if screen == "results" {
-                tripPlanner.choose(true, location: DirectionsLocation(name: "Los Angeles Union Station", lat: 34.0562, lon: -118.2365))
-                tripPlanner.choose(false, location: DirectionsLocation(name: "Santa Monica Pier", lat: 34.0100, lon: -118.4960))
-                tripPlanner.search()
-            } else if let rank = Int(screen), tripPlanner.itineraries.indices.contains(rank - 1) {
-                tripPlanner.selectJourney(tripPlanner.itineraries[rank - 1])
+            do {
+                if screen == "results" {
+                    guard let path = configuration.plannerQueryPath else { throw DirectionsError.invalidRequest }
+                    let envelope = try DirectionsRouteEnvelope.decode(Data(contentsOf: URL(fileURLWithPath: path)))
+                    var query = envelope.query
+                    query.request_id = envelope.requestId
+                    tripPlanner.choose(true, location: DirectionsLocation(name: "Santa Monica", lat: query.from.lat, lon: query.from.lon))
+                    tripPlanner.choose(false, location: DirectionsLocation(name: "UCLA", lat: query.to.lat, lon: query.to.lon))
+                    tripPlanner.options = DirectionsOptions(cycling: query.preTransitModes.contains("BIKE"),
+                        walkingPace: 1000 / query.pedestrianSpeed, cyclingKmh: query.cyclingSpeed * 3.6,
+                        accessSeconds: Double(query.maxPreTransitTime), egressSeconds: Double(query.maxPostTransitTime),
+                        directSeconds: Double(query.maxDirectTime))
+                    tripPlanner.now = false
+                    tripPlanner.arriveBy = query.arrival_unix_seconds != nil
+                    tripPlanner.time = Date(timeIntervalSince1970: Double(query.arrival_unix_seconds ?? query.departure_unix_seconds ?? 0))
+                    tripPlanner.search(queryOverride: query)
+                } else if let rank = Int(screen), tripPlanner.itineraries.indices.contains(rank - 1) {
+                    tripPlanner.selectJourney(tripPlanner.itineraries[rank - 1])
+                } else {
+                    ScreenshotReadiness.shared.failPlanner("Saved screenshot session is missing journey \(screen)")
+                }
+            } catch {
+                ScreenshotReadiness.shared.failPlanner("Cannot load routing query: \(error)")
             }
             push(.tripPlanner)
             presDetent = .large
