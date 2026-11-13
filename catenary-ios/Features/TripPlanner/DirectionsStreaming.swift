@@ -1,7 +1,7 @@
 import Foundation
 
 // Ported from catenary-compose TripPlannerStreaming.kt. Keep the wire contract shared with Edelweiss.
-enum ConnectionDirection { case before, after }
+enum ConnectionDirection: Equatable, Sendable { case before, after }
 
 func directionsPageAtEdge(direction: ConnectionDirection?, firstVisible: Int?, lastVisible: Int?, count: Int) -> ConnectionDirection? {
     guard count > 0 else { return nil }

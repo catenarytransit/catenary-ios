@@ -70,7 +70,10 @@ struct TripPlannerScreen: View {
             if loading { pagingAnchor = nil; pagingDirection = nil }
             markScreenshotReady()
         }
-        .onDisappear { if !model.details { model.leave() }; search.reset() }
+        .onDisappear {
+            if navigator.currentStackItem != .tripPlanner { model.leave() }
+            search.reset()
+        }
         .catenaryOnChange(of: focused) { _, endpoint in
             if let endpoint { model.beginEditing(endpoint); navigator.presDetent = .large; performSearch(endpoint) }
         }
@@ -552,6 +555,7 @@ struct JourneyPreview: View {
 }
 
 private struct DirectionsTimelineSegment: View {
+    @Environment(\.colorScheme) private var colorScheme
     let leg: DirectionsLeg
     let trailing: Bool
     var body: some View {
@@ -565,14 +569,14 @@ private struct DirectionsTimelineSegment: View {
                         var x = radius
                         while x + radius <= size.width {
                             let dot = Path(ellipseIn: CGRect(x: x - radius, y: size.height / 2 - radius, width: radius * 2, height: radius * 2))
-                            context.fill(dot, with: .color(leg.color))
+                            context.fill(dot, with: .color(leg.railColor(for: colorScheme)))
                             x += spacing
                         }
                     } else {
                         var line = Path()
                         line.move(to: CGPoint(x: 0, y: size.height / 2))
                         line.addLine(to: CGPoint(x: size.width, y: size.height / 2))
-                        context.stroke(line, with: .color(leg.color), lineWidth: 2)
+                        context.stroke(line, with: .color(leg.railColor(for: colorScheme)), lineWidth: 2)
                     }
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 if trailing && leg.street { LegModeIcon(leg: leg, preview: true) }
@@ -652,13 +656,7 @@ private struct DirectionsLegView: View {
     let leg: DirectionsLeg
     @State private var expanded = false
     @Environment(\.colorScheme) private var colorScheme
-    private var rail: Color {
-        if leg.street { return .secondary }
-        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
-        leg.uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-        let brightness = 0.2126 * red + 0.7152 * green + 0.0722 * blue
-        return (colorScheme == .light && brightness > 0.85) || (colorScheme == .dark && brightness < 0.2) ? .primary : leg.color
-    }
+    private var rail: Color { leg.railColor(for: colorScheme) }
     private var shortenStation: Bool {
         let names = [leg.from?.name] + (leg.intermediateStops ?? []).map(\.name) + [leg.to?.name]
         return [0, 1, 2].contains(leg.routeType ?? -1) && names.allSatisfy { $0?.hasSuffix(" Station") == true }
@@ -739,8 +737,20 @@ extension DirectionsLeg {
     }
     var badge: some View { routeBadge() }
     func routeBadge(compact: Bool = false) -> some View {
-        TransitRouteBadge(shortName: routeShortName ?? routeId, longName: routeLongName,
+        func label(_ value: String?) -> String? {
+            guard let value else { return nil }
+            return compact ? value.trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "(?i)(?:\\s+\\b(?:line|branch))+$", with: "", options: .regularExpression) : value
+        }
+        return TransitRouteBadge(shortName: label(routeShortName ?? (routeLongName == nil ? routeId : nil)), longName: label(routeLongName),
             colorHex: routeColor, textColorHex: routeTextColor, chateauID: chateau, compact: compact)
+    }
+    func railColor(for scheme: ColorScheme) -> Color {
+        if street { return .secondary }
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        let brightness = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+        return (scheme == .light && brightness > 0.85) || (scheme == .dark && brightness < 0.2) ? .primary : color
     }
     var color: Color { Color(uiColor: uiColor) }
     var uiColor: UIColor {
