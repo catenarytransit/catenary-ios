@@ -56,7 +56,8 @@ The **iOS Screenshots** workflow runs on pull requests to `main`/`dev`, pushes t
 artifact includes `routing/01-trip-planning.png` and three journey detail PNGs.
 The run summary links to the artifact. These inject the live Santa Monica → UCLA request in
 `Tests/TripPlanner/screenshot-route.json` (fixed departure epoch `1794598300`),
-wait for routing completion and map rendering, and
+wait for routing completion and fullscreen presentation (map rendering is required
+when the captured view actually shows the map), and
 reopen the same saved results for ranks 1–3. Automatic pagination is suspended
 for this capture so the ranks stay fixed. The simulator also swipes the fullscreen
 results in both directions and verifies that the settled content offset changes

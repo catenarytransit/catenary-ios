@@ -103,6 +103,7 @@ final class ScreenshotReadiness {
     private let lock = NSLock()
     private var drawerReady = false
     private var mapReady = false
+    private var plannerRequiresMap = true
     private var signalScheduled = false
     private var signalSent = false
     private var plannerStatus = "Waiting for planner"
@@ -135,7 +136,7 @@ final class ScreenshotReadiness {
     private func writeStatusLocked() {
         guard ScreenshotLaunchConfiguration.current.plannerScreen != nil,
               let token = ScreenshotLaunchConfiguration.current.readyToken else { return }
-        let status = "\(plannerStatus)\nplannerScrollOffset=\(plannerScrollOffset)\ndrawerReady=\(drawerReady) mapReady=\(mapReady) signalSent=\(signalSent)\n"
+        let status = "\(plannerStatus)\nplannerScrollOffset=\(plannerScrollOffset)\ndrawerReady=\(drawerReady) mapReady=\(mapReady) mapRequired=\(plannerRequiresMap) signalSent=\(signalSent)\n"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("catenary-screenshot-status-\(token)")
         try? Data(status.utf8).write(to: url, options: .atomic)
     }
@@ -145,8 +146,11 @@ final class ScreenshotReadiness {
         update { drawerReady = true }
     }
 
-    func markPlannerReady() {
-        update { drawerReady = true }
+    func markPlannerReady(requiresMap: Bool = true) {
+        update {
+            drawerReady = true
+            plannerRequiresMap = requiresMap
+        }
     }
 
     func markMapReady() {
@@ -166,7 +170,7 @@ final class ScreenshotReadiness {
         lock.lock()
         mutation()
         writeStatusLocked()
-        let shouldSchedule = drawerReady && mapReady && !signalScheduled && !signalSent
+        let shouldSchedule = drawerReady && (!plannerRequiresMap || mapReady) && !signalScheduled && !signalSent
         if shouldSchedule {
             signalScheduled = true
         }
@@ -184,7 +188,7 @@ final class ScreenshotReadiness {
 
     private func emitIfStillReady() {
         lock.lock()
-        guard drawerReady, mapReady, !signalSent,
+        guard drawerReady, !plannerRequiresMap || mapReady, !signalSent,
               let token = ScreenshotLaunchConfiguration.current.readyToken else {
             signalScheduled = false
             lock.unlock()

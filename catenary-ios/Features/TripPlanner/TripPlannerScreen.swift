@@ -26,7 +26,9 @@ struct TripPlannerPresentation: View {
                     .background(Color(uiColor: .systemGroupedBackground))
             }
         }
-        .onAppear { model.open(currentLocation: locationManager.lastKnownLocation) }
+        .onAppear {
+            if !model.mapState.visible { model.open(currentLocation: locationManager.lastKnownLocation) }
+        }
         .onDisappear {
             if navigator.currentStackItem != .tripPlanner { model.leave() }
         }
@@ -167,7 +169,7 @@ struct TripPlannerScreen: View {
         guard screen == "results" ? !model.details : model.details && model.selected == (Int(screen) ?? 0) - 1 else { return }
         // Route layers and the camera fit are installed on the next SwiftUI update.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            ScreenshotReadiness.shared.markPlannerReady()
+            ScreenshotReadiness.shared.markPlannerReady(requiresMap: !fullscreen)
         }
 #endif
     }
