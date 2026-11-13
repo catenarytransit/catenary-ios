@@ -138,3 +138,23 @@ let unclampedJSON = try JSONSerialization.jsonObject(with: JSONEncoder().encode(
 expect(unclampedJSON["timetable_view"] as? Bool == true && unclampedJSON["timeout_seconds"] as? Int == 8, "New Edelweiss contract fields are always sent")
 
 print("Trip planner pagination, streaming, and wire-contract fixtures passed")
+
+// Dense train interchanges keep internal walks compact, while substantial transfers stay visible.
+let railLeg = DirectionsLeg(mode: "RAIL", duration: 600, routeType: 2)
+let internalWalk = DirectionsLeg(mode: "WALK", duration: 360)
+let transferJourney = DirectionsItinerary(startTime: "2099-01-01T10:00:00Z", endTime: "2099-01-01T11:00:00Z",
+    legs: [railLeg, internalWalk, railLeg])
+expect(transferJourney.previewLegs.count == 2, "Six-minute internal train transfer is hidden")
+var longerTransfer = transferJourney
+longerTransfer.legs[1].duration = 480
+expect(longerTransfer.previewLegs.count == 3, "Eight-minute train transfer stays visible")
+let transferWidths = directionsTimelineWidths(longerTransfer.legs, width: 124)
+expect(transferWidths == [48, 28, 48], "Walking transfer reserves less width than train badges")
+let narrowWidths = directionsTimelineWidths(longerTransfer.legs, width: 62)
+expect(narrowWidths == [24, 14, 24], "Narrow timeline scales minimum widths proportionally")
+expect(transferJourney.canBeSaved && !firstPage.journeys[0].canBeSaved, "Only future journeys can be newly starred")
+do {
+    _ = try DirectionsStreamState(requestId: "missing").accept(DirectionsStreamMessage(type: "complete", requestId: "missing", sequence: nil, response: nil, message: nil))
+    fatalError("Missing authoritative final response accepted")
+} catch let error as URLError { expect(error.code == .cannotParseResponse, "Malformed completion is a transport failure") }
+print("Compact transfers, save eligibility, and malformed completion checks passed")

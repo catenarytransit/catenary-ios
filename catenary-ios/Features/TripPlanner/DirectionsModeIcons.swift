@@ -85,7 +85,7 @@ struct DirectionsModeGlyph: View {
             let scale = min(size.width, size.height) / 24
             let transform = CGAffineTransform(scaleX: scale, y: scale)
             for d in paths {
-                context.fill(svgPath(d).applying(transform), with: .color(.white))
+                context.fill(svgPath(d).applying(transform), with: .foreground)
             }
         }
     }

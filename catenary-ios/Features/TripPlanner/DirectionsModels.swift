@@ -65,6 +65,7 @@ struct DirectionsItinerary: Codable, Equatable, Sendable {
     var legs: [DirectionsLeg]
     var id: String?
     var seconds: Double { directionsDuration(duration, startTime, endTime) }
+    var canBeSaved: Bool { (directionsDate(endTime) ?? .distantPast) > Date() }
     /// Stable key for dedup/selection across pages; falls back to a structural fingerprint when the backend omits `id`.
     var identity: String {
         if let id, !id.isEmpty { return id }

@@ -20,6 +20,16 @@ struct TripPlannerScreen: View {
     @State private var showsTimeSheet = false
     @State private var recent: [DirectionsLocation] = []
     @State private var skeletonPulse = false
+    @State private var pagingDirection: ConnectionDirection?
+    @State private var visibleJourneys: [String: CGRect] = [:]
+    @State private var resultsHeight: CGFloat = 0
+    @State private var pagingAnchor: String?
+
+    private var fullscreenDetails: Binding<Bool> {
+        Binding(get: { model.details && !model.usingMap }, set: { presented in
+            if !presented && !model.usingMap { model.details = false }
+        })
+    }
     @AppStorage("usUnits") private var usUnits = false
     private let recentKey = "tripPlanner.recent.v1"
 
@@ -46,7 +56,7 @@ struct TripPlannerScreen: View {
             } else if let editing = model.editing {
                 endpointSearch(editing)
             } else if model.details, let itinerary = model.chosen {
-                if model.usingMap { mapModeHeader(itinerary) } else { details(itinerary) }
+                mapModeHeader(itinerary)
             } else {
                 results
             }
@@ -56,8 +66,11 @@ struct TripPlannerScreen: View {
             model.open(currentLocation: locationManager.lastKnownLocation); loadRecent()
             markScreenshotReady()
         }
-        .catenaryOnChange(of: model.loading) { _, _ in markScreenshotReady() }
-        .onDisappear { model.leave(); search.reset() }
+        .catenaryOnChange(of: model.loading) { _, loading in
+            if loading { pagingAnchor = nil; pagingDirection = nil }
+            markScreenshotReady()
+        }
+        .onDisappear { if !model.details { model.leave() }; search.reset() }
         .catenaryOnChange(of: focused) { _, endpoint in
             if let endpoint { model.beginEditing(endpoint); navigator.presDetent = .large; performSearch(endpoint) }
         }
@@ -68,13 +81,20 @@ struct TripPlannerScreen: View {
             model.resolveCurrentOrigin(locationManager.lastKnownLocation)
         }
         .catenaryOnChange(of: model.usingMap) { _, usingMap in
-            navigator.presDetent = usingMap ? .height(160) : .height(350)
+            navigator.presDetent = .height(350)
         }
         .task(id: debounceKey) {
             guard model.canSearch, !model.searched else { return }
             try? await Task.sleep(nanoseconds: 300_000_000)
             guard !Task.isCancelled, model.canSearch, !model.searched else { return }
             model.search()
+        }
+        .fullScreenCover(isPresented: fullscreenDetails) {
+            if let itinerary = model.chosen {
+                details(itinerary)
+                    .foregroundStyle(Color.primary)
+                    .background(Color(uiColor: .systemGroupedBackground))
+            }
         }
         .sheet(isPresented: $showsOptions) { optionsSheet }
         .sheet(isPresented: $showsTimeSheet) {
@@ -267,6 +287,7 @@ struct TripPlannerScreen: View {
         return date.formatted(date: .complete, time: .omitted)
     }
     private var results: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             LazyVStack(spacing: 8) {
                 if let error = model.error {
@@ -292,17 +313,49 @@ struct TripPlannerScreen: View {
                         } label: { JourneyPreview(itinerary: itinerary) }
                         .buttonStyle(.plain)
                     }
-                    .onAppear {
-                        guard !model.screenshotAutomation else { return }
-                        if index <= 1, model.canLoadEarlier { model.loadConnections(earlier: true) }
-                        if index >= model.itineraries.count - 2, model.canLoadLater { model.loadConnections(earlier: false) }
-                    }
+                    .background(GeometryReader { geometry in
+                        Color.clear.preference(key: JourneyBoundsKey.self,
+                            value: [itinerary.identity: geometry.frame(in: .named("connections"))])
+                    })
                 }
                 connectionEdge(earlier: false)
             }
         }
+        .coordinateSpace(name: "connections")
+        .catenaryOnGeometryChange(for: CGFloat.self) { $0.size.height } action: { _, height in resultsHeight = height }
+        .onPreferenceChange(JourneyBoundsKey.self) { bounds in
+            visibleJourneys = bounds
+            requestVisiblePage()
+        }
+        .simultaneousGesture(DragGesture().onChanged { gesture in
+            guard abs(gesture.translation.height) > 20 else { return }
+            pagingDirection = gesture.translation.height > 0 ? .before : .after
+            requestVisiblePage()
+        })
+        .catenaryOnChange(of: model.itineraries.first?.identity) { _, _ in
+            if let pagingAnchor {
+                proxy.scrollTo(pagingAnchor, anchor: .top)
+                self.pagingAnchor = nil
+            }
+        }
+        }
     }
-    /// Busy/retry indicator at a results edge; pagination itself is triggered by the nearby rows' onAppear.
+    private func requestVisiblePage() {
+        guard !model.screenshotAutomation, model.error == nil, !model.loading else { return }
+        let visible = model.itineraries.indices.filter {
+            guard let frame = visibleJourneys[model.itineraries[$0].identity] else { return false }
+            return frame.maxY > 0 && frame.minY < resultsHeight
+        }
+        if pagingDirection == .before, (visible.first ?? Int.max) <= 1, model.canLoadEarlier {
+            pagingAnchor = visible.first.map { model.itineraries[$0].identity }
+            pagingDirection = nil
+            model.loadConnections(earlier: true)
+        } else if pagingDirection == .after, (visible.last ?? -1) >= model.itineraries.count - 2, model.canLoadLater {
+            pagingDirection = nil
+            model.loadConnections(earlier: false)
+        }
+    }
+    /// Retrying a failed page keeps the current results and cursor intact.
     private func connectionEdge(earlier: Bool) -> some View {
         let busy = earlier ? model.earlierLoading : model.laterLoading
         let canRetry = model.error != nil && (earlier ? model.canLoadEarlier : model.canLoadLater)
@@ -327,36 +380,64 @@ struct TripPlannerScreen: View {
             withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) { skeletonPulse = true }
         }
     }
-    /// Walk/bike-only journeys and the Map toggle collapse the drawer to a thin header over the persistent map layers.
+    /// The same summary and controls remain available above the map and in fullscreen details.
     private func mapModeHeader(_ itinerary: DirectionsItinerary) -> some View {
-        VStack(spacing: 8) {
-            HStack {
-                Button { model.details = false } label: { Label("Journeys", systemImage: "chevron.backward") }
-                Spacer()
-                if !model.streetOnly {
-                    Button { model.mapMode = false } label: { Label("List", systemImage: "list.bullet") }
-                }
-            }
-            JourneyPreview(itinerary: itinerary, compact: true)
+        VStack {
+            journeySummary(itinerary)
             Spacer(minLength: 0)
         }
     }
-    private func details(_ itinerary: DirectionsItinerary) -> some View {
-        VStack(spacing: 8) {
-            HStack {
-                Button { model.details = false } label: { Label("Journeys", systemImage: "chevron.backward") }
-                Spacer()
-                Button { model.mapMode = true } label: { Label("Map", systemImage: "map") }
-                Toggle("Transfer stops", isOn: $model.showTransfers).font(.caption).fixedSize()
+    private func summaryAction(_ label: String, icon: String, enabled: Bool = true, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.system(size: 20))
+                .frame(width: 44, height: 44)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: Circle())
+                .overlay(Circle().strokeBorder(Color.primary.opacity(0.15)))
+                .shadow(color: .black.opacity(0.12), radius: 2, y: 2)
+        }
+        .buttonStyle(.plain).foregroundStyle(Color.primary)
+        .accessibilityLabel(label).disabled(!enabled)
+    }
+    private func journeySummary(_ itinerary: DirectionsItinerary) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            summaryAction("Journeys", icon: "arrow.backward") { model.details = false }
+            VStack(alignment: .leading, spacing: 0) {
+                Text("\(model.originText) → \(model.destinationText)")
+                    .font(.headline).lineLimit(2).padding(.horizontal, 12).padding(.top, 12)
+                JourneyPreview(itinerary: itinerary)
+                Color.clear.frame(height: 12)
             }
-            JourneyPreview(itinerary: itinerary, compact: navigator.presDetent == .large)
+            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+            .overlay(alignment: .bottomLeading) {
+                HStack(spacing: 12) {
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        let saved = model.savedJourneys[itinerary.identity] != nil
+                        summaryAction(saved ? "Unsave journey" : "Save journey", icon: saved ? "star.fill" : "star",
+                            enabled: !model.savingJourney && (saved || itinerary.canBeSaved)) { model.toggleSavedJourney() }
+                    }
+                    if !model.streetOnly {
+                        summaryAction(model.usingMap ? "List" : "Map", icon: model.usingMap ? "list.bullet" : "map") {
+                            model.mapMode.toggle()
+                        }
+                    }
+                }.padding(.leading, 12).offset(y: 22)
+            }
+            .padding(.bottom, 22)
+            if let error = model.saveError { Text(error).font(.caption).foregroundStyle(.red) }
+        }
+    }
+    private func details(_ itinerary: DirectionsItinerary) -> some View {
+        VStack(spacing: 4) {
+            journeySummary(itinerary).padding(.horizontal, 20).padding(.top, 4)
             ScrollView {
                 let legs = itinerary.detailLegs
                 LazyVStack(alignment: .leading, spacing: 12) {
+                    DirectionsJourneyEndpoint(name: model.originText, first: true)
                     ForEach(legs.indices, id: \.self) { index in
                         DirectionsLegView(leg: legs[index])
                     }
-                }.padding(.bottom)
+                    DirectionsJourneyEndpoint(name: model.destinationText, first: false)
+                }.padding(12)
             }
         }
     }
@@ -438,8 +519,8 @@ struct JourneyPreview: View {
             if !compact {
                 GeometryReader { proxy in
                     let legs = itinerary.previewLegs
-                    let width = max(proxy.size.width, CGFloat(legs.count) * 64)
-                    let widths = directionsTimelineWidths(legs, width: Double(width), minimum: 64)
+                    let width = max(proxy.size.width, CGFloat(directionsTimelineMinimums(legs).reduce(0, +)))
+                    let widths = directionsTimelineWidths(legs, width: Double(width))
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 0) {
                             ForEach(legs.indices, id: \.self) { index in
@@ -448,7 +529,7 @@ struct JourneyPreview: View {
                             }
                         }
                     }
-                }.frame(height: 58).transition(.opacity)
+                }.frame(height: 44).transition(.opacity)
             }
         }
         .padding(10)
@@ -494,11 +575,11 @@ private struct DirectionsTimelineSegment: View {
                 if trailing && leg.street { LegModeIcon(leg: leg, preview: true) }
             }.frame(height: 22)
             if leg.street {
-                Text("\(Int(ceil(leg.seconds / 60)))′" + (directionsDistance(leg).map { " · " + directionsFormattedDistance($0) } ?? ""))
-                    .font(.caption2).foregroundStyle(.secondary).lineLimit(2)
-            } else { leg.badge }
+                Text("\(Int(ceil(leg.seconds / 60)))′")
+                    .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+            } else { leg.routeBadge(compact: true) }
             Spacer(minLength: 0)
-        }.padding(.trailing, 4)
+        }.padding(.trailing, 4).clipped().foregroundStyle(Color.primary)
     }
 }
 
@@ -507,45 +588,138 @@ func directionsDurationLabel(_ seconds: Double) -> String {
     return minutes >= 60 ? "\(minutes / 60) h \(minutes % 60) min" : "\(minutes) min"
 }
 
+private struct JourneyBoundsKey: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
+/// Every row stretches its rail to its measured height, including wrapped station names.
+private struct DirectionsConnectionRow<Content: View>: View {
+    var color: Color = .primary
+    var time = ""
+    var platform: String? = nil
+    var pearl = false
+    var first = false
+    var last = false
+    var dotted = false
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(time).font(.system(size: 14, weight: .bold)).monospacedDigit()
+                .frame(width: 60, alignment: .trailing)
+            Color.clear.frame(width: 20)
+                .overlay(GeometryReader { geometry in
+                    Canvas { context, size in
+                        let x = size.width / 2
+                        var path = Path()
+                        path.move(to: CGPoint(x: x, y: first ? size.height / 2 : 0))
+                        path.addLine(to: CGPoint(x: x, y: last ? size.height / 2 : size.height))
+                        context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: 2, dash: dotted ? [2, 4] : []))
+                        if pearl {
+                            context.fill(Path(ellipseIn: CGRect(x: x - 4, y: size.height / 2 - 4, width: 8, height: 8)), with: .color(color))
+                        }
+                    }.frame(height: geometry.size.height)
+                })
+            content().frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 3)
+            if let platform, !platform.isEmpty {
+                Text(platform).font(.caption).frame(maxWidth: 48, alignment: .trailing)
+                    .accessibilityLabel("Platform \(platform)")
+            }
+        }.fixedSize(horizontal: false, vertical: true).frame(minHeight: 28)
+    }
+}
+
+private struct DirectionsJourneyEndpoint: View {
+    let name: String
+    let first: Bool
+    var body: some View {
+        DirectionsConnectionRow(pearl: true, first: first, last: !first) {
+            Text(name).font(.body.bold())
+        }
+        .padding(.horizontal, 12).padding(.vertical, 4)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+    }
+}
+
 private struct DirectionsLegView: View {
     let leg: DirectionsLeg
+    @State private var expanded = false
+    @Environment(\.colorScheme) private var colorScheme
+    private var rail: Color {
+        if leg.street { return .secondary }
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        leg.uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        let brightness = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+        return (colorScheme == .light && brightness > 0.85) || (colorScheme == .dark && brightness < 0.2) ? .primary : leg.color
+    }
+    private var shortenStation: Bool {
+        let names = [leg.from?.name] + (leg.intermediateStops ?? []).map(\.name) + [leg.to?.name]
+        return [0, 1, 2].contains(leg.routeType ?? -1) && names.allSatisfy { $0?.hasSuffix(" Station") == true }
+    }
+    private func stationName(_ name: String?) -> String {
+        let name = name ?? ""
+        return shortenStation ? String(name.dropLast(8)) : name
+    }
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                LegModeIcon(leg: leg).foregroundStyle(leg.color)
-                if leg.street { Text(leg.mode.capitalized).bold() } else { leg.badge }
-                if let trip = leg.tripShortName, !trip.isEmpty { Text(trip).bold() }
-                Spacer()
-                Text("\(Int(ceil(leg.seconds / 60))) min").font(.subheadline)
-            }
-            if let headsign = leg.headsign { Text(headsign).font(.subheadline) }
-            endpoint(leg.from, time: leg.startTime, platform: leg.fromPlatform)
-            if let stops = leg.intermediateStops, !stops.isEmpty {
-                DisclosureGroup("\(stops.count) stops") {
-                    ForEach(stops.indices, id: \.self) { index in
-                        HStack {
-                            Text(directionsClock(stops[index].departure ?? stops[index].arrival)).monospacedDigit()
-                            Text(stops[index].name ?? "Stop")
-                        }.font(.subheadline).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 3)
+        VStack(spacing: 0) {
+            if leg.street {
+                DirectionsConnectionRow(color: rail, time: directionsDurationLabel(leg.seconds), dotted: true) {
+                    HStack(spacing: 6) {
+                        LegModeIcon(leg: leg)
+                        Text(directionsDistance(leg).map { directionsFormattedDistance($0) } ?? "Distance unavailable")
                     }
                 }
-            }
-            endpoint(leg.to, time: leg.endTime, platform: leg.toPlatform)
-            if leg.street, let distance = directionsDistance(leg) {
-                Text(directionsFormattedDistance(distance)).font(.caption).foregroundStyle(.secondary)
-            }
-        }.padding(12).background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
-    }
-    private func endpoint(_ point: DirectionsPoint?, time: String?, platform: String?) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(directionsClock(time)).monospacedDigit()
-            VStack(alignment: .leading) {
-                Text(point?.name ?? "")
-                if let platform = platform ?? point?.platformCode ?? point?.platform, !platform.isEmpty {
-                    Text("Platform \(platform)").font(.caption).foregroundStyle(.secondary)
+            } else {
+                endpoint(leg.from, time: leg.startTime, platform: leg.fromPlatform, first: true)
+                DirectionsConnectionRow(color: rail) {
+                    HStack(spacing: 6) {
+                        LegModeIcon(leg: leg)
+                        leg.badge
+                        if let trip = leg.tripShortName, !trip.isEmpty { Text(trip).bold() }
+                    }
                 }
+                if let headsign = leg.headsign ?? leg.routeLongName, !headsign.isEmpty {
+                    DirectionsConnectionRow(color: rail) { Text(headsign).font(.subheadline) }
+                }
+                let stops = leg.intermediateStops ?? []
+                DirectionsConnectionRow(color: rail) {
+                    if stops.isEmpty {
+                        Text("0 stops · \(directionsDurationLabel(leg.seconds))").font(.subheadline)
+                    } else {
+                        Button { withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() } } label: {
+                            HStack {
+                                Text("\(stops.count) stops · \(directionsDurationLabel(leg.seconds))")
+                                Spacer()
+                                Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            }.font(.subheadline).frame(minHeight: 32)
+                        }.buttonStyle(.plain).accessibilityLabel(expanded ? "Hide stops" : "Show stops")
+                            .accessibilityValue("\(stops.count) stops · \(directionsDurationLabel(leg.seconds))")
+                    }
+                }
+                if expanded {
+                    ForEach(stops.indices, id: \.self) { index in
+                        DirectionsConnectionRow(color: rail,
+                            time: directionsClock(stops[index].departure ?? stops[index].arrival ?? stops[index].scheduledDeparture ?? stops[index].scheduledArrival), pearl: true) {
+                            Text(stationName(stops[index].name)).font(.subheadline)
+                        }
+                    }
+                }
+                endpoint(leg.to, time: leg.endTime, platform: leg.toPlatform, first: false)
             }
-        }.font(.subheadline)
+        }
+        .foregroundStyle(Color.primary)
+        .padding(.horizontal, 12).padding(.vertical, 4)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(leg.street ? Color.primary.opacity(0.15) : .clear))
+    }
+    private func endpoint(_ point: DirectionsPoint?, time: String?, platform: String?, first: Bool) -> some View {
+        DirectionsConnectionRow(color: rail, time: directionsClock(time),
+            platform: platform ?? point?.platformCode ?? point?.platform, pearl: true, first: first, last: !first) {
+            Text(stationName(point?.name)).font(.body.weight(.medium))
+        }
     }
 }
 
@@ -559,9 +733,10 @@ extension DirectionsLeg {
         default: return "tram.fill"
         }
     }
-    var badge: some View {
+    var badge: some View { routeBadge() }
+    func routeBadge(compact: Bool = false) -> some View {
         TransitRouteBadge(shortName: routeShortName ?? routeId, longName: routeLongName,
-            colorHex: routeColor, textColorHex: routeTextColor, chateauID: chateau)
+            colorHex: routeColor, textColorHex: routeTextColor, chateauID: chateau, compact: compact)
     }
     var color: Color { Color(uiColor: uiColor) }
     var uiColor: UIColor {

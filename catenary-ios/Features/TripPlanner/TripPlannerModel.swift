@@ -55,6 +55,38 @@ final class TripPlannerModel: ObservableObject {
     @Published private(set) var laterLoading = false
     @Published private(set) var previousPageCursor: String?
     @Published private(set) var nextPageCursor: String?
+    @Published private(set) var savedJourneys: [String: SavedDirectionsJourney] = [:]
+    @Published private(set) var savingJourney = false
+    @Published private(set) var saveError: String?
+    private static let savedURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("saved-journeys.json")
+
+    struct SavedDirectionsJourney: Codable, Sendable {
+        var itinerary: DirectionsItinerary
+        var origin: DirectionsLocation?
+        var destination: DirectionsLocation?
+    }
+    func toggleSavedJourney() {
+        guard let journey = chosen, !savingJourney else { return }
+        let saved = savedJourneys[journey.identity] != nil
+        guard saved || journey.canBeSaved else { return }
+        var updated = savedJourneys
+        if saved { updated.removeValue(forKey: journey.identity) }
+        else { updated[journey.identity] = SavedDirectionsJourney(itinerary: journey, origin: origin, destination: destination) }
+        let snapshot = updated
+        savingJourney = true; saveError = nil
+        Task { @MainActor in
+            do {
+                let url = Self.savedURL
+                try await Task.detached(priority: .utility) {
+                    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try JSONEncoder().encode(snapshot).write(to: url, options: .atomic)
+                }.value
+                self.savedJourneys = snapshot
+            } catch { self.saveError = "Unable to save journey. Please try again." }
+            self.savingJourney = false
+        }
+    }
 
     private var request: Task<Void, Never>?
     private var pageRequest: Task<Void, Never>?
@@ -85,7 +117,7 @@ final class TripPlannerModel: ObservableObject {
     var chosen: DirectionsItinerary? { itineraries.indices.contains(selected) ? itineraries[selected] : nil }
     var canSearch: Bool { origin?.isValid == true && destination?.isValid == true }
     var canLoadEarlier: Bool {
-        previousPageCursor != nil && baseQuery != nil && !earlierLoading && !laterLoading && (!loading || !itineraries.isEmpty)
+        previousPageCursor != nil && baseQuery != nil && !earlierLoading && !laterLoading && !loading
     }
     var canLoadLater: Bool {
         nextPageCursor != nil && baseQuery != nil && !earlierLoading && !laterLoading && !loading
@@ -98,6 +130,10 @@ final class TripPlannerModel: ObservableObject {
     var usingMap: Bool { details && (mapMode || streetOnly) }
 
     init() {
+        if let data = try? Data(contentsOf: Self.savedURL),
+           let saved = try? JSONDecoder().decode([String: SavedDirectionsJourney].self, from: data) {
+            savedJourneys = saved
+        }
         if let data = store.read(),
            let session = try? JSONDecoder().decode(Session.self, from: data),
            session.origin.isValid, session.destination.isValid,
@@ -118,6 +154,7 @@ final class TripPlannerModel: ObservableObject {
     /// Prepare a fresh planner without replacing an existing endpoint or session.
     func open(currentLocation: CLLocationCoordinate2D?) {
         visible = true
+        Task { await DirectionsSocketPool.shared.preconnect() }
         awaitingCurrentOrigin = origin == nil && destination == nil && originText.isEmpty && destinationText.isEmpty
         if let currentLocation { resolveCurrentOrigin(currentLocation) }
         publishMap(fit: true)
@@ -131,6 +168,7 @@ final class TripPlannerModel: ObservableObject {
         awaitingCurrentOrigin = false
         if loading, itineraries.isEmpty { searched = false }
         visible = false; cancelRequests()
+        Task { await DirectionsSocketPool.shared.close() }
         editing = nil; mapPicking = nil; publishMap()
     }
     private func cancelRequests() {
@@ -239,12 +277,14 @@ final class TripPlannerModel: ObservableObject {
                         self.nextPageCursor = (page.nextPageCursor?.isEmpty == false && page.nextPageCursor != cursor) ? page.nextPageCursor : nil
                     }
                     self.publishPages()
+                    // Persist the final cursors after the busy flag clears below.
                 }
             } catch {
                 if token == self.generation { self.error = error.localizedDescription }
             }
             if token == self.generation {
                 if earlier { self.earlierLoading = false } else { self.laterLoading = false }
+                self.saveSession()
             }
         }
     }

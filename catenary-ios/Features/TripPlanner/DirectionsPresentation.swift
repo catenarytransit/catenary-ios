@@ -57,27 +57,38 @@ extension DirectionsItinerary {
         return combined.enumerated().filter { index, leg in
             if !leg.street { return true }
             if index == 0 || index == combined.count - 1 { return (directionsDistance(leg) ?? 25) >= 25 }
-            return leg.seconds > 300
+            let trains = combined[index - 1].routeType == 2 && combined[index + 1].routeType == 2
+            return leg.seconds > (trains ? 420 : 300)
         }.map(\.element)
     }
 }
 
-/// Allocate a minimum icon width before distributing the remaining width by duration.
+func directionsTimelineMinimums(_ legs: [DirectionsLeg], minimum: Double = 48) -> [Double] {
+    legs.indices.map { index in
+        let transfer = index > 0 && index < legs.count - 1 && legs[index].mode.uppercased() == "WALK"
+            && !legs[index - 1].street && !legs[index + 1].street
+        return transfer ? min(28, minimum) : minimum
+    }
+}
+
+/// Allocate icon widths before distributing the remaining width by duration.
 func directionsTimelineWidths(_ legs: [DirectionsLeg], width: Double, minimum: Double = 48) -> [Double] {
     guard !legs.isEmpty else { return [] }
     let weights = legs.map { $0.seconds.isFinite && $0.seconds > 0 ? $0.seconds : 1 }
     var pixels = Array(repeating: 0.0, count: legs.count)
     var remaining = Array(legs.indices)
     var available = max(1, width)
-    let floor = min(minimum, available / Double(legs.count))
+    let minimums = directionsTimelineMinimums(legs, minimum: minimum)
+    let totalMinimum = minimums.reduce(0, +)
+    if totalMinimum > available { return minimums.map { $0 * available / totalMinimum } }
     while !remaining.isEmpty {
         let total = remaining.reduce(0) { $0 + weights[$1] }
-        let small = remaining.filter { available * weights[$0] / total < floor }
+        let small = remaining.filter { available * weights[$0] / total < minimums[$0] }
         if small.isEmpty {
             for index in remaining { pixels[index] = available * weights[index] / total }
             break
         }
-        for index in small { pixels[index] = floor; available -= floor }
+        for index in small { pixels[index] = minimums[index]; available -= minimums[index] }
         remaining.removeAll { small.contains($0) }
     }
     return pixels.map { max(0.001, $0) }

@@ -69,6 +69,7 @@ final class DirectionsStreamState {
             sequence = next
             return .page(response)
         case "complete":
+            guard message.response != nil else { throw URLError(.cannotParseResponse) }
             return .complete(message.response)
         case "error":
             throw DirectionsStreamError.backend(message.message ?? "Routing failed")
@@ -97,7 +98,44 @@ func mergeDirectionsPages(_ pages: [DirectionsPlan]) -> [DirectionsItinerary] {
     return (transit + direct).sorted { sortKey($0) < sortKey($1) }
 }
 
-/// One cancellable, short-lived socket per stateless page; HTTP uses the identical query/ID.
+/// Warm sockets are consumed by one request each, so overlapping pages never share frames.
+actor DirectionsSocketPool {
+    static let shared = DirectionsSocketPool()
+    private let session = URLSession(configuration: .default)
+    private var idle: [(task: URLSessionWebSocketTask, created: Date)] = []
+    private var active = false
+
+    func preconnect() {
+        active = true
+        discardExpired()
+        while idle.count < 2 { idle.append((makeSocket(), Date())) }
+    }
+    func take() -> URLSessionWebSocketTask {
+        discardExpired()
+        let socket = idle.isEmpty ? makeSocket() : idle.removeFirst().task
+        if active { preconnect() }
+        return socket
+    }
+    func close() {
+        active = false
+        idle.forEach { $0.task.cancel(with: .goingAway, reason: nil) }
+        idle.removeAll()
+    }
+    private func makeSocket() -> URLSessionWebSocketTask {
+        let task = session.webSocketTask(with: URL(string: "wss://edelweiss.catenarymaps.org/v1/route/ws")!)
+        task.resume()
+        return task
+    }
+    private func discardExpired() {
+        idle.removeAll { entry in
+            guard Date().timeIntervalSince(entry.created) > 25 else { return false }
+            entry.task.cancel(with: .goingAway, reason: nil)
+            return true
+        }
+    }
+}
+
+/// WebSocket-first pages consume a preconnected socket; HTTP is a transport-failure fallback.
 enum DirectionsStreaming {
     static func load(query: DirectionsRequest, requestId: String, session: URLSession = .shared, onPage: @escaping (DirectionsPlan) -> Void) async throws {
         do {
@@ -108,6 +146,7 @@ enum DirectionsStreaming {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
+            try Task.checkCancellation()
             try await httpFallback(query: query, session: session, onPage: onPage)
         }
     }
@@ -129,28 +168,31 @@ enum DirectionsStreaming {
     }
 
     private static func socketPage(query: DirectionsRequest, requestId: String, onPage: @escaping (DirectionsPlan) -> Void) async throws {
-        let socketSession = URLSession(configuration: .default)
-        let task = socketSession.webSocketTask(with: URL(string: "wss://edelweiss.catenarymaps.org/v1/route/ws")!)
-        task.resume()
+        let task = await DirectionsSocketPool.shared.take()
         defer { task.cancel(with: .goingAway, reason: nil) }
-        try await task.send(.string(try buildEnvelope(query: query, requestId: requestId)))
-        let state = DirectionsStreamState(requestId: requestId)
-        // Bound a stalled connection, including one that never sends a complete frame.
-        let completed = try await withThrowingTaskGroup(of: Bool.self) { group -> Bool in
-            group.addTask { try await receiveLoop(task: task, state: state, onPage: onPage) }
-            group.addTask {
-                try await Task.sleep(nanoseconds: 45_000_000_000)
-                throw DirectionsStreamError.timeout
+        try await withTaskCancellationHandler(operation: {
+            try Task.checkCancellation()
+            let state = DirectionsStreamState(requestId: requestId)
+            // Bound a stalled connection, including one that never sends a complete frame.
+            let completed = try await withThrowingTaskGroup(of: Bool.self) { group -> Bool in
+                group.addTask {
+                    try await task.send(.string(try buildEnvelope(query: query, requestId: requestId)))
+                    return try await receiveLoop(task: task, state: state, onPage: onPage)
+                }
+                group.addTask {
+                    try await Task.sleep(nanoseconds: 45_000_000_000)
+                    throw DirectionsStreamError.timeout
+                }
+                // URLSession receive can remain suspended after Task cancellation.
+                // Close the socket before the group waits for its cancelled children.
+                defer {
+                    group.cancelAll()
+                    task.cancel(with: .goingAway, reason: nil)
+                }
+                return try await group.next() ?? false
             }
-            // URLSession receive can remain suspended after Task cancellation.
-            // Close the socket before the group waits for its cancelled children.
-            defer {
-                group.cancelAll()
-                task.cancel(with: .goingAway, reason: nil)
-            }
-            return try await group.next() ?? false
-        }
-        guard completed else { throw DirectionsStreamError.timeout }
+            guard completed else { throw DirectionsStreamError.timeout }
+        }, onCancel: { task.cancel(with: .goingAway, reason: nil) })
     }
 
     private static func receiveLoop(task: URLSessionWebSocketTask, state: DirectionsStreamState, onPage: @escaping (DirectionsPlan) -> Void) async throws -> Bool {

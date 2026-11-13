@@ -29,8 +29,19 @@ Manual simulator/device checks:
   shortcuts with location permission granted and denied.
 - Compare departure and arrive-by queries, walking and cycling limits, no-results
   and network-error states. Open a journey and expand intermediate stops.
-- Expand and collapse the drawer: the same summary card changes height above the
-  leg list. Check light/dark mode, landscape, VoiceOver, and larger text sizes.
+- Open a transit journey: details take over the full screen, with the journey summary,
+  star and map buttons at the top. Switch to Map and back to List; the same selected
+  journey and summary remain. Back returns to the result list.
+- Compare compact route badges, black mode icons in light mode, endpoint pearls,
+  route rails, platforms, street distances and expandable intermediate stops against
+  Compose. Check dark mode, landscape, VoiceOver and larger text sizes.
+- Star a future journey, leave and reopen it: the star survives. Unstar it without
+  leaving details. Past journeys cannot be newly starred.
+- Scroll towards each result edge: earlier/later pages load once per gesture and
+  preserve selection; prepending keeps the visible journey in view. Test failed
+  pages and retries, fast endpoint edits, and exit during connection establishment.
+  Opening Directions preconnects two WebSockets; each page consumes its own socket.
+  Explicit backend errors remain authoritative; transport failures fall back to HTTP.
 - Leave Directions: planner lines and endpoint markers disappear. Reopen it to
   restore the completed journey search.
 
