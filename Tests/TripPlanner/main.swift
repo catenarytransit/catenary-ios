@@ -165,3 +165,22 @@ expect(directionsPageAtEdge(direction: .before, firstVisible: 4, lastVisible: 7,
 expect(directionsPageAtEdge(direction: .after, firstVisible: nil, lastVisible: nil, count: 8) == nil, "Offscreen results never page")
 expect(directionsPageAtEdge(direction: .after, firstVisible: 0, lastVisible: 0, count: 0) == nil, "Empty results never page")
 print("Scroll direction and pagination edge checks passed")
+
+// Named server zones must win over the device zone and 12-hour clock preferences.
+expect(directionsClock("2026-07-01T20:05:00Z", timezone: "America/Los_Angeles") == "13:05", "Summer DST and 24-hour clock")
+expect(directionsClock("2026-01-01T20:05:00Z", timezone: "America/Los_Angeles") == "12:05", "Winter timezone offset")
+expect(directionsClock("2026-07-01T20:05:00Z", timezone: "Asia/Tokyo") == "05:05", "Arrival across midnight")
+expect(directionsClock("bad", timezone: "UTC") == "—", "Invalid timestamp placeholder")
+expect(directionsDayHeading("2026-07-01T23:30:00Z", "2026-07-02T00:30:00Z", timezone: "America/Los_Angeles") == nil, "UTC midnight is not local midnight")
+expect(directionsDayHeading("2026-07-02T06:30:00Z", "2026-07-02T07:30:00Z", timezone: "America/Los_Angeles") != nil, "Local midnight heading")
+let zonedJourney = try JSONDecoder().decode(DirectionsItinerary.self, from: Data("""
+{"startTime":"2026-07-01T19:55:00Z","endTime":"2026-07-02T01:15:00Z","legs":[
+{"mode":"WALK","startTime":"2026-07-01T19:55:00Z","endTime":"2026-07-01T20:05:00Z"},
+{"mode":"RAIL","startTime":"2026-07-01T20:05:00Z","endTime":"2026-07-02T01:05:00Z","from":{"timezone":"America/Los_Angeles"},"to":{"timezone":"America/Denver"},"intermediateStops":[{"timezone":"America/Phoenix"}]},
+{"mode":"WALK","startTime":"2026-07-02T01:05:00Z","endTime":"2026-07-02T01:15:00Z"}]}
+""".utf8))
+expect(zonedJourney.previewTimeGroups.departure.map(\.endpoint) == [true, false], "Overall departure is bold; boarding is secondary")
+expect(zonedJourney.previewTimeGroups.arrival.map(\.endpoint) == [false, true], "Alighting is secondary; overall arrival is bold")
+expect(zonedJourney.previewTimeGroups.departure.allSatisfy { $0.timezone == "America/Los_Angeles" }, "Departure zone uses boarding stop")
+expect(zonedJourney.previewTimeGroups.arrival.allSatisfy { $0.timezone == "America/Denver" }, "Arrival zone uses alighting stop")
+expect(zonedJourney.legs[1].intermediateStops?.first?.timezone == "America/Phoenix", "Intermediate stop timezone decoded")

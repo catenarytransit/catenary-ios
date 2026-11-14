@@ -208,7 +208,9 @@ struct TripPlannerScreen: View {
             }
         }
         .padding(10)
-        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18))
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(Color.primary.opacity(0.16), lineWidth: 1))
+        .shadow(color: .black.opacity(0.12), radius: 5, y: 2)
     }
     private var timeButton: some View {
         Button { focused = nil; showsTimeSheet = true } label: {
@@ -331,10 +333,9 @@ struct TripPlannerScreen: View {
     }
     private func dateHeading(for index: Int) -> String? {
         guard index > 0, model.itineraries.indices.contains(index) else { return nil }
-        guard let previous = directionsDate(model.itineraries[index - 1].startTime),
-              let date = directionsDate(model.itineraries[index].startTime) else { return nil }
-        guard !Calendar.current.isDate(previous, inSameDayAs: date) else { return nil }
-        return date.formatted(date: .complete, time: .omitted)
+        let itinerary = model.itineraries[index]
+        return directionsDayHeading(model.itineraries[index - 1].startTime,
+            itinerary.startTime, timezone: itinerary.departureTimezone)
     }
     private var results: some View {
         ScrollViewReader { proxy in
@@ -560,10 +561,6 @@ extension SearchRow {
 func directionsFormattedDistance(_ meters: Double) -> String {
     TransitFormatting.distance(meters, useImperial: UserDefaults.standard.bool(forKey: "usUnits"))
 }
-func directionsClock(_ time: String?) -> String {
-    guard let date = directionsDate(time) else { return "—" }
-    return date.formatted(date: .omitted, time: .shortened)
-}
 
 struct JourneyPreview: View {
     let itinerary: DirectionsItinerary
@@ -603,9 +600,9 @@ struct JourneyPreview: View {
     private func timeGroup(_ markers: [DirectionsTimeMarker]) -> some View {
         HStack(spacing: 4) {
             ForEach(markers.indices, id: \.self) { index in
-                Text(directionsClock(markers[index].time))
-                    .font(markers[index].transit ? .subheadline.bold() : .caption)
-                    .foregroundStyle(markers[index].transit ? Color.primary : Color.secondary)
+                Text(directionsClock(markers[index].time, timezone: markers[index].timezone))
+                    .font(.system(size: markers[index].endpoint ? 16 : 14, weight: markers[index].endpoint ? .bold : .regular))
+                    .foregroundStyle(markers[index].endpoint ? Color.primary : Color.secondary)
                     .lineLimit(1).minimumScaleFactor(0.6)
             }
         }
@@ -793,7 +790,7 @@ private struct DirectionsLegView: View {
                 if expanded {
                     ForEach(stops.indices, id: \.self) { index in
                         DirectionsConnectionRow(color: rail,
-                            time: directionsClock(stops[index].departure ?? stops[index].arrival ?? stops[index].scheduledDeparture ?? stops[index].scheduledArrival), pearl: true) {
+                            time: directionsClock(stops[index].departure ?? stops[index].arrival ?? stops[index].scheduledDeparture ?? stops[index].scheduledArrival, timezone: stops[index].timezone ?? leg.from?.timezone), pearl: true) {
                             Text(stationName(stops[index].name)).font(.subheadline)
                         }
                     }
@@ -807,7 +804,7 @@ private struct DirectionsLegView: View {
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(leg.street ? Color.primary.opacity(0.15) : .clear))
     }
     private func endpoint(_ point: DirectionsPoint?, time: String?, platform: String?, first: Bool) -> some View {
-        DirectionsConnectionRow(color: rail, time: directionsClock(time),
+        DirectionsConnectionRow(color: rail, time: directionsClock(time, timezone: point?.timezone),
             platform: platform ?? point?.platformCode ?? point?.platform, pearl: true, first: first, last: !first) {
             Text(stationName(point?.name)).font(.body.weight(.medium))
         }

@@ -15,6 +15,7 @@ struct DirectionsPoint: Codable, Equatable, Sendable {
     var lat: Double?
     var lon: Double?
     var platform: String?
+    var timezone: String? = nil
     var platformCode: String?
     var location: DirectionsLocation? {
         guard let lat, let lon else { return nil }
@@ -28,6 +29,7 @@ struct DirectionsStop: Codable, Equatable, Sendable {
     var departure: String?
     var scheduledArrival: String?
     var scheduledDeparture: String?
+    var timezone: String? = nil
 }
 struct DirectionsGeometry: Codable, Equatable, Sendable {
     var points: String?

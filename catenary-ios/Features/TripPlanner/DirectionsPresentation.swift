@@ -2,7 +2,8 @@ import Foundation
 
 struct DirectionsTimeMarker: Equatable {
     let time: String
-    let transit: Bool
+    let endpoint: Bool
+    var timezone: String? = nil
 }
 struct DirectionsTimeGroups: Equatable {
     let departure: [DirectionsTimeMarker]
@@ -10,9 +11,15 @@ struct DirectionsTimeGroups: Equatable {
 }
 
 extension DirectionsItinerary {
+    var departureTimezone: String? {
+        legs.first(where: { !$0.street })?.from?.timezone ?? legs.first?.from?.timezone
+    }
+    var arrivalTimezone: String? {
+        legs.last(where: { !$0.street })?.to?.timezone ?? legs.last?.to?.timezone
+    }
     var previewTimeGroups: DirectionsTimeGroups {
         guard let first = legs.firstIndex(where: { !$0.street }), let last = legs.lastIndex(where: { !$0.street }) else {
-            return DirectionsTimeGroups(departure: [.init(time: startTime, transit: false)], arrival: [.init(time: endTime, transit: false)])
+            return DirectionsTimeGroups(departure: [.init(time: startTime, endpoint: true, timezone: departureTimezone)], arrival: [.init(time: endTime, endpoint: true, timezone: arrivalTimezone)])
         }
         func atStop(_ streetLegs: ArraySlice<DirectionsLeg>) -> Bool {
             var meters = 0.0
@@ -26,15 +33,15 @@ extension DirectionsItinerary {
         let alighting = legs[last].endTime ?? (last + 1 < legs.count ? legs[last + 1].startTime : endTime)
         let originAtStop = atStop(legs[..<first])
         let destinationAtStop = atStop(legs[(last + 1)...])
-        var departure = [DirectionsTimeMarker(time: startTime, transit: originAtStop || directionsDate(boarding) == directionsDate(startTime))]
+        var departure = [DirectionsTimeMarker(time: startTime, endpoint: true, timezone: departureTimezone)]
         var arrival: [DirectionsTimeMarker] = []
         if !originAtStop, let boarding, directionsDate(boarding) != nil, directionsDate(boarding) != directionsDate(startTime) {
-            departure.append(.init(time: boarding, transit: true))
+            departure.append(.init(time: boarding, endpoint: false, timezone: legs[first].from?.timezone))
         }
         if !destinationAtStop, let alighting, directionsDate(alighting) != nil, directionsDate(alighting) != directionsDate(endTime) {
-            arrival.append(.init(time: alighting, transit: true))
+            arrival.append(.init(time: alighting, endpoint: false, timezone: legs[last].to?.timezone))
         }
-        arrival.append(.init(time: endTime, transit: destinationAtStop || directionsDate(alighting) == directionsDate(endTime)))
+        arrival.append(.init(time: endTime, endpoint: true, timezone: arrivalTimezone))
         return DirectionsTimeGroups(departure: departure, arrival: arrival)
     }
     var detailLegs: [DirectionsLeg] {
@@ -109,4 +116,30 @@ func encodeDirectionsPolyline(_ points: [DirectionsCoordinate]) -> String {
         append(nextLat - lat); append(nextLon - lon); lat = nextLat; lon = nextLon
     }
     return String(decoding: bytes, as: UTF8.self)
+}
+
+/// Keep server wall times in their named zone (including DST), independent of device preferences.
+func directionsTimeZone(_ identifier: String?) -> TimeZone {
+    identifier.flatMap(TimeZone.init(identifier:)) ?? .autoupdatingCurrent
+}
+func directionsClock(_ time: String?, timezone: String? = nil) -> String {
+    guard let date = directionsDate(time) else { return "—" }
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.timeZone = directionsTimeZone(timezone)
+    formatter.dateFormat = "HH:mm"
+    return formatter.string(from: date)
+}
+func directionsDayHeading(_ previous: String?, _ time: String, timezone: String?) -> String? {
+    guard let previous = directionsDate(previous), let date = directionsDate(time) else { return nil }
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = directionsTimeZone(timezone)
+    guard !calendar.isDate(previous, inSameDayAs: date) else { return nil }
+    let formatter = DateFormatter()
+    formatter.locale = .autoupdatingCurrent
+    formatter.timeZone = calendar.timeZone
+    formatter.dateStyle = .full
+    formatter.timeStyle = .none
+    return formatter.string(from: date)
 }
