@@ -56,6 +56,9 @@ jobs:
       - name: Verify trip planner contracts and geometry
         run: Tests/TripPlanner/run.sh
 
+      - name: Verify departure route filters
+        run: Tests/DepartureFilters/run.sh
+
       - name: Clear Xcode and SwiftPM state
         shell: bash
         run: |

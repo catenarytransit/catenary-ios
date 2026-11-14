@@ -782,7 +782,7 @@ private struct StopDepartureTimeView: View {
     }
 }
 
-private struct StopRouteBadge: View {
+struct StopRouteBadge: View {
     let chateauID: String
     let shortName: String?
     let longName: String?

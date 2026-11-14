@@ -10,6 +10,7 @@ struct StationDeparturesScreen: View {
     @State private var isNow: Bool
     @State private var now = Date()
     @State private var activeMode: StopTransitMode?
+    @State private var selectedRoutes = Set<DepartureRouteFilterKey>()
     @State private var enabledTrainCategories = Set<String>()
     @State private var categoryChateauID: String?
     @State private var alertsPresented = false
@@ -44,9 +45,9 @@ struct StationDeparturesScreen: View {
         ScrollViewReader { proxy in
             VStack(alignment: .leading, spacing: 8) {
                 header
-                if let coordinate = model.stationCoordinate ?? destinationCoordinate {
-                    TripPlannerLocationActions(name: stationName, coordinate: coordinate)
-                }
+                TripPlannerLocationActions(
+                    name: stationName, coordinate: model.stationCoordinate ?? destinationCoordinate
+                )
 
                 StationTimeSelector(
                     selectedDate: $selectedDate,
@@ -54,6 +55,10 @@ struct StationDeparturesScreen: View {
                     timezoneID: timezoneID,
                     onSelectionChanged: reloadForSelectedTime
                 )
+
+                if routeFiltersEnabled {
+                    routeFilterRow
+                }
 
                 if availableModes.count > 1 {
                     StopModePicker(availableModes: availableModes, selection: $activeMode)
@@ -86,6 +91,7 @@ struct StationDeparturesScreen: View {
             .padding(.bottom, 8)
         }
         .task(id: source.id) {
+            selectedRoutes.removeAll()
             if await redirectGTFSStopToOSMStationIfNeeded() { return }
             guard !Task.isCancelled else { return }
             await model.reset(source: source, anchor: referenceDate)
@@ -113,6 +119,15 @@ struct StationDeparturesScreen: View {
         }
         .catenaryOnChange(of: model.events) { _, _ in
             synchronizeFilters()
+        }
+        .catenaryOnChange(of: activeMode) { _, _ in
+            selectedRoutes.removeAll()
+        }
+        .catenaryOnChange(of: routeFilters) { _, _ in
+            reconcileRouteSelection()
+        }
+        .catenaryOnChange(of: routeFiltersEnabled) { _, enabled in
+            if !enabled { selectedRoutes.removeAll() }
         }
         .catenaryOnChange(of: model.primary) { _, _ in
             updateMapContext()
@@ -361,8 +376,75 @@ struct StationDeparturesScreen: View {
         StopTrainCategoryClassifier.categories(for: model.primaryChateauID)
     }
 
+    private var routeFilters: [DepartureRouteFilter] {
+        let mode = activeMode ?? availableModes.first
+        let definitions = model.routes.flatMap { chateauID, routes in
+            routes.compactMap { routeID, route -> DepartureRouteDefinition? in
+                guard StopTransitMode.from(routeType: route.routeType ?? 3) == mode else { return nil }
+                return DepartureRouteDefinition(chateauID: chateauID, routeID: routeID,
+                    shortName: route.shortName, longName: route.longName, color: route.color)
+            }
+        }
+        return DepartureRouteFilters.badges(for: definitions)
+    }
+
+    private var routeFiltersEnabled: Bool {
+        DepartureRouteFilters.isEnabled(badgeCount: routeFilters.count,
+            isRail: (activeMode ?? availableModes.first) == .rail,
+            hasCategoryFilters: !trainCategories.isEmpty,
+            hasNationalRail: model.routes["nationalrailuk"] != nil)
+    }
+
+    private func reconcileRouteSelection() {
+        guard !model.routes.isEmpty else { return }
+        selectedRoutes.formIntersection(Set(routeFilters.map(\.key)))
+    }
+
+    private var routeFilterRow: some View {
+        HStack(spacing: 4) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 2) {
+                    ForEach(routeFilters) { filter in
+                        let selected = selectedRoutes.contains(filter.key)
+                        let route = filter.routeIDs.sorted().first.flatMap {
+                            model.routes[filter.key.chateauID]?[$0]
+                        }
+                        Button {
+                            if selected { selectedRoutes.remove(filter.key) }
+                            else { selectedRoutes.insert(filter.key) }
+                        } label: {
+                            StopRouteBadge(chateauID: filter.key.chateauID,
+                                shortName: filter.key.name, longName: route?.longName,
+                                colorHex: route?.color, textColorHex: route?.textColor,
+                                mode: activeMode ?? availableModes.first ?? .bus,
+                                layout: departureLayout, compact: true)
+                                .padding(.horizontal, 4)
+                                .frame(minWidth: 40, minHeight: 44)
+                                .contentShape(Rectangle())
+                                .opacity(selectedRoutes.isEmpty || selected ? 1 : 0.35)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(Text(verbatim: filter.key.name))
+                        .accessibilityAddTraits(selected ? .isSelected : [])
+                    }
+                }
+            }
+            if !selectedRoutes.isEmpty {
+                Button { selectedRoutes.removeAll() } label: {
+                    Image(systemName: "xmark")
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Reset route filters")
+            }
+        }
+    }
+
     private var filteredEvents: [StopEvent] {
         let cutoff = Int64(referenceDate.timeIntervalSince1970) - 60
+        let badges = routeFilters
+        let filterRoutes = routeFiltersEnabled
         return model.events.filter { event in
             guard !event.isTerminalArrivalOnly,
                   (event.effectiveTime ?? 0) >= cutoff else {
@@ -374,6 +456,11 @@ struct StationDeparturesScreen: View {
             if let activeMode, availableModes.count > 1, mode != activeMode {
                 return false
             }
+
+            if filterRoutes && !DepartureRouteFilters.matches(
+                chateauID: event.chateau, routeID: event.routeId,
+                selected: selectedRoutes, badges: badges
+            ) { return false }
 
             if mode == .rail, !trainCategories.isEmpty {
                 let category = StopDeparturePresentation.trainCategory(

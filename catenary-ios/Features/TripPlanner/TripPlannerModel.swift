@@ -332,7 +332,7 @@ extension DirectionsLocation {
 
 struct TripPlannerLocationActions: View {
     let name: String
-    let coordinate: CLLocationCoordinate2D
+    let coordinate: CLLocationCoordinate2D?
     @EnvironmentObject private var navigator: viewObject
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -342,8 +342,9 @@ struct TripPlannerLocationActions: View {
             }
         }
     }
-    private func action(_ origin: Bool, title: String) -> some View {
+    private func action(_ origin: Bool, title: LocalizedStringKey) -> some View {
         Button {
+            guard let coordinate, CLLocationCoordinate2DIsValid(coordinate) else { return }
             let planner = navigator.tripPlanner
             let location = DirectionsLocation(name: name, coordinate: coordinate)
             planner.choose(origin, location: location)
@@ -361,6 +362,7 @@ struct TripPlannerLocationActions: View {
             }.font(.subheadline)
         }
         .buttonStyle(.bordered)
+        .disabled(coordinate.map { !CLLocationCoordinate2DIsValid($0) } ?? true)
     }
 }
 
