@@ -138,6 +138,9 @@ struct OSMItemScreen: View {
                         .font(.subheadline)
                 }
 
+                if let coordinate = nearbyCoordinate {
+                    TripPlannerLocationActions(name: title, coordinate: coordinate)
+                }
                 Button {
                     guard let nearbyCoordinate else { return }
                     navigator.push(.nearbyDepartures(

@@ -503,6 +503,19 @@ final class MapFeatureTapCoordinator: NSObject, ObservableObject, UIGestureRecog
     @objc private func handleTap(_ recognizer: UITapGestureRecognizer) {
         guard recognizer.state == .ended, let mapView, let navigator else { return }
         let point = recognizer.location(in: mapView)
+        if navigator.currentStackItem == .tripPlanner,
+           let origin = navigator.tripPlanner.mapPicking ?? navigator.tripPlanner.editing {
+            let features = mapView.visibleFeatures(at: point)
+            let namedPoint = features.compactMap { $0 as? MLNPointFeature }.first {
+                $0.attribute(forKey: "name") as? String != nil
+            }
+            let coordinate = namedPoint?.coordinate ?? mapView.convert(point, toCoordinateFrom: mapView)
+            let name = namedPoint?.attribute(forKey: "name") as? String
+            navigator.tripPlanner.choose(origin, location: DirectionsLocation(
+                name: name ?? String(format: "%.6f, %.6f", coordinate.latitude, coordinate.longitude), coordinate: coordinate, mapPicked: namedPoint == nil))
+            navigator.presDetent = .height(350)
+            return
+        }
         let hitArea = CGRect(x: point.x - 22, y: point.y - 22, width: 44, height: 44)
         let transitFeatures = mapView.visibleFeatures(
             in: hitArea,
@@ -1062,10 +1075,12 @@ struct mapLibreView: View, Equatable {
     let layerSettings: AllLayerSettings
     let selectedStopContext: SelectedStopMapContext?
     let selectedTransitContext: SelectedTransitMapContext?
+    var plannerMapState = DirectionsMapState()
     let viewobject: viewObject
     @StateObject private var realtimeVM = RealtimeVehicles()
     @StateObject private var trajectoryVM = RealtimeTrajectories()
     @StateObject private var wildfireVM = WildfireMapData()
+    @StateObject private var plannerMapCoordinator = TripPlannerMapCoordinator()
     @StateObject private var featureTapCoordinator = MapFeatureTapCoordinator()
 
     static func == (lhs: Self, rhs: Self) -> Bool {
@@ -1078,6 +1093,7 @@ struct mapLibreView: View, Equatable {
             && lhs.layerSettings == rhs.layerSettings
             && lhs.selectedStopContext == rhs.selectedStopContext
             && lhs.selectedTransitContext == rhs.selectedTransitContext
+            && lhs.plannerMapState == rhs.plannerMapState
             && lhs.viewobject === rhs.viewobject
     }
 
@@ -2475,6 +2491,7 @@ struct mapLibreView: View, Equatable {
                 active: nearbyPinActive,
                 coordinate: nearbyPinCoordinate
             )
+            plannerMapCoordinator.update(map: map.mapView, state: plannerMapState)
             featureTapCoordinator.install(on: map.mapView, navigator: viewobject)
             featureTapCoordinator.updatePersistentLayerDefinitions(
                 persistentMapLayerDefinitions
@@ -2520,6 +2537,7 @@ struct mapLibreView: View, Equatable {
             )
             featureTapCoordinator.updateTransitContext(selectedTransitContext)
             featureTapCoordinator.updateSelectedStop(selectedStopContext)
+            plannerMapCoordinator.styleLoaded(state: plannerMapState)
         }
         .task {
             featureTapCoordinator.updateLayerSettings(layerSettings)

@@ -8,6 +8,7 @@ on:
   pull_request:
     branches:
       - dev
+      - main
 
 permissions:
   contents: read
@@ -259,6 +260,107 @@ jobs:
             fi
           done
 
+      - name: Capture fullscreen planner and verify bidirectional scrolling
+        shell: bash
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          mkdir -p "$SCREENSHOT_DIR/routing"
+          data_container="$(xcrun simctl get_app_container "$SIMULATOR_UDID" "$BUNDLE_ID" data)"
+          query_path="$data_container/tmp/screenshot-route.json"
+          cp Tests/TripPlanner/screenshot-route.json "$query_path"
+          cp "$query_path" "$SCREENSHOT_DIR/routing/query.json"
+
+          capture_routing() {
+            local screen="$1" filename="$2" token ready_file error_file status_file deadline
+            token="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+            ready_file="$data_container/tmp/catenary-screenshot-ready-$token"
+            error_file="$data_container/tmp/catenary-screenshot-error-$token"
+            status_file="$data_container/tmp/catenary-screenshot-status-$token"
+            xcrun simctl terminate "$SIMULATOR_UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
+            xcrun simctl launch \
+              --stdout="$SCREENSHOT_DIR/routing/$screen.stdout.log" \
+              --stderr="$SCREENSHOT_DIR/routing/$screen.stderr.log" \
+              "$SIMULATOR_UDID" "$BUNDLE_ID" \
+              --ci-screenshot-planner "$screen" \
+              --ci-screenshot-planner-query "$query_path" \
+              --ci-screenshot-ready-token "$token" \
+              --ci-screenshot-drawer expanded
+
+            deadline=$((SECONDS + 180))
+            while [[ ! -f "$ready_file" ]]; do
+              if [[ -f "$error_file" ]] || (( SECONDS >= deadline )); then
+                echo "::error::Routing screenshot $screen failed or timed out."
+                cat "$error_file" "$status_file" 2>/dev/null || true
+                if [[ -f "$status_file" ]]; then
+                  cp "$status_file" "$SCREENSHOT_DIR/routing/$screen-status.txt"
+                fi
+                xcrun simctl io "$SIMULATOR_UDID" screenshot "$SCREENSHOT_DIR/routing/$screen-failed.png" || true
+                return 1
+              fi
+              sleep 0.5
+            done
+            xcrun simctl io "$SIMULATOR_UDID" screenshot "$SCREENSHOT_DIR/routing/$filename"
+            cp "$status_file" "$SCREENSHOT_DIR/routing/$screen-status.txt"
+            if [[ "$screen" = results ]]; then results_status_file="$status_file"; fi
+            rm -f "$ready_file"
+          }
+
+          # Inject the checked-in Santa Monica → UCLA query, including its fixed
+          # departure time. Detail launches reuse the exact completed result set.
+          capture_routing results 01-trip-planning.png
+
+          # Exercise the real ScrollView on the simulator, with fixed result ranks.
+          # Compare settled content offsets: a bounce or a drawer resize cannot pass.
+          flow_dir="$RUNNER_TEMP/catenary-planner-scroll"
+          mkdir -p "$flow_dir"
+          cat > "$flow_dir/down.yaml" <<EOF
+          appId: $BUNDLE_ID
+          ---
+          - assertVisible:
+              id: "planner.back"
+          - assertVisible:
+              id: "planner.results"
+          - swipe:
+              start: "50%, 85%"
+              end: "50%, 45%"
+              duration: 900
+              waitToSettleTimeoutMs: 2500
+          EOF
+          cat > "$flow_dir/up.yaml" <<EOF
+          appId: $BUNDLE_ID
+          ---
+          - swipe:
+              start: "50%, 45%"
+              end: "50%, 85%"
+              duration: 900
+              waitToSettleTimeoutMs: 2500
+          - assertVisible:
+              id: "planner.back"
+          EOF
+          cp "$results_status_file" "$flow_dir/before.txt"
+          maestro --device "$SIMULATOR_UDID" test "$flow_dir/down.yaml"
+          cp "$results_status_file" "$flow_dir/after-down.txt"
+          maestro --device "$SIMULATOR_UDID" test "$flow_dir/up.yaml"
+          cp "$results_status_file" "$flow_dir/after-up.txt"
+          python3 - "$flow_dir" <<'PYTHON'
+          import pathlib, sys
+          root = pathlib.Path(sys.argv[1])
+          def offset(name):
+              status = (root / name).read_text()
+              assert "fullscreen=true" in status, status
+              return float(next(line.split("=", 1)[1] for line in status.splitlines() if line.startswith("plannerScrollOffset=")))
+          before, down, up = map(offset, ["before.txt", "after-down.txt", "after-up.txt"])
+          assert down > before + 20, f"Results did not scroll down: {before} -> {down}"
+          assert up < down - 20, f"Results did not scroll back up: {down} -> {up}"
+          print(f"Fullscreen scrolling passed: {before} -> {down} -> {up}")
+          PYTHON
+          cp "$flow_dir/"*.txt "$SCREENSHOT_DIR/routing/"
+          for rank in 1 2 3; do
+            capture_routing "$rank" "0$((rank + 1))-journey-$rank-details.png"
+          done
+          test "$(find "$SCREENSHOT_DIR/routing" -name '*.png' | wc -l | tr -d ' ')" = 4
+
       - name: Record drawer transition video
         shell: bash
         run: |
@@ -368,6 +470,7 @@ jobs:
           echo "Created drawer video: $(stat -f%z "$video_path") bytes"
 
       - name: Upload screenshots
+        id: screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -375,6 +478,15 @@ jobs:
           path: ${{ env.SCREENSHOT_DIR }}
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Link screenshots in run summary
+        if: always() && steps.screenshots.outputs.artifact-url != ''
+        env:
+          ARTIFACT_URL: ${{ steps.screenshots.outputs.artifact-url }}
+        run: |
+          echo "### iOS development screenshots" >> "$GITHUB_STEP_SUMMARY"
+          echo "[Download screenshots]($ARTIFACT_URL)" >> "$GITHUB_STEP_SUMMARY"
+          echo "The routing folder contains any completed planner/detail captures and diagnostics (Santa Monica → UCLA)." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload drawer transition video
         if: always()

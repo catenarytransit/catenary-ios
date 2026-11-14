@@ -84,31 +84,34 @@ struct TransitRouteBadge: View {
     let colorHex: String?
     let textColorHex: String?
     let chateauID: String?
+    var compact = false
 
     init(
         shortName: String?,
         longName: String?,
         colorHex: String?,
         textColorHex: String?,
-        chateauID: String? = nil
+        chateauID: String? = nil,
+        compact: Bool = false
     ) {
         self.shortName = shortName
         self.longName = longName
         self.colorHex = colorHex
         self.textColorHex = textColorHex
         self.chateauID = chateauID
+        self.compact = compact
     }
 
     @ViewBuilder
     var body: some View {
         if let mtaRouteID {
-            MTASubwayIcon(routeID: mtaRouteID, size: 24)
+            MTASubwayIcon(routeID: mtaRouteID, size: compact ? 16 : 24)
         } else {
             Text(displayName)
-                .font(.caption.weight(.bold))
+                .font(compact ? .system(size: 10, weight: .bold) : .caption.weight(.bold))
                 .lineLimit(1)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 4)
+                .padding(.horizontal, compact ? 4 : 7)
+                .padding(.vertical, compact ? 1 : 4)
                 .foregroundStyle(Color.transitHex(textColorHex, fallback: .white))
                 .background(Color.transitHex(colorHex, fallback: .secondary), in: .rect(cornerRadius: 6))
                 .accessibilityLabel(Text(verbatim: L10n.format(

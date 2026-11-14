@@ -19,6 +19,7 @@ enum CatenaryStackItem: Hashable, Identifiable {
     case stop(chateauID: String, stopID: String, timeEpochSeconds: Int64? = nil)
     case nearbyDepartures(chateauID: String, latitude: Double, longitude: Double)
     case mapSelectionScreen(options: [MapSelectionOption], lookup: RouteClickLookup? = nil)
+    case tripPlanner
     case settings
     case block(chateauID: String, blockID: String, serviceDate: String)
     case osmItem(
@@ -55,6 +56,7 @@ enum CatenaryStackItem: Hashable, Identifiable {
         case let .mapSelectionScreen(options, lookup):
             let location = lookup.map { "|\($0.latitude)|\($0.longitude)|\($0.zoom)" } ?? ""
             return "selection|" + options.map(\.id).joined(separator: ",") + location
+        case .tripPlanner: return "trip-planner"
         case .settings:
             return "settings"
         case let .block(chateauID, blockID, serviceDate):

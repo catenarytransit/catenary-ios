@@ -3,6 +3,7 @@
 //  catenary-ios
 //
 
+import Combine
 import CoreLocation
 import Foundation
 import MapLibre
@@ -48,6 +49,11 @@ private enum MapCameraPersistence {
 private let persistedMapCameraAtLaunch = MapCameraPersistence.load()
 
 class viewObject: ObservableObject {
+    let tripPlanner = TripPlannerModel()
+    @Published var plannerMapState = DirectionsMapState()
+    var userCoordinate: CLLocationCoordinate2D?
+    private var plannerSubscription: AnyCancellable?
+
     @Published var camera: MapViewCamera = {
 #if DEBUG || SCREENSHOT_AUTOMATION
         if let mapCamera = ScreenshotLaunchConfiguration.current.mapCamera {
@@ -143,9 +149,40 @@ class viewObject: ObservableObject {
     @Published var currentRotation: CLLocationDirection = 0
 
     init() {
+        plannerSubscription = tripPlanner.$mapState.sink { [weak self] state in
+            self?.plannerMapState = state
+        }
+
 #if DEBUG || SCREENSHOT_AUTOMATION
         let configuration = ScreenshotLaunchConfiguration.current
-        if let deepLink = configuration.deepLink {
+        if let screen = configuration.plannerScreen {
+            do {
+                if screen == "results" {
+                    guard let path = configuration.plannerQueryPath else { throw DirectionsError.invalidRequest }
+                    let envelope = try DirectionsRouteEnvelope.decode(Data(contentsOf: URL(fileURLWithPath: path)))
+                    var query = envelope.query
+                    query.request_id = envelope.requestId
+                    tripPlanner.choose(true, location: DirectionsLocation(name: "Santa Monica", lat: query.from.lat, lon: query.from.lon))
+                    tripPlanner.choose(false, location: DirectionsLocation(name: "UCLA", lat: query.to.lat, lon: query.to.lon))
+                    tripPlanner.options = DirectionsOptions(cycling: query.preTransitModes.contains("BIKE"),
+                        walkingPace: 1000 / query.pedestrianSpeed, cyclingKmh: query.cyclingSpeed * 3.6,
+                        accessSeconds: Double(query.maxPreTransitTime), egressSeconds: Double(query.maxPostTransitTime),
+                        directSeconds: Double(query.maxDirectTime))
+                    tripPlanner.now = false
+                    tripPlanner.arriveBy = query.arrival_unix_seconds != nil
+                    tripPlanner.time = Date(timeIntervalSince1970: Double(query.arrival_unix_seconds ?? query.departure_unix_seconds ?? 0))
+                    tripPlanner.search(queryOverride: query)
+                } else if let rank = Int(screen), tripPlanner.itineraries.indices.contains(rank - 1) {
+                    tripPlanner.selectJourney(tripPlanner.itineraries[rank - 1])
+                } else {
+                    ScreenshotReadiness.shared.failPlanner("Saved screenshot session is missing journey \(screen)")
+                }
+            } catch {
+                ScreenshotReadiness.shared.failPlanner("Cannot load routing query: \(error)")
+            }
+            push(.tripPlanner)
+            presDetent = .large
+        } else if let deepLink = configuration.deepLink {
             openDeepLink(deepLink)
 
             // `push` expands the drawer. Restore the requested screenshot detent
