@@ -184,3 +184,47 @@ expect(zonedJourney.previewTimeGroups.arrival.map(\.endpoint) == [false, true], 
 expect(zonedJourney.previewTimeGroups.departure.allSatisfy { $0.timezone == "America/Los_Angeles" }, "Departure zone uses boarding stop")
 expect(zonedJourney.previewTimeGroups.arrival.allSatisfy { $0.timezone == "America/Denver" }, "Arrival zone uses alighting stop")
 expect(zonedJourney.legs[1].intermediateStops?.first?.timezone == "America/Phoenix", "Intermediate stop timezone decoded")
+
+// Trip info uses the service date/start time rather than the boarding date (overnight trips).
+let tripInfoFixture = #"{"mode":"BUS","chateau":"test","tripId":"loop","routeId":"1","routeType":3,"tripStartDate":"20261113","tripStartTime":"25:00:00","startTime":"2026-11-14T09:20:00Z","endTime":"2026-11-14T09:30:00Z","from":{"name":"A","stopId":"a"},"to":{"name":"A","stopId":"a"},"fromStopSequence":30,"toStopSequence":50}"#
+let tripInfoLeg = try JSONDecoder().decode(DirectionsLeg.self, from: Data(tripInfoFixture.utf8))
+let tripSelection = tripInfoLeg.singleTripInfo!
+expect(tripSelection.chateauID == "test" && tripSelection.tripID == "loop" && tripSelection.routeID == "1", "Exact trip identifiers")
+expect(tripSelection.startDate == "20261113" && tripSelection.startTime == "25:00:00" && tripSelection.routeType == 3, "Overnight trip instance")
+let restoredTripLeg = try JSONDecoder().decode(DirectionsLeg.self, from: JSONEncoder().encode(tripInfoLeg))
+expect(restoredTripLeg.singleTripInfo == tripSelection, "Saved journeys retain trip info metadata")
+let segment = tripSelection.journeySegment!
+func tripStop(_ id: String, _ sequence: Int?, _ time: Int64?) throws -> SingleTripStopTime {
+    var json: [String: Any] = ["stop_id": id, "longitude": 0, "latitude": 0]
+    if let sequence { json["gtfs_stop_sequence"] = sequence }
+    if let time { json["scheduled_departure_time_unix_seconds"] = time; json["scheduled_arrival_time_unix_seconds"] = time }
+    return try JSONDecoder().decode(SingleTripStopTime.self, from: JSONSerialization.data(withJSONObject: json))
+}
+let loopStops = try [tripStop("a", 10, segment.from.time - 600), tripStop("b", 20, nil),
+    tripStop("a", 30, segment.from.time), tripStop("b", 40, nil), tripStop("a", 50, segment.to.time), tripStop("c", 60, nil)]
+let selectedRange = JourneyTripRange(from: 2, to: 4)
+expect(JourneyTripRange.resolve(stops: loopStops, segment: segment) == selectedRange, "Sequences distinguish loop stop visits")
+let sequenceFreeStops = try loopStops.map { try tripStop($0.stopID, nil, $0.scheduledDepartureTimeUnixSeconds) }
+expect(JourneyTripRange.resolve(stops: sequenceFreeStops, segment: segment) == selectedRange, "Scheduled times distinguish repeated visits when sequence is absent")
+expect(JourneyTripRange.resolve(stops: loopStops, segment: nil) == nil, "Ordinary trips have no selected segment")
+expect(JourneyTripRange.resolve(stops: loopStops, segment: JourneyTripSegment(from: segment.to, to: segment.from)) == nil, "Reversed selections fail safely")
+let missingEndpoint = JourneyTripEndpoint(stopID: "missing", sequence: 30, time: segment.from.time)
+expect(JourneyTripRange.resolve(stops: loopStops, segment: JourneyTripSegment(from: missingEndpoint, to: segment.to)) == nil, "Missing stops fail safely")
+expect(selectedRange.stop(1) == JourneyStopPresentation(active: false, endpoint: false, incomingActive: false, outgoingActive: false), "Earlier stops muted")
+expect(selectedRange.stop(2) == JourneyStopPresentation(active: true, endpoint: true, incomingActive: false, outgoingActive: true), "Boarding pearl splits contrast")
+expect(selectedRange.stop(3) == JourneyStopPresentation(active: true, endpoint: false, incomingActive: true, outgoingActive: true), "Intermediate stop fully active")
+expect(selectedRange.stop(4) == JourneyStopPresentation(active: true, endpoint: true, incomingActive: true, outgoingActive: false), "Alighting pearl splits contrast")
+expect(!selectedRange.stop(5).active, "Later stops muted")
+for field in ["tripId", "tripStartDate", "chateau", "startTime"] {
+    var missing = try JSONSerialization.jsonObject(with: Data(tripInfoFixture.utf8)) as! [String: Any]
+    missing.removeValue(forKey: field)
+    let leg = try JSONDecoder().decode(DirectionsLeg.self, from: JSONSerialization.data(withJSONObject: missing))
+    expect(leg.singleTripInfo == nil, "Incomplete trip metadata hides navigation: \(field)")
+}
+var streetTrip = tripInfoLeg; streetTrip.mode = "WALK"
+expect(streetTrip.singleTripInfo == nil, "Street legs do not offer trip info")
+var badTimeTrip = tripInfoLeg; badTimeTrip.startTime = "invalid"
+expect(badTimeTrip.singleTripInfo == nil, "Invalid times do not offer trip info")
+let oldLeg = try JSONDecoder().decode(DirectionsLeg.self, from: Data(#"{"mode":"BUS"}"#.utf8))
+expect(oldLeg.singleTripInfo == nil, "Older saved journeys remain readable")
+print("Trip info metadata, overnight services, loop matching and segment presentation passed")

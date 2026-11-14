@@ -11,6 +11,7 @@ struct DirectionsLocation: Codable, Equatable, Sendable {
 }
 
 struct DirectionsPoint: Codable, Equatable, Sendable {
+    var stopId: String? = nil
     var name: String?
     var lat: Double?
     var lon: Double?
@@ -55,6 +56,11 @@ struct DirectionsLeg: Codable, Equatable, Sendable {
     var intermediateStops: [DirectionsStop]?
     var legGeometry: DirectionsGeometry?
     var headsign: String?
+    var tripId: String? = nil
+    var tripStartDate: String? = nil
+    var tripStartTime: String? = nil
+    var fromStopSequence: Int? = nil
+    var toStopSequence: Int? = nil
     var street: Bool { ["WALK", "BIKE", "BICYCLE"].contains(mode.uppercased()) }
     var label: String { routeShortName ?? routeLongName ?? routeId ?? mode.capitalized }
     var seconds: Double { directionsDuration(duration, startTime, endTime) }

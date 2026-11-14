@@ -295,7 +295,7 @@ private struct CatenaryStackDestinationView: View {
             StationDeparturesScreen(destination: destination)
                 .id(destination.stopScreenIdentity)
 
-        case let .singleTrip(chateauID, tripID, routeID, startTime, startDate, vehicleID, routeType):
+        case let .singleTrip(chateauID, tripID, routeID, startTime, startDate, vehicleID, routeType, journeySegment):
             SingleTripScreen(
                 selection: SingleTripSelection(
                     chateauID: chateauID,
@@ -304,7 +304,8 @@ private struct CatenaryStackDestinationView: View {
                     startTime: startTime,
                     startDate: startDate,
                     vehicleID: vehicleID,
-                    routeType: routeType
+                    routeType: routeType,
+                    journeySegment: journeySegment
                 )
             )
             .id(destination.id)
@@ -403,7 +404,7 @@ private struct StackDestinationSummary: View {
 
     private var rows: [(String, String)] {
         switch destination {
-        case let .singleTrip(chateauID, tripID, routeID, startTime, startDate, vehicleID, routeType):
+        case let .singleTrip(chateauID, tripID, routeID, startTime, startDate, vehicleID, routeType, _):
             return compactRows([
                 ("Chateau", chateauID), ("Trip", tripID), ("Route", routeID),
                 ("Start time", startTime), ("Start date", startDate),

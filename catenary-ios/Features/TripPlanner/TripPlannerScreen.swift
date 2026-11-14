@@ -740,6 +740,7 @@ private struct DirectionsJourneyEndpoint: View {
 
 private struct DirectionsLegView: View {
     let leg: DirectionsLeg
+    @EnvironmentObject private var navigator: viewObject
     @State private var expanded = false
     @Environment(\.colorScheme) private var colorScheme
     private var rail: Color { leg.railColor(for: colorScheme) }
@@ -771,6 +772,27 @@ private struct DirectionsLegView: View {
                 }
                 if let headsign = leg.headsign ?? leg.routeLongName, !headsign.isEmpty {
                     DirectionsConnectionRow(color: rail) { Text(headsign).font(.subheadline) }
+                }
+                if let trip = leg.singleTripInfo {
+                    DirectionsConnectionRow(color: rail) {
+                        Button {
+                            navigator.push(.singleTrip(chateauID: trip.chateauID, tripID: trip.tripID,
+                                routeID: trip.routeID, startTime: trip.startTime, startDate: trip.startDate,
+                                vehicleID: trip.vehicleID, routeType: trip.routeType, journeySegment: trip.journeySegment))
+                        } label: {
+                            HStack(spacing: 2) {
+                                Text("Trip info")
+                                Image(systemName: "chevron.right").accessibilityHidden(true)
+                            }
+                            .font(.subheadline)
+                            .frame(minHeight: 40)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(colorScheme == .dark
+                            ? Color(red: 0.58, green: 0.77, blue: 0.99)
+                            : Color(red: 0.11, green: 0.31, blue: 0.85))
+                    }
                 }
                 let stops = leg.intermediateStops ?? []
                 DirectionsConnectionRow(color: rail) {

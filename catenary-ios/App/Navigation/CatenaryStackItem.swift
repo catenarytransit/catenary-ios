@@ -11,7 +11,8 @@ enum CatenaryStackItem: Hashable, Identifiable {
         startTime: String?,
         startDate: String?,
         vehicleID: String?,
-        routeType: Int?
+        routeType: Int?,
+        journeySegment: JourneyTripSegment? = nil
     )
     case vehicleSelected(chateauID: String, vehicleID: String?, gtfsID: String)
     case vehicleHistory(chateauID: String, vehicleID: String, routeID: String?)
@@ -41,8 +42,8 @@ enum CatenaryStackItem: Hashable, Identifiable {
 
     var id: String {
         switch self {
-        case let .singleTrip(chateauID, tripID, routeID, startTime, startDate, vehicleID, routeType):
-            return "trip|\(chateauID)|\(tripID ?? "")|\(routeID ?? "")|\(startTime ?? "")|\(startDate ?? "")|\(vehicleID ?? "")|\(routeType.map { String($0) } ?? "")"
+        case let .singleTrip(chateauID, tripID, routeID, startTime, startDate, vehicleID, routeType, journeySegment):
+            return "trip|\(chateauID)|\(tripID ?? "")|\(routeID ?? "")|\(startTime ?? "")|\(startDate ?? "")|\(vehicleID ?? "")|\(routeType.map { String($0) } ?? "")|\(journeySegment?.identity ?? "")"
         case let .vehicleSelected(chateauID, vehicleID, gtfsID):
             return "vehicle|\(chateauID)|\(vehicleID ?? "")|\(gtfsID)"
         case let .vehicleHistory(chateauID, vehicleID, routeID):
