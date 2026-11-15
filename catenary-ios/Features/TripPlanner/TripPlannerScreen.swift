@@ -233,7 +233,15 @@ struct TripPlannerScreen: View {
     private func endpointField(_ origin: Bool) -> some View {
         TextField(origin ? "Origin" : "Destination", text: Binding(
             get: { origin ? model.originText : model.destinationText },
-            set: { model.edit(origin, text: $0); performSearch(origin) }
+            set: { newValue in
+                // A programmatic text update (e.g. choosing a result while the field is still
+                // focused) can echo back through this setter with the unchanged value. Treating
+                // that echo as a fresh edit would wipe out the just-chosen location and reopen
+                // the picker, so only genuine edits (a different string) should reach model.edit.
+                let current = origin ? model.originText : model.destinationText
+                guard newValue != current else { return }
+                model.edit(origin, text: newValue); performSearch(origin)
+            }
         ))
         .focused($focused, equals: origin)
         .textFieldStyle(.plain)
