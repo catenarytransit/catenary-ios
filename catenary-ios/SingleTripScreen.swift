@@ -5,6 +5,7 @@ struct SingleTripScreen: View {
     let selection: SingleTripSelection
 
     @EnvironmentObject private var viewObject: viewObject
+    @EnvironmentObject private var savedTripsStore: SavedTripsStore
     @StateObject private var model: SingleTripViewModel
     @AppStorage("singleTripShowOriginalTimetable") private var showOriginalTimetable = false
     @AppStorage("singleTripShowCountdown") private var showCountdown = true
@@ -324,6 +325,21 @@ struct SingleTripScreen: View {
                 }
 
                 Spacer()
+
+                if let snapshot = SavedTripSnapshot.make(selection: selection, data: data) {
+                    Button {
+                        if savedTripsStore.contains(snapshot.id) {
+                            savedTripsStore.remove(snapshot.id)
+                        } else {
+                            savedTripsStore.save(snapshot)
+                        }
+                    } label: {
+                        Image(systemName: savedTripsStore.contains(snapshot.id) ? "star.fill" : "star")
+                            .font(.headline)
+                    }
+                    .accessibilityLabel(savedTripsStore.contains(snapshot.id) ? "Remove saved trip" : "Save trip")
+                    .accessibilityIdentifier("trip.save")
+                }
             }
 
             if let occupancy = occupancyLabel {
