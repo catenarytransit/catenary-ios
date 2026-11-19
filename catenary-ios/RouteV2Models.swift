@@ -1,7 +1,7 @@
 import Foundation
 
 /// OJP-inspired JSON returned by Edelweiss /v2/route and /v2/route/ws.
-struct RouteV2Event: Decodable, Sendable {
+struct RouteV2Event: Codable, Sendable {
     let timetabledTime: String?
     let estimatedTime: String?
     let recordedAtTime: String?
@@ -50,7 +50,7 @@ enum RouteV2Time {
     }
 }
 
-struct RouteV2Place: Decodable, Sendable {
+struct RouteV2Place: Codable, Sendable {
     let name: String?
     let lat: Double?
     let lon: Double?
@@ -72,7 +72,7 @@ struct RouteV2Place: Decodable, Sendable {
     }
 }
 
-struct RouteV2Stop: Decodable, Sendable, Identifiable {
+struct RouteV2Stop: Codable, Sendable, Identifiable {
     let name: String?
     let arrival: String?
     let departure: String?
@@ -98,7 +98,7 @@ struct RouteV2Stop: Decodable, Sendable, Identifiable {
     var id: String { (stopId ?? name ?? "stop") + "|" + (departure ?? arrival ?? "") }
 }
 
-struct RouteV2Leg: Decodable, Sendable, Identifiable {
+struct RouteV2Leg: Codable, Sendable, Identifiable {
     let mode: String
     let startTime: String?
     let endTime: String?
@@ -138,7 +138,7 @@ struct RouteV2Leg: Decodable, Sendable, Identifiable {
     var arrivalTime: String? { arrivalEvent?.effectiveTime ?? endTime }
 }
 
-struct RouteV2Journey: Decodable, Sendable, Identifiable {
+struct RouteV2Journey: Codable, Sendable, Identifiable {
     let id: String?
     let startTime: String
     let endTime: String
@@ -170,7 +170,7 @@ struct RouteV2Journey: Decodable, Sendable, Identifiable {
     var alightingLeg: RouteV2Leg? { legs.last { !$0.street } }
 }
 
-struct RouteV2Plan: Decodable, Sendable {
+struct RouteV2Plan: Codable, Sendable {
     let itineraries: [RouteV2Journey]
     let direct: [RouteV2Journey]?
     let previousPageCursor: String?
@@ -184,7 +184,7 @@ struct RouteV2Plan: Decodable, Sendable {
     }
 }
 
-struct RouteV2StreamFrame: Decodable, Sendable {
+struct RouteV2StreamFrame: Codable, Sendable {
     let type: String
     let requestId: String?
     let sequence: Int?
