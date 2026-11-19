@@ -228,3 +228,80 @@ expect(badTimeTrip.singleTripInfo == nil, "Invalid times do not offer trip info"
 let oldLeg = try JSONDecoder().decode(DirectionsLeg.self, from: Data(#"{"mode":"BUS"}"#.utf8))
 expect(oldLeg.singleTripInfo == nil, "Older saved journeys remain readable")
 print("Trip info metadata, overnight services, loop matching and segment presentation passed")
+
+
+// Edelweiss v2 OJP event provenance, on-time delay, changed quay and skipped stops.
+let v2Fixture = #"""
+{
+  "itineraries": [{
+    "id": "ojp-rt-example",
+    "startTime": "2026-11-19T10:00:00Z",
+    "endTime": "2026-11-19T11:03:00Z",
+    "legs": [{
+      "mode": "RAIL", "tripId": "rt-1", "chateau": "example",
+      "startTime": "2026-11-19T10:00:00Z",
+      "endTime": "2026-11-19T11:03:00Z",
+      "ServiceDeparture": {
+        "TimetabledTime": "2026-11-19T10:00:00Z",
+        "EstimatedTime": "2026-11-19T10:00:00Z"
+      },
+      "ServiceArrival": {
+        "TimetabledTime": "2026-11-19T11:00:00Z",
+        "RecordedAtTime": "2026-11-19T11:03:00Z"
+      },
+      "from": {"name": "Origin", "timezone": "Europe/Zurich", "PlannedQuay": "3"},
+      "to": {"name": "Arrival", "timezone": "Europe/Zurich", "EstimatedQuay": "4"},
+      "intermediateStops": [{
+        "name": "Skipped", "NotServicedStop": true,
+        "ServiceDeparture": {
+          "TimetabledTime": "2026-11-19T10:30:00Z",
+          "EstimatedTime": "2026-11-19T10:32:00Z"
+        }
+      }]
+    }]
+  }]
+}
+"""#
+let v2Plan = try JSONDecoder().decode(DirectionsPlan.self, from: Data(v2Fixture.utf8))
+let v2Itinerary = v2Plan.journeys[0]
+let v2Leg = v2Itinerary.legs[0]
+expect(v2Leg.departureEvent?.delaySeconds == 0, "Explicit realtime on-time must not become nil")
+expect(directionsDelayLabel(v2Leg.departureDelaySeconds) == "+0'", "On-time realtime appears as +0'")
+expect(v2Leg.arrivalEvent?.delaySeconds == 180, "Recorded arrival is three minutes late")
+expect(directionsDelayLabel(v2Leg.arrivalDelaySeconds) == "+3'", "Positive delay is formatted with apostrophe")
+expect(directionsDelayLabel(-60) == "-1'", "Negative realtime delays remain visible")
+expect(DirectionsEventTime(timetabledTime: "2026-11-19T10:00:00Z").delaySeconds == nil,
+    "Timetable alone cannot imply +0' realtime")
+expect(v2Itinerary.previewTimeGroups.departure.last?.delaySeconds == 0,
+    "Summary delay sits to the right of the left-side boarding time group")
+expect(v2Leg.from?.plannedQuay == "3" && v2Leg.to?.estimatedQuay == "4",
+    "OJP planned and estimated quays decoded separately")
+expect(v2Leg.intermediateStops?.first?.notServicedStop == true,
+    "Skipped call preserved")
+expect(v2Leg.intermediateStops?.first?.serviceDeparture?.delaySeconds == 120,
+    "Intermediate stop delay decoded")
+let v2RoundTrip = try JSONDecoder().decode(DirectionsPlan.self, from: JSONEncoder().encode(v2Plan))
+expect(v2RoundTrip.journeys[0].legs[0].serviceDeparture?.estimatedTime != nil,
+    "Realtime event fields survive saved-journey roundtrip")
+print("Edelweiss v2 events, +0' delays, quays and skipped calls passed")
+
+// Visited destinations appear synchronously while the user is typing, ahead of
+// asynchronous search results, with case- and diacritic-insensitive matching.
+let historyPlace = SearchHistoryItem(
+    id: "test|1604-primrose-ios",
+    kind: .cypress,
+    title: "1604 S Primrose Ave",
+    subtitle: "California",
+    latitude: 33.0,
+    longitude: -117.0
+)
+SearchHistoryStore.record(historyPlace)
+expect(SearchHistoryStore.matchingItems(for: "1604", limit: 10).contains(where: { $0.id == historyPlace.id }),
+    "Visited street address is suggested immediately on prefix")
+expect(SearchHistoryStore.matchingItems(for: "primrose", limit: 10).contains(where: { $0.id == historyPlace.id }),
+    "Middle-word prefix locates a known address")
+expect(!SearchHistoryStore.matchingItems(for: "not-the-same-place").contains(where: { $0.id == historyPlace.id }),
+    "Unrelated search does not show visited location")
+expect(SearchHistoryStore.normalizedSearchText("  CAFÉ   PRIMROSE  ") == "cafe primrose",
+    "History normalizes accents and repeated whitespace")
+print("Search history instant visited-place prefix matching passed")
