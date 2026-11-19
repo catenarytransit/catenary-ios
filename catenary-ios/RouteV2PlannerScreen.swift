@@ -139,7 +139,15 @@ struct RouteV2PlannerScreen: View {
                     longitude: point.x
                 ))
             },
-            onRecentClick: { _ in }
+            onRecentClick: { item in
+                guard item.kind != .route,
+                      let latitude = item.latitude, let longitude = item.longitude else { return }
+                select(RouteV2Endpoint(
+                    name: item.title,
+                    latitude: latitude,
+                    longitude: longitude
+                ))
+            }
         )
     }
 
