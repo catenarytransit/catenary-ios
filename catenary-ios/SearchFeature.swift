@@ -339,7 +339,7 @@ final class SearchViewModel: ObservableObject {
         if let section = catenaryResults?.stopsSection {
             // A GTFS stop assigned to a returned OSM station is represented by
             // that station card. Do not suppress other stops or unrelated stations.
-            let visibleStationIDs = Set(osmStationResults.compactMap(\.osmID))
+            let visibleStationIDs = Set(osmStationResults.prefix(10).compactMap(\.osmID))
             let rankings = Array((section.ranking ?? []).prefix(10))
             let total = max(rankings.count, 1)
             for (index, ranking) in rankings.enumerated() {
