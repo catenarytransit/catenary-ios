@@ -6,6 +6,7 @@ struct SavedTripsScreen: View {
     let onBack: () -> Void
 
     @EnvironmentObject private var store: SavedTripsStore
+    @EnvironmentObject private var savedRoutes: SavedRouteJourneysStore
     @Environment(\.scenePhase) private var scenePhase
 
     private var orderedSnapshots: [SavedTripSnapshot] {
@@ -13,6 +14,10 @@ struct SavedTripsScreen: View {
             if $0.departure != $1.departure { return $0.departure < $1.departure }
             return $0.id < $1.id
         }
+    }
+
+    private var orderedRoutes: [SavedRouteJourney] {
+        savedRoutes.journeys.sorted { $0.journey.startTime < $1.journey.startTime }
     }
 
     private var days: [(String, [SavedTripSnapshot])] {
@@ -23,10 +28,33 @@ struct SavedTripsScreen: View {
     var body: some View {
         NavigationStack {
             Group {
-                if orderedSnapshots.isEmpty {
+                if orderedSnapshots.isEmpty && orderedRoutes.isEmpty {
                     emptyState
                 } else {
                     List {
+                        ForEach(Array(Dictionary(grouping: orderedRoutes, by: \.dayKey).keys.sorted()), id: \.self) { day in
+                            Section {
+                                ForEach(orderedRoutes.filter { $0.dayKey == day }) { snapshot in
+                                    NavigationLink {
+                                        RouteV2JourneyDetails(journey: snapshot.journey)
+                                    } label: {
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            Text("\(snapshot.originName) → \(snapshot.destinationName)")
+                                                .font(.headline)
+                                            RouteV2JourneyPreview(journey: snapshot.journey)
+                                        }
+                                        .padding(.vertical, 8)
+                                    }
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                        Button("Remove", systemImage: "star.slash", role: .destructive) {
+                                            savedRoutes.remove(snapshot.id)
+                                        }
+                                    }
+                                }
+                            } header: {
+                                Text(orderedRoutes.first(where: { $0.dayKey == day })?.dayLabel ?? "")
+                            }
+                        }
                         ForEach(days.indices, id: \.self) { index in
                             let trips = days[index].1
                             Section {
@@ -75,9 +103,13 @@ struct SavedTripsScreen: View {
             }
             .onAppear {
                 store.refresh()
+                savedRoutes.refresh()
             }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { store.refresh() }
+                if phase == .active {
+                    store.refresh()
+                    savedRoutes.refresh()
+                }
             }
         }
         .background(Color(uiColor: .systemGroupedBackground))
@@ -87,7 +119,7 @@ struct SavedTripsScreen: View {
         ContentUnavailableView {
             Label("No journeys saved", systemImage: "star")
         } description: {
-            Text("Save a trip with the star on its trip screen. Saved trips appear here and are removed 12 hours after arrival.")
+            Text("Save a journey or trip with the star. Saved journeys appear here and are removed 12 hours after arrival.")
         } actions: {
             Button("Back to map", action: onBack)
                 .buttonStyle(.borderedProminent)
