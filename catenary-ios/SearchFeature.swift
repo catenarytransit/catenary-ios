@@ -5,6 +5,7 @@ import SwiftUI
 
 struct SearchLauncher: View {
     let onSearch: () -> Void
+    let onDirections: () -> Void
     let onSettingsClick: () -> Void
 
     var body: some View {
@@ -29,6 +30,13 @@ struct SearchLauncher: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Search")
+
+            Button(action: onDirections) {
+                Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 48, height: 48)
+            }
+            .accessibilityLabel("Plan a journey")
 
             Button(action: onSettingsClick) {
                 Image(systemName: "gearshape.fill")
