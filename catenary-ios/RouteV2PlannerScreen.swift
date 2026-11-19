@@ -186,6 +186,7 @@ struct RouteV2PlannerScreen: View {
     private func updateSearch(query: String) {
         guard editingOrigin || editingDestination else { return }
         let center = initialCoordinate ?? CLLocationCoordinate2D(latitude: 34.05, longitude: -118.24)
+        searchModel.query = query
         searchModel.search(query: query, userLocation: initialCoordinate, mapCenter: center)
     }
 
@@ -216,7 +217,7 @@ struct RouteV2PlannerScreen: View {
 }
 
 /// The summary follows Compose's endpoint / transit clocks / delay ordering.
-private struct RouteV2JourneyPreview: View {
+struct RouteV2JourneyPreview: View {
     let journey: RouteV2Journey
 
     private var boarding: RouteV2Leg? { journey.boardingLeg }
@@ -262,8 +263,9 @@ private struct RouteV2JourneyPreview: View {
     }
 }
 
-private struct RouteV2JourneyDetails: View {
+struct RouteV2JourneyDetails: View {
     let journey: RouteV2Journey
+    @EnvironmentObject private var savedRoutes: SavedRouteJourneysStore
 
     var body: some View {
         ScrollView {
@@ -315,6 +317,20 @@ private struct RouteV2JourneyDetails: View {
         }
         .navigationTitle("Journey details")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    if savedRoutes.contains(journey.stableID) {
+                        savedRoutes.remove(journey.stableID)
+                    } else {
+                        savedRoutes.save(journey)
+                    }
+                } label: {
+                    Image(systemName: savedRoutes.contains(journey.stableID) ? "star.fill" : "star")
+                }
+                .accessibilityLabel(savedRoutes.contains(journey.stableID) ? "Remove saved journey" : "Save journey")
+            }
+        }
     }
 }
 
