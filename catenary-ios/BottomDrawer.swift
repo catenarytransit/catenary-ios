@@ -25,6 +25,7 @@ struct BottomDrawer: View {
     @EnvironmentObject var viewObject: viewObject
     @FocusState private var isFocused: Bool
     @State private var isSearchActive = false
+    @State private var showsSavedJourneys = false
 
     var body: some View {
         Group {
@@ -42,6 +43,7 @@ struct BottomDrawer: View {
                         drawerHeight: sheetHeight,
                         isDrawerCollapsed: selectedDetent == .height(80),
                         collapsedDrawerHeight: collapsedDrawerHeight,
+                        onOpenTrips: { showsSavedJourneys = true },
                         pinActive: $nearbyPinActive,
                         pickedCoordinate: $nearbyPinCoordinate
                     )
@@ -62,6 +64,17 @@ struct BottomDrawer: View {
                     }
                 }
             }
+        }
+        .fullScreenCover(isPresented: $showsSavedJourneys) {
+            SavedJourneysScreen(
+                model: viewObject.tripPlanner,
+                onBack: { showsSavedJourneys = false },
+                onOpen: { saved in
+                    viewObject.tripPlanner.openSavedJourney(saved)
+                    showsSavedJourneys = false
+                    viewObject.push(.tripPlanner)
+                }
+            )
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack {
