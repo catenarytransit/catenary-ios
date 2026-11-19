@@ -16,12 +16,14 @@ var GlobalViewObject: viewObject = viewObject()
 struct CatenaryMapsApp: App {
     @StateObject var viewobject = GlobalViewObject
     @StateObject private var searchViewModel = SearchViewModel()
+    @StateObject private var savedTripsStore = SavedTripsStore()
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     
     var body: some Scene {
         WindowGroup {
             MainUIView(searchViewModel: searchViewModel)
                 .environmentObject(viewobject)
+                .environmentObject(savedTripsStore)
         }
     }
 }
