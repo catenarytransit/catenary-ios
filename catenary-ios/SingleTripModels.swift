@@ -8,6 +8,7 @@ struct SingleTripSelection: Hashable {
     let startDate: String?
     let vehicleID: String?
     let routeType: Int?
+    var journeySegment: JourneyTripSegment? = nil
 }
 
 struct SingleTripRealtimeTime: Codable, Equatable {

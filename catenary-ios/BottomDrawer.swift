@@ -25,6 +25,7 @@ struct BottomDrawer: View {
     @EnvironmentObject var viewObject: viewObject
     @FocusState private var isFocused: Bool
     @State private var isSearchActive = false
+    @State private var showsSavedJourneys = false
 
     var body: some View {
         Group {
@@ -42,6 +43,7 @@ struct BottomDrawer: View {
                         drawerHeight: sheetHeight,
                         isDrawerCollapsed: selectedDetent == .height(80),
                         collapsedDrawerHeight: collapsedDrawerHeight,
+                        onOpenTrips: { showsSavedJourneys = true },
                         pinActive: $nearbyPinActive,
                         pickedCoordinate: $nearbyPinCoordinate
                     )
@@ -62,6 +64,17 @@ struct BottomDrawer: View {
                     }
                 }
             }
+        }
+        .fullScreenCover(isPresented: $showsSavedJourneys) {
+            SavedJourneysScreen(
+                model: viewObject.tripPlanner,
+                onBack: { showsSavedJourneys = false },
+                onOpen: { saved in
+                    viewObject.tripPlanner.openSavedJourney(saved)
+                    showsSavedJourneys = false
+                    viewObject.push(.tripPlanner)
+                }
+            )
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack {
@@ -295,7 +308,7 @@ private struct CatenaryStackDestinationView: View {
             StationDeparturesScreen(destination: destination)
                 .id(destination.stopScreenIdentity)
 
-        case let .singleTrip(chateauID, tripID, routeID, startTime, startDate, vehicleID, routeType):
+        case let .singleTrip(chateauID, tripID, routeID, startTime, startDate, vehicleID, routeType, journeySegment):
             SingleTripScreen(
                 selection: SingleTripSelection(
                     chateauID: chateauID,
@@ -304,7 +317,8 @@ private struct CatenaryStackDestinationView: View {
                     startTime: startTime,
                     startDate: startDate,
                     vehicleID: vehicleID,
-                    routeType: routeType
+                    routeType: routeType,
+                    journeySegment: journeySegment
                 )
             )
             .id(destination.id)
@@ -334,6 +348,9 @@ private struct CatenaryStackDestinationView: View {
 
         case let .mapSelectionScreen(options, lookup):
             MapOverlappingSelectionScreen(options: options, routeLookup: lookup)
+
+        case .tripPlanner:
+            TripPlannerPresentation(model: viewObject.tripPlanner, locationManager: locationManager)
 
         case .settings:
             SettingsScreen()
@@ -389,6 +406,7 @@ private struct StackDestinationSummary: View {
         case .stop: return L10n.string("Stop")
         case .nearbyDepartures: return L10n.string("Nearby departures")
         case .mapSelectionScreen: return L10n.string("Selection")
+        case .tripPlanner: return L10n.string("Directions")
         case .settings: return L10n.string("Settings")
         case .block: return L10n.string("Block")
         case .osmItem: return L10n.string("Map item")
@@ -399,7 +417,7 @@ private struct StackDestinationSummary: View {
 
     private var rows: [(String, String)] {
         switch destination {
-        case let .singleTrip(chateauID, tripID, routeID, startTime, startDate, vehicleID, routeType):
+        case let .singleTrip(chateauID, tripID, routeID, startTime, startDate, vehicleID, routeType, _):
             return compactRows([
                 ("Chateau", chateauID), ("Trip", tripID), ("Route", routeID),
                 ("Start time", startTime), ("Start date", startDate),
@@ -427,7 +445,7 @@ private struct StackDestinationSummary: View {
                 ("Latitude", latitude.map { String($0) }), ("Longitude", longitude.map { String($0) }),
                 ("Time", time.map { String($0) })
             ])
-        case .mapSelectionScreen, .settings:
+        case .mapSelectionScreen, .settings, .tripPlanner:
             return []
         }
     }
