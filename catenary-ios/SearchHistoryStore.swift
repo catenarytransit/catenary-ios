@@ -77,6 +77,38 @@ enum SearchHistoryStore {
     private static let duplicateWindow: TimeInterval = 30
     private static let recencyDecay: TimeInterval = 14 * 24 * 60 * 60
 
+    /// Normalize for prefix matching without depending on the user's capitalization,
+    /// accents or repeated spaces. This is separate from the short-lived API cache.
+    static func normalizedSearchText(_ text: String) -> String {
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+    }
+
+    /// Previously visited places are returned synchronously, before any network
+    /// results. Match the start of a title or a word boundary, so typing "1604"
+    /// immediately finds "1604 S Primrose Ave"; "Primrose" also works.
+    static func matchingItems(
+        for query: String,
+        limit: Int = 6,
+        now: TimeInterval = Date().timeIntervalSince1970
+    ) -> [SearchHistoryItem] {
+        guard limit > 0 else { return [] }
+        let needle = normalizedSearchText(query)
+        guard !needle.isEmpty else { return [] }
+
+        return Array(topItems(limit: maximumItems, now: now)
+            .filter { item in
+                let title = normalizedSearchText(item.title)
+                let subtitle = normalizedSearchText(item.subtitle ?? "")
+                return title.hasPrefix(needle)
+                    || title.contains(" " + needle)
+                    || subtitle.hasPrefix(needle)
+                    || subtitle.contains(" " + needle)
+            }
+            .prefix(limit))
+    }
+
     static func record(
         _ item: SearchHistoryItem,
         now: TimeInterval = Date().timeIntervalSince1970
