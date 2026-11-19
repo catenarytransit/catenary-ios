@@ -36,7 +36,7 @@ func directionsPageQuery(base: DirectionsRequest, direction: ConnectionDirection
     return query
 }
 
-/// Wire envelope shared with catenary-web and Edelweiss /v1/route/ws.
+/// Wire envelope shared with catenary-web and Edelweiss /v2/route/ws.
 struct DirectionsStreamMessage: Decodable {
     let type: String
     let requestId: String?
@@ -129,7 +129,7 @@ actor DirectionsSocketPool {
         idle.removeAll()
     }
     private func makeSocket() -> URLSessionWebSocketTask {
-        let task = session.webSocketTask(with: URL(string: "wss://edelweiss.catenarymaps.org/v1/route/ws")!)
+        let task = session.webSocketTask(with: URL(string: "wss://edelweiss.catenarymaps.org/v2/route/ws")!)
         task.resume()
         return task
     }
@@ -159,7 +159,7 @@ enum DirectionsStreaming {
     }
 
     private static func httpFallback(query: DirectionsRequest, session: URLSession, onPage: @escaping (DirectionsPlan) -> Void) async throws {
-        var urlRequest = URLRequest(url: URL(string: "https://edelweiss.catenarymaps.org/v1/route")!)
+        var urlRequest = URLRequest(url: URL(string: "https://edelweiss.catenarymaps.org/v2/route")!)
         urlRequest.httpMethod = "POST"
         urlRequest.timeoutInterval = 120
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -183,6 +183,16 @@ enum DirectionsStreaming {
             // Bound a stalled connection, including one that never sends a complete frame.
             let completed = try await withThrowingTaskGroup(of: Bool.self) { group -> Bool in
                 group.addTask {
+                    // URLSessionWebSocketTask.resume() is asynchronous. Confirm
+                    // the upgraded connection is live before sending the first
+                    // route frame. The 45-second watchdog below covers this too.
+                    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                        task.sendPing { error in
+                            if let error { continuation.resume(throwing: error) }
+                            else { continuation.resume() }
+                        }
+                    }
+                    try await Task.checkCancellation()
                     try await task.send(.string(try buildEnvelope(query: query, requestId: requestId)))
                     return try await receiveLoop(task: task, state: state, onPage: onPage)
                 }
