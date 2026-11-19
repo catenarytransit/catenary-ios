@@ -517,27 +517,25 @@ private struct SingleTripStopRow: View {
         Button(action: onTap) {
             HStack(alignment: .top, spacing: columnSpacing) {
                 VStack(alignment: .trailing, spacing: 1) {
+                    // Actual clock is first so its baseline aligns with the pearl.
+                    Text(realtimeTimeText ?? scheduledTimeText ?? "—")
+                        .font(.subheadline.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(primaryTimeColor)
+
+                    if let delaySeconds, let label = RouteV2Time.delay(Int(delaySeconds)) {
+                        Text(label)
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(delayColor)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+
                     if showOriginalTimetable,
                        let scheduledTimeText,
                        let realtimeTimeText,
                        scheduledTimeText != realtimeTimeText {
                         Text(scheduledTimeText)
-                            .font(.subheadline.monospacedDigit())
+                            .font(.caption2.monospacedDigit())
                             .foregroundStyle(.secondary)
-                    }
-
-                    Text(realtimeTimeText ?? scheduledTimeText ?? "—")
-                        .font(.subheadline.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(primaryTimeColor)
-
-                    if let delaySeconds, abs(delaySeconds) >= 30 {
-                        DelayDiff(
-                            diff: delaySeconds,
-                            showSeconds: false,
-                            fontSizeOfPolarity: 10,
-                            useSymbolSign: true,
-                            hideMinUnits: true
-                        )
                     }
 
                     if showCountdown, let countdown = countdownText {
@@ -660,7 +658,7 @@ private struct SingleTripStopRow: View {
     }
 
     private var delayText: String? {
-        guard let delaySeconds, abs(delaySeconds) >= 30 else { return nil }
+        guard let delaySeconds else { return nil }
         let minutes = Int(round(Double(delaySeconds) / 60))
         return minutes > 0 ? "+\(minutes) min" : "\(minutes) min"
     }
