@@ -512,7 +512,7 @@ struct CatenarySearchResultsView: View {
     }
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .bottom) {
             // No systemBackground here: the drawer itself owns the adaptive
             // material / Liquid Glass background in both light and dark mode.
             ScrollView {
