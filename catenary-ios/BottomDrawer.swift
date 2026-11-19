@@ -20,6 +20,7 @@ struct BottomDrawer: View {
     let searchViewModel: SearchViewModel
     let focusRequest: Int
     let showsSearchBarWhenInactive: Bool
+    let onOpenTrips: () -> Void
     @Binding var nearbyPinActive: Bool
     @Binding var nearbyPinCoordinate: CLLocationCoordinate2D?
     @EnvironmentObject var viewObject: viewObject
@@ -42,6 +43,7 @@ struct BottomDrawer: View {
                         drawerHeight: sheetHeight,
                         isDrawerCollapsed: selectedDetent == .height(80),
                         collapsedDrawerHeight: collapsedDrawerHeight,
+                        onOpenTrips: onOpenTrips,
                         pinActive: $nearbyPinActive,
                         pickedCoordinate: $nearbyPinCoordinate
                     )
