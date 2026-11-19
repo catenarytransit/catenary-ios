@@ -44,8 +44,13 @@ struct RouteV2PlannerScreen: View {
                     }
                 }
             }
-            .navigationDestination(item: $selectedJourney) { journey in
-                RouteV2JourneyDetails(journey: journey)
+            .navigationDestination(isPresented: Binding(
+                get: { selectedJourney != nil },
+                set: { if !$0 { selectedJourney = nil } }
+            )) {
+                if let journey = selectedJourney {
+                    RouteV2JourneyDetails(journey: journey)
+                }
             }
         }
         .task {
@@ -228,7 +233,7 @@ private struct RouteV2JourneyPreview: View {
                 }
                 if let delay = RouteV2Time.delay(boarding?.departureEvent?.delaySeconds) {
                     Text(delay)
-                        .foregroundStyle((boarding?.departureEvent?.delaySeconds ?? 0) > 0 ? .orange : .secondary)
+                        .foregroundStyle((boarding?.departureEvent?.delaySeconds ?? 0) > 0 ? Color.orange : Color.secondary)
                         .accessibilityLabel("Departure delay \(delay)")
                 }
                 Spacer(minLength: 4)
@@ -329,7 +334,7 @@ private struct RouteV2StopRow: View {
                 if let delay = RouteV2Time.delay(event?.delaySeconds) {
                     Text(delay)
                         .font(.caption2.monospacedDigit())
-                        .foregroundStyle((event?.delaySeconds ?? 0) > 0 ? .orange : .secondary)
+                        .foregroundStyle((event?.delaySeconds ?? 0) > 0 ? Color.orange : Color.secondary)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
             }
