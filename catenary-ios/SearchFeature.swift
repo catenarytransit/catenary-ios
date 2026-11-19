@@ -115,6 +115,47 @@ final class SearchViewModel: ObservableObject {
     private var searchTask: Task<Void, Never>?
     private var generation = UUID()
 
+    private struct CachedResult {
+        let rows: [SearchRow]
+        let insertedAt: Date
+    }
+
+    // Keep recently visible search-result boxes, including when the user backspaces.
+    // Include approximate position so identically worded queries in distant cities
+    // do not reuse irrelevant map-ranked results.
+    private var cachedResults: [String: CachedResult] = [:]
+    private let cacheLifetime: TimeInterval = 90
+    private let cacheLimit = 32
+
+    private func cacheKey(_ request: SearchRequestContext) -> String {
+        func grid(_ location: SearchCoordinate?) -> String {
+            guard let location else { return "none" }
+            return "\(Int((location.latitude * 100).rounded())):\(Int((location.longitude * 100).rounded()))"
+        }
+        return "\(request.query.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current))|\(grid(request.userLocation))|\(grid(request.mapCenter))"
+    }
+
+    private func cached(_ key: String) -> [SearchRow]? {
+        guard let entry = cachedResults[key] else { return nil }
+        guard Date().timeIntervalSince(entry.insertedAt) < cacheLifetime else {
+            cachedResults.removeValue(forKey: key)
+            return nil
+        }
+        return entry.rows
+    }
+
+    private func remember(_ rows: [SearchRow], for key: String) {
+        let now = Date()
+        cachedResults = cachedResults.filter {
+            now.timeIntervalSince($0.value.insertedAt) < cacheLifetime
+        }
+        cachedResults[key] = CachedResult(rows: rows, insertedAt: now)
+        if cachedResults.count > cacheLimit,
+           let oldest = cachedResults.min(by: { $0.value.insertedAt < $1.value.insertedAt }) {
+            cachedResults.removeValue(forKey: oldest.key)
+        }
+    }
+
     func search(
         query: String,
         userLocation: CLLocationCoordinate2D?,
@@ -136,15 +177,21 @@ final class SearchViewModel: ObservableObject {
 
         let token = UUID()
         generation = token
-        if !isLoading {
-            isLoading = true
-        }
 
         let request = SearchRequestContext(
             query: trimmedQuery,
             userLocation: userLocation.map(SearchCoordinate.init),
             mapCenter: SearchCoordinate(mapCenter)
         )
+        let key = cacheKey(request)
+        if let saved = cached(key) {
+            rows = saved
+            isLoading = false
+            return
+        }
+        // Never show another query's results as though they matched the new text.
+        rows = []
+        isLoading = true
         let worker = self.worker
 
         searchTask = Task { [weak self] in
@@ -163,6 +210,7 @@ final class SearchViewModel: ObservableObject {
 
             self.rows = combinedRows
             self.isLoading = false
+            self.remember(combinedRows, for: key)
         }
     }
 
@@ -281,13 +329,17 @@ final class SearchViewModel: ObservableObject {
         }
 
         if let section = catenaryResults?.stopsSection {
+            // A GTFS stop assigned to a returned OSM station is represented by
+            // that station card. Do not suppress other stops or unrelated stations.
+            let visibleStationIDs = Set(osmStationResults.compactMap(\.osmID))
             let rankings = Array((section.ranking ?? []).prefix(10))
             let total = max(rankings.count, 1)
             for (index, ranking) in rankings.enumerated() {
                 guard let chateau = ranking.chateau,
                       let gtfsID = ranking.gtfsID,
                       let stop = section.stops?[chateau]?[gtfsID],
-                      stop.parentStation == nil else {
+                      stop.parentStation == nil,
+                      stop.osmStationID.map({ !visibleStationIDs.contains($0) }) ?? true else {
                     continue
                 }
 
@@ -980,6 +1032,7 @@ struct SearchStopInfo: Decodable, Sendable {
     let point: SearchPoint?
     let routes: [String]?
     let parentStation: String?
+    let osmStationID: String?
 
     enum CodingKeys: String, CodingKey {
         case name
@@ -987,6 +1040,23 @@ struct SearchStopInfo: Decodable, Sendable {
         case point
         case routes
         case parentStation = "parent_station"
+        case osmStationID = "osm_station_id"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        code = try container.decodeIfPresent(String.self, forKey: .code)
+        point = try container.decodeIfPresent(SearchPoint.self, forKey: .point)
+        routes = try container.decodeIfPresent([String].self, forKey: .routes)
+        parentStation = try container.decodeIfPresent(String.self, forKey: .parentStation)
+        if let stringID = try? container.decode(String.self, forKey: .osmStationID) {
+            osmStationID = stringID
+        } else if let intID = try? container.decode(Int64.self, forKey: .osmStationID) {
+            osmStationID = String(intID)
+        } else {
+            osmStationID = nil
+        }
     }
 }
 
