@@ -4,6 +4,7 @@ struct DirectionsTimeMarker: Equatable {
     let time: String
     let endpoint: Bool
     var timezone: String? = nil
+    var delaySeconds: Int64? = nil
 }
 struct DirectionsTimeGroups: Equatable {
     let departure: [DirectionsTimeMarker]
@@ -29,14 +30,23 @@ extension DirectionsItinerary {
             }
             return meters < 25
         }
-        let boarding = legs[first].startTime ?? (first > 0 ? legs[first - 1].endTime : nil)
-        let alighting = legs[last].endTime ?? (last + 1 < legs.count ? legs[last + 1].startTime : endTime)
+        let boarding = legs[first].departureCurrentTime ?? (first > 0 ? legs[first - 1].endTime : nil)
+        let alighting = legs[last].arrivalCurrentTime ?? (last + 1 < legs.count ? legs[last + 1].startTime : endTime)
         let originAtStop = atStop(legs[..<first])
         let destinationAtStop = atStop(legs[(last + 1)...])
-        var departure = [DirectionsTimeMarker(time: startTime, endpoint: true, timezone: departureTimezone)]
+        let boardingDelay = legs[first].departureDelaySeconds
+        let showBoarding = !originAtStop && boarding != nil
+            && directionsDate(boarding) != nil && directionsDate(boarding) != directionsDate(startTime)
+        var departure = [DirectionsTimeMarker(
+            time: startTime, endpoint: true, timezone: departureTimezone,
+            delaySeconds: showBoarding ? nil : boardingDelay
+        )]
         var arrival: [DirectionsTimeMarker] = []
-        if !originAtStop, let boarding, directionsDate(boarding) != nil, directionsDate(boarding) != directionsDate(startTime) {
-            departure.append(.init(time: boarding, endpoint: false, timezone: legs[first].from?.timezone))
+        if showBoarding, let boarding {
+            departure.append(.init(
+                time: boarding, endpoint: false,
+                timezone: legs[first].from?.timezone, delaySeconds: boardingDelay
+            ))
         }
         if !destinationAtStop, let alighting, directionsDate(alighting) != nil, directionsDate(alighting) != directionsDate(endTime) {
             arrival.append(.init(time: alighting, endpoint: false, timezone: legs[last].to?.timezone))
