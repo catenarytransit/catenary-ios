@@ -27,7 +27,8 @@ struct SavedTripsScreen: View {
                     emptyState
                 } else {
                     List {
-                        ForEach(days, id: \.0) { _, trips in
+                        ForEach(days.indices, id: \.self) { index in
+                            let trips = days[index].1
                             Section {
                                 ForEach(trips) { trip in
                                     NavigationLink(value: trip) {
@@ -48,6 +49,15 @@ struct SavedTripsScreen: View {
                         }
                     }
                     .listStyle(.insetGrouped)
+                    .overlay(alignment: .top) {
+                        if let error = store.errorMessage {
+                            Text(error)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .padding(8)
+                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
                 }
             }
             .navigationTitle("Trips")
