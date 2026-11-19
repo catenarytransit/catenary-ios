@@ -17,6 +17,7 @@ struct CatenaryMapsApp: App {
     @StateObject var viewobject = GlobalViewObject
     @StateObject private var searchViewModel = SearchViewModel()
     @StateObject private var savedTripsStore = SavedTripsStore()
+    @StateObject private var savedRouteJourneysStore = SavedRouteJourneysStore()
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     
     var body: some Scene {
@@ -24,6 +25,7 @@ struct CatenaryMapsApp: App {
             MainUIView(searchViewModel: searchViewModel)
                 .environmentObject(viewobject)
                 .environmentObject(savedTripsStore)
+                .environmentObject(savedRouteJourneysStore)
         }
     }
 }
