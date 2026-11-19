@@ -235,6 +235,7 @@ struct MainUIView: View {
     @StateObject private var nearbyPinMapCoordinator = NearbyPinMapCoordinator()
     @State private var isSheetPresented = true
     @State private var showSavedTrips = false
+    @State private var showRoutePlanner = false
     @State private var liveSheetHeight: CGFloat = 350
     @State private var collapsedNativeSheetHeight: CGFloat?
     @State private var pendingCollapsedNativeSheetHeight: CGFloat?
@@ -288,6 +289,12 @@ struct MainUIView: View {
                 }
                 .fullScreenCover(isPresented: $showSavedTrips) {
                     SavedTripsScreen(onBack: { showSavedTrips = false })
+                }
+                .fullScreenCover(isPresented: $showRoutePlanner) {
+                    RouteV2PlannerScreen(
+                        initialCoordinate: locationManager.lastKnownLocation,
+                        onBack: { showRoutePlanner = false }
+                    )
                 }
                 .catenaryOnChange(of: viewobject.showLayerSelector) { last, current in
                     withAnimation(.catenaryBouncy) {
@@ -345,6 +352,7 @@ struct MainUIView: View {
                        (viewobject.presDetent != .large || isSearchSheetTransitioning) {
                         SearchLauncher(
                             onSearch: beginSearch,
+                            onDirections: { showRoutePlanner = true },
                             onSettingsClick: { viewobject.push(.settings) }
                         )
                         .frame(width: usesLeadingPaneLayout ? leadingPaneWidth : nil)
