@@ -234,6 +234,7 @@ struct MainUIView: View {
     @StateObject var locationManager = LocationManager()
     @StateObject private var nearbyPinMapCoordinator = NearbyPinMapCoordinator()
     @State private var isSheetPresented = true
+    @State private var showSavedTrips = false
     @State private var liveSheetHeight: CGFloat = 350
     @State private var collapsedNativeSheetHeight: CGFloat?
     @State private var pendingCollapsedNativeSheetHeight: CGFloat?
@@ -284,6 +285,9 @@ struct MainUIView: View {
                 }
                 .sheet(isPresented: nativeSheetPresentationBinding) {
                     bottomDrawerSheet
+                }
+                .fullScreenCover(isPresented: $showSavedTrips) {
+                    SavedTripsScreen(onBack: { showSavedTrips = false })
                 }
                 .catenaryOnChange(of: viewobject.showLayerSelector) { last, current in
                     withAnimation(.catenaryBouncy) {
@@ -632,6 +636,7 @@ struct MainUIView: View {
             locationManager: locationManager,
             searchViewModel: searchViewModel,
             focusRequest: searchFocusRequest,
+            onOpenTrips: { showSavedTrips = true },
             showsSearchBarWhenInactive: !usesLandscapePhoneDrawer || isLandscapeSearchRequested,
             nearbyPinActive: $nearbyPinActive,
             nearbyPinCoordinate: $nearbyPinCoordinate
