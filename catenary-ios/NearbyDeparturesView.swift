@@ -198,6 +198,7 @@ struct NearbyDeparturesView: View {
     let drawerHeight: CGFloat?
     let isDrawerCollapsed: Bool?
     let collapsedDrawerHeight: CGFloat?
+    let onOpenTrips: () -> Void
     @Binding private var pinActive: Bool
     @Binding private var pickedCoordinate: CLLocationCoordinate2D?
 
@@ -217,6 +218,7 @@ struct NearbyDeparturesView: View {
         drawerHeight: CGFloat? = nil,
         isDrawerCollapsed: Bool? = nil,
         collapsedDrawerHeight: CGFloat? = nil,
+        onOpenTrips: @escaping () -> Void = {},
         pinActive: Binding<Bool> = .constant(false),
         pickedCoordinate: Binding<CLLocationCoordinate2D?> = .constant(nil)
     ) {
@@ -225,6 +227,7 @@ struct NearbyDeparturesView: View {
         self.drawerHeight = drawerHeight
         self.isDrawerCollapsed = isDrawerCollapsed
         self.collapsedDrawerHeight = collapsedDrawerHeight
+        self.onOpenTrips = onOpenTrips
         _pinActive = pinActive
         _pickedCoordinate = pickedCoordinate
         _lockedOrigin = State(
@@ -303,12 +306,31 @@ struct NearbyDeparturesView: View {
             .accessibilityHidden(drawerExpansionProgress < 0.5)
 
             if usesCompactDrawerSummary {
-                compactSummary
+                HStack(alignment: .center, spacing: 10) {
+                    compactSummary
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .allowsHitTesting(false)
+
+                    Button(action: onOpenTrips) {
+                        VStack(spacing: 3) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                            Text("Trips")
+                                .font(.caption2.weight(.medium))
+                        }
+                        .frame(minWidth: 48, minHeight: 54)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Saved trips")
+                    .accessibilityHint("Opens your saved trips in a full-screen view")
+                    .accessibilityIdentifier("nearby.saved-trips")
+                }
                     .padding(.horizontal, 16)
-                    .padding(.top, 36)
+                    .padding(.top, 30)
                     .frame(maxWidth: .infinity, maxHeight: 120, alignment: .topLeading)
                     .opacity(1 - drawerExpansionProgress)
-                    .allowsHitTesting(false)
+                    .allowsHitTesting(drawerExpansionProgress < 0.5)
                     .accessibilityHidden(drawerExpansionProgress >= 0.5)
             }
         }

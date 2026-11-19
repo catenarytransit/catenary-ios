@@ -1,6 +1,33 @@
 import Foundation
 
 // Ported from catenary-compose TripPlannerModels.kt. Keep Edelweiss field names and units.
+/// OJP-style v2 event: an estimated or recorded event is the sole evidence
+/// of realtime, so an explicit on-time update is displayed as +0'.
+struct DirectionsEventTime: Codable, Equatable, Sendable {
+    var timetabledTime: String? = nil
+    var estimatedTime: String? = nil
+    var recordedAtTime: String? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case timetabledTime = "TimetabledTime"
+        case estimatedTime = "EstimatedTime"
+        case recordedAtTime = "RecordedAtTime"
+    }
+
+    var effectiveTime: String? { recordedAtTime ?? estimatedTime ?? timetabledTime }
+    var delaySeconds: Int64? {
+        guard let baseline = directionsDate(timetabledTime),
+              let realtime = directionsDate(recordedAtTime ?? estimatedTime) else { return nil }
+        return Int64(realtime.timeIntervalSince(baseline).rounded())
+    }
+}
+
+func directionsDelayLabel(_ delaySeconds: Int64?) -> String? {
+    guard let delaySeconds else { return nil }
+    let minutes = Int((Double(abs(delaySeconds)) / 60).rounded())
+    return (delaySeconds < 0 ? "-" : "+") + String(minutes) + "'"
+}
+
 struct DirectionsLocation: Codable, Equatable, Sendable {
     var name: String
     var lat: Double
@@ -18,6 +45,25 @@ struct DirectionsPoint: Codable, Equatable, Sendable {
     var platform: String?
     var timezone: String? = nil
     var platformCode: String?
+    var plannedQuay: String? = nil
+    var estimatedQuay: String? = nil
+    var serviceDeparture: DirectionsEventTime? = nil
+    var serviceArrival: DirectionsEventTime? = nil
+    var notServicedStop: Bool? = nil
+    var noBoardingAtStop: Bool? = nil
+    var noAlightingAtStop: Bool? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case stopId, name, lat, lon, platform, timezone, platformCode
+        case plannedQuay = "PlannedQuay"
+        case estimatedQuay = "EstimatedQuay"
+        case serviceDeparture = "ServiceDeparture"
+        case serviceArrival = "ServiceArrival"
+        case notServicedStop = "NotServicedStop"
+        case noBoardingAtStop = "NoBoardingAtStop"
+        case noAlightingAtStop = "NoAlightingAtStop"
+    }
+
     var location: DirectionsLocation? {
         guard let lat, let lon else { return nil }
         let result = DirectionsLocation(name: name ?? "", lat: lat, lon: lon)
@@ -31,6 +77,25 @@ struct DirectionsStop: Codable, Equatable, Sendable {
     var scheduledArrival: String?
     var scheduledDeparture: String?
     var timezone: String? = nil
+    var stopId: String? = nil
+    var serviceDeparture: DirectionsEventTime? = nil
+    var serviceArrival: DirectionsEventTime? = nil
+    var plannedQuay: String? = nil
+    var estimatedQuay: String? = nil
+    var notServicedStop: Bool? = nil
+    var noBoardingAtStop: Bool? = nil
+    var noAlightingAtStop: Bool? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case name, arrival, departure, scheduledArrival, scheduledDeparture, timezone, stopId
+        case serviceDeparture = "ServiceDeparture"
+        case serviceArrival = "ServiceArrival"
+        case plannedQuay = "PlannedQuay"
+        case estimatedQuay = "EstimatedQuay"
+        case notServicedStop = "NotServicedStop"
+        case noBoardingAtStop = "NoBoardingAtStop"
+        case noAlightingAtStop = "NoAlightingAtStop"
+    }
 }
 struct DirectionsGeometry: Codable, Equatable, Sendable {
     var points: String?
@@ -61,6 +126,26 @@ struct DirectionsLeg: Codable, Equatable, Sendable {
     var tripStartTime: String? = nil
     var fromStopSequence: Int? = nil
     var toStopSequence: Int? = nil
+    var serviceDeparture: DirectionsEventTime? = nil
+    var serviceArrival: DirectionsEventTime? = nil
+    var cancelled: Bool? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case mode, duration, startTime, endTime, routeColor, routeTextColor
+        case routeShortName, routeLongName, routeId, routeType, chateau
+        case tripShortName, from, to, fromPlatform, toPlatform
+        case intermediateStops, legGeometry, headsign, tripId, tripStartDate, tripStartTime
+        case fromStopSequence, toStopSequence, cancelled
+        case serviceDeparture = "ServiceDeparture"
+        case serviceArrival = "ServiceArrival"
+    }
+
+    var departureEvent: DirectionsEventTime? { serviceDeparture ?? from?.serviceDeparture }
+    var arrivalEvent: DirectionsEventTime? { serviceArrival ?? to?.serviceArrival }
+    var departureDelaySeconds: Int64? { departureEvent?.delaySeconds }
+    var arrivalDelaySeconds: Int64? { arrivalEvent?.delaySeconds }
+    var departureCurrentTime: String? { departureEvent?.effectiveTime ?? startTime }
+    var arrivalCurrentTime: String? { arrivalEvent?.effectiveTime ?? endTime }
     var street: Bool { ["WALK", "BIKE", "BICYCLE"].contains(mode.uppercased()) }
     var label: String { routeShortName ?? routeLongName ?? routeId ?? mode.capitalized }
     var seconds: Double { directionsDuration(duration, startTime, endTime) }

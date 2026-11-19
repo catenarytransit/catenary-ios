@@ -8,6 +8,7 @@ swiftc catenary-ios/Features/TripPlanner/DirectionsModels.swift \
   catenary-ios/Features/TripPlanner/DirectionsPresentation.swift \
   catenary-ios/Features/TripPlanner/DirectionsStreaming.swift \
   catenary-ios/SingleTripModels.swift \
+  catenary-ios/SearchHistoryStore.swift \
   catenary-ios/Features/TripPlanner/JourneyTripInfo.swift \
   Tests/TripPlanner/main.swift -o "$test_binary"
 "$test_binary"

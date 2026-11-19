@@ -73,6 +73,48 @@ final class TripPlannerModel: ObservableObject {
         var updated = savedJourneys
         if saved { updated.removeValue(forKey: journey.identity) }
         else { updated[journey.identity] = SavedDirectionsJourney(itinerary: journey, origin: origin, destination: destination) }
+        persistSavedJourneys(updated)
+    }
+
+    /// Open a saved itinerary in PR #56's existing full-screen planner details.
+    /// Reuse its actual v2 model, trip-info navigation and map representation.
+    func openSavedJourney(_ saved: SavedDirectionsJourney) {
+        invalidate()
+        origin = saved.origin
+        destination = saved.destination
+        originText = saved.origin?.name ?? saved.itinerary.legs.first?.from?.name ?? "Origin"
+        destinationText = saved.destination?.name ?? saved.itinerary.legs.last?.to?.name ?? "Destination"
+        itineraries = [saved.itinerary]
+        initialPage = DirectionsPlan(itineraries: [saved.itinerary])
+        selected = 0
+        details = true
+        showTransfers = true
+        searched = true
+        mapMode = false
+        editing = nil
+        publishMap(fit: true)
+        saveSession()
+    }
+
+    func removeSavedJourney(id: String) {
+        guard !savingJourney, savedJourneys[id] != nil else { return }
+        var updated = savedJourneys
+        updated.removeValue(forKey: id)
+        persistSavedJourneys(updated)
+    }
+
+    /// Match Compose's 12-hour post-arrival pruning rule.
+    func pruneExpiredSavedJourneys(now: Date = Date()) {
+        guard !savingJourney else { return }
+        let cutoff = now.addingTimeInterval(-12 * 60 * 60)
+        let updated = savedJourneys.filter { _, saved in
+            (directionsDate(saved.itinerary.endTime) ?? .distantPast) >= cutoff
+        }
+        if updated.count != savedJourneys.count { persistSavedJourneys(updated) }
+    }
+
+    private func persistSavedJourneys(_ updated: [String: SavedDirectionsJourney]) {
+        guard !savingJourney else { return }
         let snapshot = updated
         savingJourney = true; saveError = nil
         Task { @MainActor in

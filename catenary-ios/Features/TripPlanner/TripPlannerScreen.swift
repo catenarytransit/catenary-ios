@@ -272,10 +272,61 @@ struct TripPlannerScreen: View {
         recent = updated
         if let data = try? JSONEncoder().encode(updated) { UserDefaults.standard.set(data, forKey: recentKey) }
     }
+    /// Blend planner-local and app-wide visited places so prior addresses
+    /// appear before the debounced search responds (e.g. "1604").
+    private func matchingVisitedPlaces(_ query: String) -> [DirectionsLocation] {
+        let needle = SearchHistoryStore.normalizedSearchText(query)
+        guard !needle.isEmpty else { return [] }
+        let local = recent.filter { location in
+            let title = SearchHistoryStore.normalizedSearchText(location.name)
+            return title.hasPrefix(needle) || title.contains(" " + needle)
+        }
+        let global = SearchHistoryStore.matchingItems(for: query, limit: 12).compactMap { item -> DirectionsLocation? in
+            guard let lat = item.latitude, let lon = item.longitude else { return nil }
+            let location = DirectionsLocation(name: item.title, lat: lat, lon: lon)
+            return location.isValid ? location : nil
+        }
+        var found: [DirectionsLocation] = []
+        for item in local + global {
+            guard !found.contains(where: { sameVisitedLocation(item, $0) }) else { continue }
+            found.append(item)
+            if found.count == 6 { break }
+        }
+        return found
+    }
+
+    private func sameVisitedLocation(_ a: DirectionsLocation, _ b: DirectionsLocation) -> Bool {
+        let titleA = SearchHistoryStore.normalizedSearchText(a.name)
+        let titleB = SearchHistoryStore.normalizedSearchText(b.name)
+        guard titleA == titleB else { return false }
+        let latDistance = (a.lat - b.lat) * 111_195
+        let lonDistance = (a.lon - b.lon) * 111_195 * cos((a.lat + b.lat) * .pi / 360)
+        return hypot(latDistance, lonDistance) < 25
+    }
+
     private func endpointSearch(_ origin: Bool) -> some View {
         let query = origin ? model.originText : model.destinationText
+        let matches = matchingVisitedPlaces(query)
+        let newResults = search.rows.filter { row in
+            guard let candidate = row.directionsLocation else { return true }
+            return !matches.contains(where: { sameVisitedLocation($0, candidate) })
+        }
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(matches.enumerated()), id: \.offset) { _, location in
+                    Button { choose(origin, location) } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "clock")
+                                .frame(width: 24)
+                                .foregroundStyle(.secondary)
+                            Text(location.name).foregroundStyle(.primary)
+                            Spacer(minLength: 4)
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.plain)
+                    Divider()
+                }
                 Button {
                     if let coordinate = locationManager.lastKnownLocation {
                         choose(origin, DirectionsLocation(name: "Current location", coordinate: coordinate, current: true))
@@ -301,7 +352,7 @@ struct TripPlannerScreen: View {
                         Divider()
                     }
                 }
-                ForEach(search.rows) { row in
+                ForEach(newResults) { row in
                     if let location = row.directionsLocation {
                         Button { choose(origin, location) } label: {
                             HStack {
@@ -605,6 +656,13 @@ struct JourneyPreview: View {
                     .foregroundStyle(markers[index].endpoint ? Color.primary : Color.secondary)
                     .lineLimit(1).minimumScaleFactor(0.6)
             }
+            if let delay = markers.last?.delaySeconds, let label = directionsDelayLabel(delay) {
+                Text(label)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(delay > 0 ? Color.orange : Color.secondary)
+                    .accessibilityLabel("Departure delay " + label)
+                    .lineLimit(1)
+            }
         }
     }
 }
@@ -692,6 +750,7 @@ private struct JourneyBoundsKey: PreferenceKey {
 private struct DirectionsConnectionRow<Content: View>: View {
     var color: Color = .primary
     var time = ""
+    var delaySeconds: Int64? = nil
     var platform: String? = nil
     var pearl = false
     var first = false
@@ -701,8 +760,16 @@ private struct DirectionsConnectionRow<Content: View>: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(time).font(.system(size: 14, weight: .bold)).monospacedDigit()
-                .frame(width: 60, alignment: .trailing)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(time).font(.system(size: 14, weight: .bold)).monospacedDigit()
+                if let delay = delaySeconds, let label = directionsDelayLabel(delay) {
+                    Text(label)
+                        .font(.system(size: 11).monospacedDigit())
+                        .foregroundStyle(delay > 0 ? Color.orange : Color.secondary)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+            }
+            .frame(width: 60, alignment: .trailing)
             Color.clear.frame(width: 20)
             content().frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 3)
             if let platform, !platform.isEmpty {
@@ -714,12 +781,15 @@ private struct DirectionsConnectionRow<Content: View>: View {
             Canvas { context, size in
                 // 60-point time column + 8-point spacing + half the 20-point rail column.
                 let x: CGFloat = 78
+                // With a second-line delay, the pearl stays aligned with the
+                // ACTUAL time on the first line, not the entire stacked clock.
+                let markerY: CGFloat = delaySeconds == nil ? size.height / 2 : 10
                 var path = Path()
-                path.move(to: CGPoint(x: x, y: first ? size.height / 2 : 0))
-                path.addLine(to: CGPoint(x: x, y: last ? size.height / 2 : size.height))
+                path.move(to: CGPoint(x: x, y: first ? markerY : 0))
+                path.addLine(to: CGPoint(x: x, y: last ? markerY : size.height))
                 context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: 2, dash: dotted ? [2, 4] : []))
                 if pearl {
-                    context.fill(Path(ellipseIn: CGRect(x: x - 4, y: size.height / 2 - 4, width: 8, height: 8)), with: .color(color))
+                    context.fill(Path(ellipseIn: CGRect(x: x - 4, y: markerY - 4, width: 8, height: 8)), with: .color(color))
                 }
             }
         }
@@ -762,7 +832,13 @@ private struct DirectionsLegView: View {
                     }
                 }
             } else {
-                endpoint(leg.from, time: leg.startTime, platform: leg.fromPlatform, first: true)
+                endpoint(leg.from, time: leg.departureCurrentTime, platform: leg.fromPlatform,
+                    event: leg.departureEvent, first: true)
+                if leg.cancelled == true {
+                    DirectionsConnectionRow(color: rail) {
+                        Label("Cancelled", systemImage: "xmark.octagon.fill").foregroundStyle(.red)
+                    }
+                }
                 DirectionsConnectionRow(color: rail) {
                     HStack(spacing: 6) {
                         LegModeIcon(leg: leg)
@@ -811,13 +887,27 @@ private struct DirectionsLegView: View {
                 }
                 if expanded {
                     ForEach(stops.indices, id: \.self) { index in
+                        let stop = stops[index]
+                        let event = stop.serviceDeparture ?? stop.serviceArrival
                         DirectionsConnectionRow(color: rail,
-                            time: directionsClock(stops[index].departure ?? stops[index].arrival ?? stops[index].scheduledDeparture ?? stops[index].scheduledArrival, timezone: stops[index].timezone ?? leg.from?.timezone), pearl: true) {
-                            Text(stationName(stops[index].name)).font(.subheadline)
+                            time: directionsClock(event?.effectiveTime ?? stop.departure ?? stop.arrival ?? stop.scheduledDeparture ?? stop.scheduledArrival,
+                                timezone: stop.timezone ?? leg.from?.timezone),
+                            delaySeconds: event?.delaySeconds, pearl: true) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(stationName(stop.name)).font(.subheadline)
+                                    .strikethrough(stop.notServicedStop == true)
+                                if stop.notServicedStop == true {
+                                    Text("Not serviced").font(.caption2).foregroundStyle(.red)
+                                }
+                                if let quay = stop.estimatedQuay ?? stop.plannedQuay {
+                                    Text("Platform " + quay).font(.caption2).foregroundStyle(.secondary)
+                                }
+                            }
                         }
                     }
                 }
-                endpoint(leg.to, time: leg.endTime, platform: leg.toPlatform, first: false)
+                endpoint(leg.to, time: leg.arrivalCurrentTime, platform: leg.toPlatform,
+                    event: leg.arrivalEvent, first: false)
             }
         }
         .foregroundStyle(Color.primary)
@@ -825,10 +915,21 @@ private struct DirectionsLegView: View {
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(leg.street ? Color.primary.opacity(0.15) : .clear))
     }
-    private func endpoint(_ point: DirectionsPoint?, time: String?, platform: String?, first: Bool) -> some View {
+    private func endpoint(
+        _ point: DirectionsPoint?, time: String?, platform: String?,
+        event: DirectionsEventTime?, first: Bool
+    ) -> some View {
         DirectionsConnectionRow(color: rail, time: directionsClock(time, timezone: point?.timezone),
-            platform: platform ?? point?.platformCode ?? point?.platform, pearl: true, first: first, last: !first) {
-            Text(stationName(point?.name)).font(.body.weight(.medium))
+            delaySeconds: event?.delaySeconds,
+            platform: point?.estimatedQuay ?? point?.plannedQuay ?? platform ?? point?.platformCode ?? point?.platform,
+            pearl: true, first: first, last: !first) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(stationName(point?.name)).font(.body.weight(.medium))
+                    .strikethrough(point?.notServicedStop == true)
+                if point?.notServicedStop == true {
+                    Text("Not serviced").font(.caption2).foregroundStyle(.red)
+                }
+            }
         }
     }
 }

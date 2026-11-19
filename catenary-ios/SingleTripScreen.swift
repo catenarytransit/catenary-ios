@@ -511,27 +511,26 @@ private struct SingleTripStopRow: View {
         Button(action: onTap) {
             HStack(alignment: .top, spacing: columnSpacing) {
                 VStack(alignment: .trailing, spacing: 1) {
+                    // Align the effective clock with the pearl; keep the
+                    // explicit +/- delay (including +0') underneath it.
+                    Text(realtimeTimeText ?? scheduledTimeText ?? "—")
+                        .font(.subheadline.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(primaryTimeColor)
+
+                    if let label = directionsDelayLabel(delaySeconds) {
+                        Text(label)
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(delayColor)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+
                     if showOriginalTimetable,
                        let scheduledTimeText,
                        let realtimeTimeText,
                        scheduledTimeText != realtimeTimeText {
                         Text(scheduledTimeText)
-                            .font(.subheadline.monospacedDigit())
+                            .font(.caption2.monospacedDigit())
                             .foregroundStyle(journeyPresentation == nil ? Color.secondary : journeyTextColor)
-                    }
-
-                    Text(realtimeTimeText ?? scheduledTimeText ?? "—")
-                        .font(.subheadline.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(primaryTimeColor)
-
-                    if let delaySeconds, abs(delaySeconds) >= 30 {
-                        DelayDiff(
-                            diff: delaySeconds,
-                            showSeconds: false,
-                            fontSizeOfPolarity: 10,
-                            useSymbolSign: true,
-                            hideMinUnits: true
-                        )
                     }
 
                     if showCountdown, let countdown = countdownText {
