@@ -121,7 +121,7 @@ final class RouteV2Session: ObservableObject {
         return [
             "from": ["lat": from.0, "lon": from.1],
             "to": ["lat": to.0, "lon": to.1],
-            arriveBy ? "arrival_unix_seconds" : "departure_unix_seconds": epoch,
+            (arriveBy ? "arrival_unix_seconds" : "departure_unix_seconds"): epoch,
             "preTransitModes": ["WALK"],
             "postTransitModes": ["WALK"],
             "pedestrianSpeed": 1.190476,
