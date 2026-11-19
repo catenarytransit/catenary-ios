@@ -496,9 +496,19 @@ struct CatenarySearchResultsView: View {
     let onRecentClick: (SearchHistoryItem) -> Void
 
     @State private var recentItems: [SearchHistoryItem] = []
+    @State private var matchingRecentItems: [SearchHistoryItem] = []
 
     private var isShowingHistory: Bool {
         viewModel.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// The user's previously selected places own the top rows. Cached and
+    /// incoming API results must not repeat one of those already shown above.
+    private var uniqueNetworkRows: [SearchRow] {
+        guard !matchingRecentItems.isEmpty else { return viewModel.rows }
+        return viewModel.rows.filter { row in
+            !matchingRecentItems.contains { $0.representsSamePlace(as: row) }
+        }
     }
 
     var body: some View {
@@ -526,7 +536,18 @@ struct CatenarySearchResultsView: View {
                             }
                         }
                     } else {
-                        ForEach(viewModel.rows) { row in
+                        // Search-history matches are local and synchronous: render
+                        // immediately as the query changes, even during debounce.
+                        ForEach(matchingRecentItems) { item in
+                            SearchResultButton(action: { selectRecent(item) }) {
+                                RecentSearchResultRow(item: item, showsClock: true)
+                            }
+                            .accessibilityIdentifier("search.recent-match.\(item.id)")
+                            Divider()
+                                .opacity(0.2)
+                        }
+
+                        ForEach(uniqueNetworkRows) { row in
                             resultRow(row)
                             Divider()
                                 .opacity(0.2)
@@ -537,14 +558,17 @@ struct CatenarySearchResultsView: View {
 
             if viewModel.isLoading {
                 ProgressView()
-                    .controlSize(.large)
+                    .controlSize(.small)
+                    .padding(12)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.bottom, 8)
+                    .accessibilityLabel("Loading search results")
             }
         }
         .onAppear(perform: reloadRecentItems)
-        .catenaryOnChange(of: viewModel.query) { _, query in
-            if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                reloadRecentItems()
-            }
+        .catenaryOnChange(of: viewModel.query) { _, _ in
+            // Do not wait for the debounced request: history is on-device.
+            reloadRecentItems()
         }
     }
 
@@ -600,10 +624,43 @@ struct CatenarySearchResultsView: View {
 
     private func reloadRecentItems() {
         recentItems = SearchHistoryStore.topItems(limit: 10)
+        matchingRecentItems = SearchHistoryStore.matchingItems(for: viewModel.query)
     }
 }
 
 private extension SearchHistoryItem {
+    /// Prefer stable source identities, then the OSM station match, and finally
+    /// the same normalized place name within 25m (cross-provider results).
+    /// Never suppress an unrelated location merely because its name matches.
+    func representsSamePlace(as row: SearchRow) -> Bool {
+        guard let candidate = SearchHistoryItem(searchRow: row) else { return false }
+        if candidate.id == id { return true }
+
+        if let stationID = osmStationID,
+           stationID == candidate.osmStationID,
+           kind != .osmItem, candidate.kind != .osmItem {
+            return true
+        }
+
+        if kind == candidate.kind,
+           let chateauID, let gtfsID,
+           chateauID == candidate.chateauID, gtfsID == candidate.gtfsID {
+            return true
+        }
+
+        let normalizedName = SearchHistoryStore.normalizedSearchText(title)
+        guard !normalizedName.isEmpty,
+              normalizedName == SearchHistoryStore.normalizedSearchText(candidate.title),
+              let latitude, let longitude,
+              let candidateLatitude = candidate.latitude,
+              let candidateLongitude = candidate.longitude else { return false }
+
+        let latitudeMetres = (latitude - candidateLatitude) * 111_195
+        let middleLatitude = ((latitude + candidateLatitude) / 2) * .pi / 180
+        let longitudeMetres = (longitude - candidateLongitude) * 111_195 * cos(middleLatitude)
+        return hypot(latitudeMetres, longitudeMetres) <= 25
+    }
+
     init?(searchRow row: SearchRow) {
         switch row {
         case let .cypress(feature, _):
@@ -667,6 +724,7 @@ private extension SearchHistoryItem {
                 subtitle: agencyNames.isEmpty ? nil : agencyNames.joined(separator: " • "),
                 chateauID: chateauID,
                 gtfsID: stopID,
+                osmStationID: stop.osmStationID,
                 latitude: stop.point?.y,
                 longitude: stop.point?.x
             )
@@ -695,10 +753,11 @@ private struct SearchResultButton<Content: View>: View {
 
 private struct RecentSearchResultRow: View {
     let item: SearchHistoryItem
+    var showsClock = false
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: item.systemImage)
+            Image(systemName: showsClock ? "clock" : item.systemImage)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .frame(width: 32, height: 32)
