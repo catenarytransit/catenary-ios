@@ -50,6 +50,9 @@ extension viewObject {
 
     private func openCatenaryMapsLink(_ query: CatenaryDeepLinkQuery) {
         switch query.value("page") {
+        case "directions":
+            push(.tripPlanner)
+
         case "route":
             guard let chateauID = query.value("chateau"),
                   let routeID = query.value("route", "route_id") else { return }
@@ -128,6 +131,8 @@ extension viewObject {
 
     private func openLegacyDeepLink(_ query: CatenaryDeepLinkQuery) {
         switch query.value("screen") {
+        case "directions":
+            push(.tripPlanner)
         case "route":
             guard let chateauID = query.value("chateau"), let routeID = query.value("route_id") else { return }
             push(.route(chateauID: chateauID, routeID: routeID))

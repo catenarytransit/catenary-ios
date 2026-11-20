@@ -12,6 +12,9 @@ struct SingleTripScreen: View {
     @State private var tripContentHeight: CGFloat = 0
     @State private var tripViewportHeight: CGFloat = 0
     @State private var showAlertsScreen = false
+    private var journeyRange: JourneyTripRange? {
+        JourneyTripRange.resolve(stops: model.stopTimes.map(\.raw), segment: selection.journeySegment)
+    }
     private var mapContextID: String { selection.chateauID + "|trip|" + (selection.tripID ?? "") }
 
     init(selection: SingleTripSelection) {
@@ -100,6 +103,7 @@ struct SingleTripScreen: View {
         _ data: SingleTripDataResponse,
         proxy: ScrollViewProxy
     ) -> some View {
+        let selectedRange = journeyRange
         let activeAlerts = Dictionary(uniqueKeysWithValues: model.activeAlerts(at: model.currentDate))
 
         return ZStack(alignment: .bottomTrailing) {
@@ -166,6 +170,7 @@ struct SingleTripScreen: View {
                                 : nil,
                             showOriginalTimetable: showOriginalTimetable,
                             showCountdown: showCountdown,
+                            journeyPresentation: selectedRange?.stop(index),
                             onTap: {
                                 viewObject.push(.stop(
                                     chateauID: selection.chateauID,
@@ -379,11 +384,11 @@ struct SingleTripScreen: View {
 
     private func scrollToCurrentStopIfNeeded(_ proxy: ScrollViewProxy) {
         guard !hasScrolledToCurrentStop,
-              currentStopTarget != nil,
+              let target = journeyRange?.from ?? currentStopTarget,
               canScrollTripContent else { return }
         hasScrolledToCurrentStop = true
         DispatchQueue.main.async {
-            scrollToCurrentStop(proxy, animated: false)
+            proxy.scrollTo(target, anchor: .center)
         }
     }
 
@@ -491,7 +496,12 @@ private struct SingleTripStopRow: View {
     let movingDotProgress: Double?
     let showOriginalTimetable: Bool
     let showCountdown: Bool
+    let journeyPresentation: JourneyStopPresentation?
     let onTap: () -> Void
+
+    private var journeyTextColor: Color {
+        journeyPresentation?.active == true ? .primary : .secondary
+    }
 
     private let timeColumnWidth: CGFloat = 72
     private let timelineColumnWidth: CGFloat = 18
@@ -501,33 +511,32 @@ private struct SingleTripStopRow: View {
         Button(action: onTap) {
             HStack(alignment: .top, spacing: columnSpacing) {
                 VStack(alignment: .trailing, spacing: 1) {
+                    // Align the effective clock with the pearl; keep the
+                    // explicit +/- delay (including +0') underneath it.
+                    Text(realtimeTimeText ?? scheduledTimeText ?? "—")
+                        .font(.subheadline.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(primaryTimeColor)
+
+                    if let label = directionsDelayLabel(delaySeconds) {
+                        Text(label)
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(delayColor)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+
                     if showOriginalTimetable,
                        let scheduledTimeText,
                        let realtimeTimeText,
                        scheduledTimeText != realtimeTimeText {
                         Text(scheduledTimeText)
-                            .font(.subheadline.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Text(realtimeTimeText ?? scheduledTimeText ?? "—")
-                        .font(.subheadline.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(primaryTimeColor)
-
-                    if let delaySeconds, abs(delaySeconds) >= 30 {
-                        DelayDiff(
-                            diff: delaySeconds,
-                            showSeconds: false,
-                            fontSizeOfPolarity: 10,
-                            useSymbolSign: true,
-                            hideMinUnits: true
-                        )
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(journeyPresentation == nil ? Color.secondary : journeyTextColor)
                     }
 
                     if showCountdown, let countdown = countdownText {
                         Text(countdown)
                             .font(.caption2.monospacedDigit())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(journeyPresentation == nil ? Color.secondary : journeyTextColor)
                     }
                 }
                 .frame(width: timeColumnWidth, alignment: .trailing)
@@ -538,8 +547,8 @@ private struct SingleTripStopRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
                         Text(stop.displayName)
-                            .font(.body.weight(isCurrent ? .bold : .regular))
-                            .foregroundStyle(stop.isCancelled ? .secondary : .primary)
+                            .font(.body.weight(journeyPresentation.map { $0.endpoint ? .bold : .regular } ?? (isCurrent ? .bold : .regular)))
+                            .foregroundStyle(journeyPresentation == nil ? (stop.isCancelled ? Color.secondary : Color.primary) : journeyTextColor)
                             .strikethrough(stop.isCancelled)
                             .multilineTextAlignment(.leading)
 
@@ -552,7 +561,7 @@ private struct SingleTripStopRow: View {
                     if stop.raw.replacedStop == true {
                         Label("Replacement stop", systemImage: "arrow.triangle.2.circlepath")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(journeyPresentation == nil ? Color.secondary : journeyTextColor)
                     }
 
                     if stop.isCancelled {
@@ -588,7 +597,8 @@ private struct SingleTripStopRow: View {
                     isCurrent: isCurrent,
                     routeColor: routeColor,
                     movingProgress: movingDotProgress,
-                    isCancelled: stop.isCancelled
+                    isCancelled: stop.isCancelled,
+                    journeyPresentation: journeyPresentation
                 )
                 .frame(width: timelineColumnWidth)
                 .frame(maxHeight: .infinity)
@@ -658,6 +668,7 @@ private struct SingleTripStopRow: View {
     }
 
     private var primaryTimeColor: Color {
+        if journeyPresentation != nil { return journeyTextColor }
         if stop.isCancelled { return .secondary }
         if isCurrent { return .green }
         return isPast ? .secondary : .primary
@@ -683,6 +694,7 @@ private struct SingleTripTimelineMarker: View {
     let routeColor: Color
     let movingProgress: Double?
     let isCancelled: Bool
+    let journeyPresentation: JourneyStopPresentation?
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -691,22 +703,27 @@ private struct SingleTripTimelineMarker: View {
             let centerX = geometry.size.width / 2
             let centerY: CGFloat = 12
             let interRowSpacing: CGFloat = 12
-            let lineWidth: CGFloat = isPast ? 1 : 2
+            let lineWidth: CGFloat = journeyPresentation == nil && isPast ? 1 : 2
             let dotDiameter: CGFloat = isCurrent ? 14 : 10
             let neutralColor: Color = colorScheme == .dark ? .white : .black
-            let lineColor = neutralColor.opacity(isPast ? 0.5 : 1)
+            let lineColor = journeyPresentation.map { $0.active ? neutralColor : Color.secondary }
+                ?? neutralColor.opacity(isPast ? 0.5 : 1)
+            let incomingColor = journeyPresentation.map { $0.incomingActive ? neutralColor : Color.secondary } ?? lineColor
+            let outgoingColor = journeyPresentation.map { $0.outgoingActive ? neutralColor : Color.secondary } ?? lineColor
+            let pearlColor = journeyPresentation.map { $0.endpoint ? neutralColor : Color(uiColor: .systemBackground) }
+                ?? (isCurrent ? routeColor : Color(uiColor: .systemBackground))
 
             ZStack(alignment: .topLeading) {
                 if !isFirst {
                     Rectangle()
-                        .fill(lineColor)
+                        .fill(incomingColor)
                         .frame(width: lineWidth, height: centerY)
                         .offset(x: centerX - lineWidth / 2)
                 }
 
                 if !isLast {
                     Rectangle()
-                        .fill(lineColor)
+                        .fill(outgoingColor)
                         .frame(
                             width: lineWidth,
                             height: max(geometry.size.height - centerY + interRowSpacing, 0)
@@ -722,7 +739,7 @@ private struct SingleTripTimelineMarker: View {
                         )
 
                         Circle()
-                            .fill(neutralColor)
+                            .fill(outgoingColor)
                             .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 1.5))
                             .frame(width: movingDotDiameter, height: movingDotDiameter)
                             .offset(
@@ -733,10 +750,10 @@ private struct SingleTripTimelineMarker: View {
                 }
 
                 Circle()
-                    .fill(isCurrent ? routeColor : Color(uiColor: .systemBackground))
+                    .fill(pearlColor)
                     .overlay {
                         Circle()
-                            .stroke(isCancelled ? Color.red : lineColor, lineWidth: 2)
+                            .stroke(journeyPresentation == nil && isCancelled ? Color.red : lineColor, lineWidth: 2)
                     }
                     .frame(width: dotDiameter, height: dotDiameter)
                     .offset(

@@ -51,9 +51,9 @@ private struct NearbyStationDeparture: Decodable, Identifiable {
 
     var effectiveDeparture: Int64? {
         if let realtimeDeparture { return realtimeDeparture }
-        if let scheduledDeparture,
-           let realtimeArrival,
-           realtimeArrival > scheduledDeparture {
+        // A realtime arrival only stands in for the departure when there's no scheduled departure
+        // to compare against, or it's actually after it; otherwise it's a stale/earlier event.
+        if let realtimeArrival, scheduledDeparture == nil || realtimeArrival > scheduledDeparture! {
             return realtimeArrival
         }
         return scheduledDeparture ?? scheduledArrival
@@ -93,7 +93,13 @@ private struct NearbyLocalDeparture: Decodable, Identifiable {
     }
 
     var effectiveDeparture: Int64? {
-        departureRealtime ?? arrivalRealtime ?? departureSchedule ?? arrivalSchedule
+        if let departureRealtime { return departureRealtime }
+        // A realtime arrival only stands in for the departure when it's actually after the
+        // scheduled departure; otherwise it's a stale/earlier event that would show the wrong time.
+        if let arrivalRealtime, departureSchedule == nil || arrivalRealtime > departureSchedule! {
+            return arrivalRealtime
+        }
+        return departureSchedule ?? arrivalSchedule
     }
 }
 
@@ -198,6 +204,7 @@ struct NearbyDeparturesView: View {
     let drawerHeight: CGFloat?
     let isDrawerCollapsed: Bool?
     let collapsedDrawerHeight: CGFloat?
+    let onOpenTrips: () -> Void
     @Binding private var pinActive: Bool
     @Binding private var pickedCoordinate: CLLocationCoordinate2D?
 
@@ -217,6 +224,7 @@ struct NearbyDeparturesView: View {
         drawerHeight: CGFloat? = nil,
         isDrawerCollapsed: Bool? = nil,
         collapsedDrawerHeight: CGFloat? = nil,
+        onOpenTrips: @escaping () -> Void = {},
         pinActive: Binding<Bool> = .constant(false),
         pickedCoordinate: Binding<CLLocationCoordinate2D?> = .constant(nil)
     ) {
@@ -225,6 +233,7 @@ struct NearbyDeparturesView: View {
         self.drawerHeight = drawerHeight
         self.isDrawerCollapsed = isDrawerCollapsed
         self.collapsedDrawerHeight = collapsedDrawerHeight
+        self.onOpenTrips = onOpenTrips
         _pinActive = pinActive
         _pickedCoordinate = pickedCoordinate
         _lockedOrigin = State(
@@ -303,12 +312,31 @@ struct NearbyDeparturesView: View {
             .accessibilityHidden(drawerExpansionProgress < 0.5)
 
             if usesCompactDrawerSummary {
-                compactSummary
+                HStack(alignment: .center, spacing: 10) {
+                    compactSummary
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .allowsHitTesting(false)
+
+                    Button(action: onOpenTrips) {
+                        VStack(spacing: 3) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                            Text("Trips")
+                                .font(.caption2.weight(.medium))
+                        }
+                        .frame(minWidth: 48, minHeight: 54)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Saved trips")
+                    .accessibilityHint("Opens your saved trips in a full-screen view")
+                    .accessibilityIdentifier("nearby.saved-trips")
+                }
                     .padding(.horizontal, 16)
-                    .padding(.top, 36)
+                    .padding(.top, 30)
                     .frame(maxWidth: .infinity, maxHeight: 120, alignment: .topLeading)
                     .opacity(1 - drawerExpansionProgress)
-                    .allowsHitTesting(false)
+                    .allowsHitTesting(drawerExpansionProgress < 0.5)
                     .accessibilityHidden(drawerExpansionProgress >= 0.5)
             }
         }
@@ -1252,9 +1280,8 @@ private struct NearbyStationDepartureRow: View {
 
     private var effectiveRealtimeDeparture: Int64? {
         if let realtimeDeparture = departure.realtimeDeparture { return realtimeDeparture }
-        if let scheduledDeparture = departure.scheduledDeparture,
-           let realtimeArrival = departure.realtimeArrival,
-           realtimeArrival > scheduledDeparture {
+        if let realtimeArrival = departure.realtimeArrival,
+           departure.scheduledDeparture == nil || realtimeArrival > departure.scheduledDeparture! {
             return realtimeArrival
         }
         return nil

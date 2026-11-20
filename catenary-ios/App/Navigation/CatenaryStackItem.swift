@@ -11,7 +11,8 @@ enum CatenaryStackItem: Hashable, Identifiable {
         startTime: String?,
         startDate: String?,
         vehicleID: String?,
-        routeType: Int?
+        routeType: Int?,
+        journeySegment: JourneyTripSegment? = nil
     )
     case vehicleSelected(chateauID: String, vehicleID: String?, gtfsID: String)
     case vehicleHistory(chateauID: String, vehicleID: String, routeID: String?)
@@ -19,6 +20,7 @@ enum CatenaryStackItem: Hashable, Identifiable {
     case stop(chateauID: String, stopID: String, timeEpochSeconds: Int64? = nil)
     case nearbyDepartures(chateauID: String, latitude: Double, longitude: Double)
     case mapSelectionScreen(options: [MapSelectionOption], lookup: RouteClickLookup? = nil)
+    case tripPlanner
     case settings
     case block(chateauID: String, blockID: String, serviceDate: String)
     case osmItem(
@@ -40,8 +42,8 @@ enum CatenaryStackItem: Hashable, Identifiable {
 
     var id: String {
         switch self {
-        case let .singleTrip(chateauID, tripID, routeID, startTime, startDate, vehicleID, routeType):
-            return "trip|\(chateauID)|\(tripID ?? "")|\(routeID ?? "")|\(startTime ?? "")|\(startDate ?? "")|\(vehicleID ?? "")|\(routeType.map { String($0) } ?? "")"
+        case let .singleTrip(chateauID, tripID, routeID, startTime, startDate, vehicleID, routeType, journeySegment):
+            return "trip|\(chateauID)|\(tripID ?? "")|\(routeID ?? "")|\(startTime ?? "")|\(startDate ?? "")|\(vehicleID ?? "")|\(routeType.map { String($0) } ?? "")|\(journeySegment?.identity ?? "")"
         case let .vehicleSelected(chateauID, vehicleID, gtfsID):
             return "vehicle|\(chateauID)|\(vehicleID ?? "")|\(gtfsID)"
         case let .vehicleHistory(chateauID, vehicleID, routeID):
@@ -55,6 +57,7 @@ enum CatenaryStackItem: Hashable, Identifiable {
         case let .mapSelectionScreen(options, lookup):
             let location = lookup.map { "|\($0.latitude)|\($0.longitude)|\($0.zoom)" } ?? ""
             return "selection|" + options.map(\.id).joined(separator: ",") + location
+        case .tripPlanner: return "trip-planner"
         case .settings:
             return "settings"
         case let .block(chateauID, blockID, serviceDate):
