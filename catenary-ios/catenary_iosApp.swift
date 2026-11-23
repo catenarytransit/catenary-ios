@@ -26,7 +26,7 @@ struct CatenaryMapsApp: App {
         WindowGroup {
             MainUIView(searchViewModel: searchViewModel)
                 .environmentObject(viewobject)
-                .onChange(of: scenePhase) { _, phase in
+                .catenaryOnChange(of: scenePhase) { _, phase in
                     if phase == .active { JourneyNotifications.shared.syncSoon() }
                 }
         }
