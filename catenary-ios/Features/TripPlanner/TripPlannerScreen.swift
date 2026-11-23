@@ -131,6 +131,13 @@ struct TripPlannerScreen: View {
             guard !Task.isCancelled, model.canSearch, !model.searched else { return }
             model.search()
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if fullscreen, let active = tracking.active, focused == nil, model.editing == nil {
+                ActiveJourneyBar(active: active, location: locationManager.lastKnownLocation) {
+                    tracking.showingDetails = true
+                }
+            }
+        }
         .sheet(isPresented: $showsOptions) {
             optionsSheet.presentationBackground(Color(uiColor: .systemGroupedBackground))
         }
