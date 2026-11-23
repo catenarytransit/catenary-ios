@@ -215,6 +215,7 @@ class viewObject: ObservableObject {
         }
     }
     @Published var showLayerSelector: Bool = false
+    @Published var globalSearchFocused: Bool = false
     @Published private(set) var catenaryStack: [CatenaryStackItem] = []
 
     var currentStackItem: CatenaryStackItem? { catenaryStack.last }
