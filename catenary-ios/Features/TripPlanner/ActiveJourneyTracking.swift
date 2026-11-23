@@ -46,6 +46,7 @@ final class ActiveJourneyStore: ObservableObject {
     private func install(_ snapshot: TripPlannerModel.SavedDirectionsJourney) {
         active = TrackedJourney(snapshot: snapshot, startedAt: Date())
         persist()
+        JourneyNotifications.shared.requestPermissionForJourney()
         JourneyNotifications.shared.syncSoon()
     }
 
@@ -254,7 +255,7 @@ struct ActiveJourneyDetails: View {
                         .padding()
                     }
                 } else {
-                    ContentUnavailableView("No active journey", systemImage: "tram")
+                    Label("No active journey", systemImage: "tram")
                 }
             }
             .navigationTitle("Active journey")
