@@ -181,10 +181,21 @@ struct ActiveJourneyBar: View {
         switch stage {
         case let .boarding(leg, minutes, transfer):
             HStack(spacing: 4) {
-                Text(leg.label).bold()
+                let ukRail = leg.chateau == NationalRailUtils.chateauID
+                    && !["TW", "ME", "LO", "XR", "HX"].contains(leg.agencyId ?? "")
+                if ukRail {
+                    Text(leg.tripShortName ?? leg.mode).bold()
+                } else {
+                    leg.routeBadge(compact: true)
+                }
                 Text(transfer ? "Next from" : "Departing")
-                Text(leg.from?.name ?? "")
+                if transfer { Text(leg.from?.name ?? "") }
+                Text("at \(directionsClock(leg.departureCurrentTime, timezone: leg.from?.timezone))")
                 Text("in \(minutes) min")
+                if let platform = leg.from?.estimatedQuay ?? leg.fromPlatform ?? leg.from?.plannedQuay,
+                   !platform.isEmpty {
+                    Text("· \(platform)")
+                }
             }
         case let .riding(leg, minutes):
             Text("Alight at \(leg.to?.name ?? "") in \(minutes) min")
