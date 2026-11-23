@@ -113,6 +113,7 @@ struct DirectionsLeg: Codable, Equatable, Sendable {
     var routeId: String?
     var routeType: Int?
     var chateau: String?
+    var agencyId: String? = nil
     var tripShortName: String?
     var from: DirectionsPoint?
     var to: DirectionsPoint?
@@ -132,7 +133,7 @@ struct DirectionsLeg: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case mode, duration, startTime, endTime, routeColor, routeTextColor
-        case routeShortName, routeLongName, routeId, routeType, chateau
+        case routeShortName, routeLongName, routeId, routeType, chateau, agencyId
         case tripShortName, from, to, fromPlatform, toPlatform
         case intermediateStops, legGeometry, headsign, tripId, tripStartDate, tripStartTime
         case fromStopSequence, toStopSequence, cancelled
