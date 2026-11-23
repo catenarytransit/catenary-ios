@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A70000012F10000100000001 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = A70000032F10000100000003 /* FirebaseCore */; };
+		A70000042F10000100000004 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = A70000052F10000100000005 /* FirebaseMessaging */; };
 		A55A00012F00000100000001 /* SVGView in Frameworks */ = {isa = PBXBuildFile; productRef = A55A00032F00000100000003 /* SVGView */; };
 		F7186EED2EE4A8BF00723A13 /* MapLibreSwiftDSL in Frameworks */ = {isa = PBXBuildFile; productRef = F7186EEC2EE4A8BF00723A13 /* MapLibreSwiftDSL */; };
 		F7186EEF2EE4A8BF00723A13 /* MapLibreSwiftMacros in Frameworks */ = {isa = PBXBuildFile; productRef = F7186EEE2EE4A8BF00723A13 /* MapLibreSwiftMacros */; };
@@ -33,6 +35,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A70000012F10000100000001 /* FirebaseCore in Frameworks */,
+				A70000042F10000100000004 /* FirebaseMessaging in Frameworks */,
 				A55A00012F00000100000001 /* SVGView in Frameworks */,
 				F7186EF12EE4A8BF00723A13 /* MapLibreSwiftUI in Frameworks */,
 				F7186EED2EE4A8BF00723A13 /* MapLibreSwiftDSL in Frameworks */,
@@ -82,6 +86,8 @@
 			);
 			name = "catenary-ios";
 			packageProductDependencies = (
+				A70000032F10000100000003 /* FirebaseCore */,
+				A70000052F10000100000005 /* FirebaseMessaging */,
 				A55A00032F00000100000003 /* SVGView */,
 				F79FE1A02ED395D6006FFFF5 /* MapLibreSwiftDSL */,
 				F79FE1A22ED395D6006FFFF5 /* MapLibreSwiftMacros */,
@@ -144,6 +150,7 @@
 			mainGroup = F71913B82EC82B7700AAA2A3;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				A70000022F10000100000002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				A55A00022F00000100000002 /* XCRemoteSwiftPackageReference "SVGView" */,
 				F7186EEB2EE4A8BF00723A13 /* XCRemoteSwiftPackageReference "swiftui-dsl" */,
 			);
@@ -399,6 +406,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		A70000022F10000100000002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.0.0;
+			};
+		};
 		A55A00022F00000100000002 /* XCRemoteSwiftPackageReference "SVGView" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/exyte/SVGView.git";
@@ -418,6 +433,16 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		A70000032F10000100000003 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A70000022F10000100000002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+		A70000052F10000100000005 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A70000022F10000100000002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
 		A55A00032F00000100000003 /* SVGView */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A55A00022F00000100000002 /* XCRemoteSwiftPackageReference "SVGView" */;
