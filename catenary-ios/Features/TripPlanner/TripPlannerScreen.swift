@@ -50,6 +50,7 @@ struct TripPlannerScreen: View {
     @StateObject private var search = SearchViewModel()
     @FocusState private var focused: Bool?
     @State private var showsOptions = false
+    @ObservedObject private var tracking = ActiveJourneyStore.shared
     @State private var showsTimeSheet = false
     @State private var recent: [DirectionsLocation] = []
     @State private var skeletonPulse = false
@@ -132,6 +133,18 @@ struct TripPlannerScreen: View {
         }
         .sheet(isPresented: $showsOptions) {
             optionsSheet.presentationBackground(Color(uiColor: .systemGroupedBackground))
+        }
+        .alert("Start this trip?", isPresented: Binding(
+            get: { tracking.switchCandidate != nil },
+            set: { if !$0 { tracking.switchCandidate = nil } }
+        )) {
+            Button("Dismiss", role: .cancel) { tracking.switchCandidate = nil }
+            Button("Start trip") {
+                tracking.confirmSwitch()
+                JourneyNotifications.shared.requestPermissionForJourney()
+            }
+        } message: {
+            Text("You're on an active trip to \(tracking.active?.snapshot.destination?.name ?? "your destination"). Do you want to switch to this trip? You can bookmark this trip to be notified of it later.")
         }
         .sheet(isPresented: $showsTimeSheet) {
             TripPlannerTimeSheet(time: model.time, isNow: model.now, arriveBy: model.arriveBy) { time, isNow, arriveBy in
@@ -539,6 +552,31 @@ struct TripPlannerScreen: View {
                             model.mapMode.toggle()
                         }
                     }
+                    Spacer(minLength: 2)
+                    let isCurrent = tracking.active?.snapshot.itinerary.identity == itinerary.identity
+                    Button {
+                        if isCurrent {
+                            tracking.end()
+                        } else {
+                            tracking.start(TripPlannerModel.SavedDirectionsJourney(
+                                itinerary: itinerary,
+                                origin: model.origin,
+                                destination: model.destination
+                            ))
+                            if tracking.switchCandidate == nil {
+                                JourneyNotifications.shared.requestPermissionForJourney()
+                            }
+                        }
+                    } label: {
+                        Text(isCurrent ? "End" : "Start")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 18)
+                            .frame(height: 38)
+                            .foregroundStyle(isCurrent ? Color(red: 0.35, green: 0.05, blue: 0.07) : .white)
+                            .background(isCurrent ? Color(red: 1, green: 0.67, blue: 0.7) : Color(red: 0.08, green: 0.24, blue: 0.62),
+                                        in: Capsule())
+                    }
+                    .accessibilityIdentifier("journey.tracking.start-end")
                 }.padding(.leading, 12).offset(y: 22)
             }
             .padding(.bottom, 22)
