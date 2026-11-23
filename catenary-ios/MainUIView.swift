@@ -365,7 +365,10 @@ struct MainUIView: View {
 
         }
         .overlay(alignment: .bottom) {
-            if let active = activeJourneyStore.active, !viewobject.showLayerSelector {
+            if let active = activeJourneyStore.active,
+               !viewobject.showLayerSelector,
+               !viewobject.globalSearchFocused,
+               viewobject.tripPlanner.editing == nil {
                 ActiveJourneyBar(active: active, location: locationManager.lastKnownLocation) {
                     activeJourneyStore.showingDetails = true
                 }
@@ -1221,7 +1224,7 @@ struct MainUIView: View {
             return UIEdgeInsets(
                 top: 0,
                 left: leadingPaneWidth + drawerOuterPadding,
-                bottom: 0,
+                bottom: activeJourneyStore.active == nil ? 0 : 42,
                 right: 0
             )
         }
@@ -1231,7 +1234,7 @@ struct MainUIView: View {
         return UIEdgeInsets(
             top: 0,
             left: 0,
-            bottom: mapViewportSize.height / 2,
+            bottom: mapViewportSize.height / 2 + (activeJourneyStore.active == nil ? 0 : 42),
             right: 0
         )
     }
