@@ -20,11 +20,15 @@ struct CatenaryMapsApp: App {
     @StateObject var viewobject = GlobalViewObject
     @StateObject private var searchViewModel = SearchViewModel()
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    @Environment(\.scenePhase) private var scenePhase
     
     var body: some Scene {
         WindowGroup {
             MainUIView(searchViewModel: searchViewModel)
                 .environmentObject(viewobject)
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { JourneyNotifications.shared.syncSoon() }
+                }
         }
     }
 }
