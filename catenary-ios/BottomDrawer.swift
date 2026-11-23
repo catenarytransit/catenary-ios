@@ -141,6 +141,7 @@ struct BottomDrawer: View {
             }
         }
         .catenaryOnChange(of: isFocused) { _, focused in
+            viewObject.globalSearchFocused = focused
             if focused {
                 isSearchActive = true
             }
