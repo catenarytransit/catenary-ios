@@ -215,10 +215,10 @@ struct ActiveJourneyDetails: View {
                                 .font(.headline)
                             JourneyPreview(itinerary: active.snapshot.itinerary)
                             TimelineView(.periodic(from: .now, by: 30)) { context in
-                                if let (index, count, percent) = ActiveJourneyStage.legProgress(active.snapshot.itinerary, now: context.date) {
+                                if let progress = ActiveJourneyStage.legProgress(active.snapshot.itinerary, now: context.date) {
                                     VStack(alignment: .leading, spacing: 6) {
-                                        Text("Leg \(index) of \(count)")
-                                        ProgressView(value: Double(percent), total: 100)
+                                        Text("Leg \(progress.0) of \(progress.1)")
+                                        ProgressView(value: Double(progress.2), total: 100)
                                             .accessibilityLabel("Journey progress")
                                     }
                                 }
