@@ -562,27 +562,101 @@ struct TripPlannerScreen: View {
     }
     private var optionsSheet: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Travel options").font(.headline)
+            HStack(spacing: 12) {
+                Text("Advanced search")
+                    .font(.headline)
                 Spacer()
-                Button("Done") { showsOptions = false }.buttonStyle(.plain)
-            }.padding()
-            Form {
-                Toggle("Cycle to and from transit", isOn: $model.options.cycling)
-                Section("Speed") {
-                    Text("Walking pace: \(model.options.walkingPace / 60, specifier: "%.1f") min/km")
-                    Slider(value: $model.options.walkingPace, in: 240...1800, step: 30)
-                    Text("Cycling speed: \(model.options.cyclingKmh, specifier: "%.0f") km/h")
-                    Slider(value: $model.options.cyclingKmh, in: 5...40, step: 1)
+                Button {
+                    showsOptions = false
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 16, weight: .semibold))
+                        .frame(width: 44, height: 44)
                 }
-                Section("Maximum travel time") {
-                    limit("To first stop", value: $model.options.accessSeconds)
-                    limit("From last stop", value: $model.options.egressSeconds)
-                    limit("Direct walk or cycle", value: $model.options.directSeconds)
-                }
+                .accessibilityLabel("Close advanced search")
+                .accessibilityIdentifier("planner.advanced.close")
             }
-            .scrollContentBackground(.hidden)
-        }.background(Color(uiColor: .systemGroupedBackground))
+            .padding(.horizontal, 18)
+            .padding(.vertical, 6)
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Toggle("Cycle to and from transit", isOn: $model.options.cycling)
+                        .tint(.accentColor)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Speed").font(.headline)
+                        Text("Walking pace: \(model.options.walkingPace / 60, specifier: "%.1f") min/km")
+                        Slider(value: $model.options.walkingPace, in: 240...1800, step: 30)
+                        Text("Cycling speed: \(model.options.cyclingKmh, specifier: "%.0f") km/h")
+                        Slider(value: $model.options.cyclingKmh, in: 5...40, step: 1)
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Maximum travel time").font(.headline)
+                        limit("To first stop", value: $model.options.accessSeconds)
+                        limit("From last stop", value: $model.options.egressSeconds)
+                        limit("Direct walk or cycle", value: $model.options.directSeconds)
+                    }
+
+                    Divider()
+
+                    Toggle("Filter means of transport", isOn: $model.options.filterTransportModes)
+                        .tint(.accentColor)
+                        .font(.headline)
+                        .accessibilityIdentifier("planner.advanced.filter")
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        ForEach(PublicTransportMode.allCases, id: \.self) { mode in
+                            let selected = model.options.transportModes.contains(mode)
+                            Button {
+                                if selected {
+                                    model.options.transportModes.remove(mode)
+                                } else {
+                                    model.options.transportModes.insert(mode)
+                                }
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: selected ? "checkmark.square.fill" : "square")
+                                        .font(.title3)
+                                        .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+                                        .frame(width: 26)
+                                    Text(L10n.string(mode.title))
+                                        .foregroundStyle(Color.primary)
+                                    Spacer()
+                                }
+                                .frame(minHeight: 38)
+                                .contentShape(Rectangle())
+                            }
+                            .accessibilityLabel(Text(L10n.string(mode.title)))
+                            .accessibilityAddTraits(selected ? .isSelected : [])
+                            .accessibilityIdentifier("planner.mode.\(mode.rawValue)")
+                            .disabled(!model.options.filterTransportModes)
+                        }
+                    }
+                    .opacity(model.options.filterTransportModes ? 1 : 0.35)
+                }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollIndicators(.visible)
+            Divider()
+            Button {
+                model.options = DirectionsOptions()
+            } label: {
+                Text("Reset options")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 48)
+            }
+            .buttonStyle(.borderedProminent)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .accessibilityIdentifier("planner.advanced.reset")
+        }
+        .background(Color(uiColor: .systemGroupedBackground))
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
     }
     private func limit(_ title: String, value: Binding<Double>) -> some View {
         VStack(alignment: .leading) {
