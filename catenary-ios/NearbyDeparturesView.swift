@@ -149,9 +149,13 @@ private final class NearbyDeparturesViewModel: ObservableObject {
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 throw URLError(.badServerResponse)
             }
-            let decoder = JSONDecoder()
-            decoder.keyDecodingStrategy = .convertFromSnakeCase
-            self.response = try decoder.decode(NearbyAPIResponse.self, from: data)
+            let decoded = try await Task.detached(priority: .userInitiated) {
+                let decoder = JSONDecoder()
+                decoder.keyDecodingStrategy = .convertFromSnakeCase
+                return try decoder.decode(NearbyAPIResponse.self, from: data)
+            }.value
+            try Task.checkCancellation()
+            self.response = decoded
             hasLoaded = true
         } catch is CancellationError {
             return

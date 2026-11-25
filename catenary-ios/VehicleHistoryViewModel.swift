@@ -55,7 +55,11 @@ final class VehicleHistoryViewModel: ObservableObject {
             if httpResponse.statusCode == 404 {
                 history = .empty
             } else if (200..<300).contains(httpResponse.statusCode) {
-                history = try JSONDecoder().decode(VehicleHistoryLookupResponse.self, from: data)
+                let decoded = try await Task.detached(priority: .userInitiated) {
+                    try JSONDecoder().decode(VehicleHistoryLookupResponse.self, from: data)
+                }.value
+                try Task.checkCancellation()
+                history = decoded
             } else {
                 let serverMessage = try? JSONDecoder()
                     .decode(VehicleHistoryLookupErrorResponse.self, from: data)

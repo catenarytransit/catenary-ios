@@ -1,6 +1,6 @@
 import Foundation
 
-struct DirectionsCoordinate: Equatable {
+struct DirectionsCoordinate: Equatable, Sendable {
     let lat: Double
     let lon: Double
 }
@@ -81,8 +81,10 @@ func directionsCoordinates(_ leg: DirectionsLeg) -> [DirectionsCoordinate] {
     }
     var chosen: (ShapeProjection, ShapeProjection)?
     var score = Double.infinity
-    for start in projections(a) {
-        for end in projections(b) where abs(start.position - end.position) >= 1e-8 {
+    let starts = projections(a)
+    let ends = projections(b)
+    for start in starts {
+        for end in ends where abs(start.position - end.position) >= 1e-8 {
             let candidate = start.distance + end.distance + (start.position > end.position ? 5 : 0)
             if candidate < score { chosen = (start, end); score = candidate }
         }
