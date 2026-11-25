@@ -118,7 +118,11 @@ private final class RouteScreenViewModel: ObservableObject {
         guard let endpoint = url.url else { return }
         do {
             let (data, _) = try await URLSession.shared.data(from: endpoint)
-            if let value = try JSONDecoder().decode(RouteShapeResponse.self, from: data).polyline {
+            let decoded = try await Task.detached(priority: .userInitiated) {
+                try JSONDecoder().decode(RouteShapeResponse.self, from: data)
+            }.value
+            try Task.checkCancellation()
+            if let value = decoded.polyline {
                 loadedShapes[shapeID] = value
             }
         } catch { /* Keep stops usable when optional shape fetch fails. */ }
@@ -146,7 +150,11 @@ private final class RouteScreenViewModel: ObservableObject {
                   (200..<300).contains(http.statusCode) else {
                 throw URLError(.badServerResponse)
             }
-            route = try JSONDecoder().decode(RouteScreenResponse.self, from: data)
+            let decoded = try await Task.detached(priority: .userInitiated) {
+                try JSONDecoder().decode(RouteScreenResponse.self, from: data)
+            }.value
+            try Task.checkCancellation()
+            route = decoded
         } catch is CancellationError {
             return
         } catch {
