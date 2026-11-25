@@ -45,10 +45,8 @@ final class RamondaWebSocket: NSObject, ObservableObject {
     @Published private(set) var tripUpdate: SingleTripRealtimeUpdate?
     @Published private(set) var errorMessage: String?
 
-    private let decoder: JSONDecoder = {
-        let decoder = JSONDecoder()
-        return decoder
-    }()
+    private let decoder = RamondaMessageDecoder()
+    private var subscriptionRevision = 0
 
     private let encoder = JSONEncoder()
     private var session: URLSession!
@@ -83,6 +81,7 @@ final class RamondaWebSocket: NSObject, ObservableObject {
         )
 
         if activeSubscription != subscription {
+            subscriptionRevision &+= 1
             initialTrip = nil
             tripUpdate = nil
             errorMessage = nil
@@ -98,6 +97,7 @@ final class RamondaWebSocket: NSObject, ObservableObject {
     }
 
     func unsubscribeTrip(chateau: String) {
+        subscriptionRevision &+= 1
         let previous = activeSubscription
         activeSubscription = nil
         reconnectTask?.cancel()
@@ -121,6 +121,7 @@ final class RamondaWebSocket: NSObject, ObservableObject {
     }
 
     func disconnect() {
+        subscriptionRevision &+= 1
         isStopping = true
         activeSubscription = nil
         reconnectTask?.cancel()
@@ -157,12 +158,12 @@ final class RamondaWebSocket: NSObject, ObservableObject {
             while !Task.isCancelled {
                 do {
                     let message = try await task.receive()
-                    guard let self else { return }
-                    self.handle(message)
+                    guard let self, !Task.isCancelled, task === self.webSocketTask else { return }
+                    await self.handle(message, task: task)
                 } catch is CancellationError {
                     return
                 } catch {
-                    guard let self else { return }
+                    guard let self, !Task.isCancelled, task === self.webSocketTask else { return }
                     self.handleFailure(error)
                     return
                 }
@@ -187,61 +188,36 @@ final class RamondaWebSocket: NSObject, ObservableObject {
         }
     }
 
-    private func handle(_ message: URLSessionWebSocketTask.Message) {
-        let data: Data?
-        switch message {
-        case let .string(text):
-            data = Data(text.utf8)
-        case let .data(receivedData):
-            data = receivedData
-        @unknown default:
-            data = nil
-        }
-
-        guard let data else { return }
-
+    private func handle(_ message: URLSessionWebSocketTask.Message, task: URLSessionWebSocketTask) async {
+        let revision = subscriptionRevision
         do {
-            guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let type = object["type"] as? String else {
-                throw RamondaSocketError.invalidEnvelope
-            }
-
-            switch type {
-            case "initial_trip":
-                let payload = try payloadData(from: object)
-                initialTrip = try decoder.decode(SingleTripDataResponse.self, from: payload)
+            let decoded = try await decoder.decode(message)
+            guard !Task.isCancelled, task === webSocketTask, revision == subscriptionRevision else { return }
+            switch decoded {
+            case .initial(let trip):
+                guard trip.tripID == activeSubscription?.tripID else { return }
+                initialTrip = trip
                 errorMessage = nil
-
-            case "update_trip":
-                let payload = try payloadData(from: object)
-                tripUpdate = try decoder.decode(SingleTripRealtimeUpdate.self, from: payload)
-
-            case "pong":
-                break
-
-            case "error":
-                errorMessage = object["message"] as? String ?? L10n.string(
+            case .update(let update):
+                guard update.tripID == activeSubscription?.tripID else { return }
+                if let chateau = update.chateau, chateau != activeSubscription?.chateau { return }
+                tripUpdate = update
+            case .error(let message):
+                errorMessage = message ?? L10n.string(
                     "ramonda.unknown_error",
                     defaultValue: "The live trip service returned an unknown error."
                 )
-
-            default:
+            case .ignored:
                 break
             }
         } catch {
+            guard !Task.isCancelled, task === webSocketTask, revision == subscriptionRevision else { return }
             errorMessage = L10n.format(
                 "ramonda.decode_error",
                 defaultValue: "Unable to decode live trip data: %@",
                 error.localizedDescription
             )
         }
-    }
-
-    private func payloadData(from object: [String: Any]) throws -> Data {
-        guard let payload = object["data"], !(payload is NSNull) else {
-            throw RamondaSocketError.missingPayload
-        }
-        return try JSONSerialization.data(withJSONObject: payload)
     }
 
     private func send<T: Encodable>(_ value: T, context: String) {
@@ -370,6 +346,45 @@ private enum RamondaSocketError: LocalizedError {
                 "ramonda.invalid_utf8",
                 defaultValue: "The outgoing message could not be encoded as UTF-8."
             )
+        }
+    }
+}
+
+private enum RamondaMessage: Decodable {
+    case initial(SingleTripDataResponse)
+    case update(SingleTripRealtimeUpdate)
+    case error(String?)
+    case ignored
+
+    private enum CodingKeys: String, CodingKey { case type, data, message }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        switch try container.decode(String.self, forKey: .type) {
+        case "initial_trip":
+            self = .initial(try container.decode(SingleTripDataResponse.self, forKey: .data))
+        case "update_trip":
+            self = .update(try container.decode(SingleTripRealtimeUpdate.self, forKey: .data))
+        case "error":
+            self = .error(try? container.decode(String.self, forKey: .message))
+        default:
+            self = .ignored
+        }
+    }
+}
+
+/// Keep decoding serial and outside the main actor; the receive loop awaits each frame.
+private actor RamondaMessageDecoder {
+    private let decoder = JSONDecoder()
+
+    func decode(_ message: URLSessionWebSocketTask.Message) throws -> RamondaMessage {
+        switch message {
+        case .string(let text):
+            return try decoder.decode(RamondaMessage.self, from: Data(text.utf8))
+        case .data(let data):
+            return try decoder.decode(RamondaMessage.self, from: data)
+        @unknown default:
+            return .ignored
         }
     }
 }
