@@ -59,6 +59,9 @@ jobs:
       - name: Verify departure route filters
         run: Tests/DepartureFilters/run.sh
 
+      - name: Verify nearby departure WebSocket contracts
+        run: bash Tests/NearbyDepartures/run.sh
+
       - name: Clear Xcode and SwiftPM state
         shell: bash
         run: |
