@@ -353,7 +353,15 @@ actor NearbyDepartureAPI {
                 group.addTask {
                     while !Task.isCancelled {
                         try await Task.sleep(nanoseconds: 5_000_000_000)
-                        try await socket.sendPing()
+                        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                            socket.sendPing { error in
+                                if let error {
+                                    continuation.resume(throwing: error)
+                                } else {
+                                    continuation.resume()
+                                }
+                            }
+                        }
                     }
                     try Task.checkCancellation()
                 }
