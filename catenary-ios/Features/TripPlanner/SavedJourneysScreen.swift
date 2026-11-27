@@ -49,7 +49,7 @@ struct SavedJourneysScreen: View {
         NavigationStack {
             Group {
                 if rows.isEmpty {
-                    ContentUnavailableView {
+                    CatenaryUnavailableView {
                         Label("No journeys saved", systemImage: "star")
                     } description: {
                         Text("Star a journey in the planner to find it here.")
@@ -106,7 +106,7 @@ struct SavedJourneysScreen: View {
         }
         .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
         .onAppear { model.pruneExpiredSavedJourneys() }
-        .onChange(of: scenePhase) { _, phase in
+        .catenaryOnChange(of: scenePhase) { _, phase in
             if phase == .active { model.pruneExpiredSavedJourneys() }
         }
     }
