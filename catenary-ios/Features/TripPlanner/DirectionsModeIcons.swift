@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Minimal SVG path-data parser covering the M/L/H/V/C/Z commands used by the bundled mode icons below.
 /// Rebuilding them as native `Path`s (instead of rendering raw SVG `currentColor` fills) lets them tint
@@ -80,12 +81,17 @@ func svgPath(_ d: String) -> Path {
 /// icons), redrawn as vector paths in their original 24x24 viewBox.
 struct DirectionsModeGlyph: View {
     let paths: [String]
+    @Environment(\.colorScheme) private var colorScheme
     var body: some View {
         Canvas { context, size in
+            // Canvas doesn't reliably re-resolve a dynamic SwiftUI Color (even Color.primary) against
+            // the current appearance, so the system label color is resolved to a concrete value here.
+            let style = UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light)
+            let labelColor = Color(UIColor.label.resolvedColor(with: style))
             let scale = min(size.width, size.height) / 24
             let transform = CGAffineTransform(scaleX: scale, y: scale)
             for d in paths {
-                context.fill(svgPath(d).applying(transform), with: .foreground)
+                context.fill(svgPath(d).applying(transform), with: .color(labelColor))
             }
         }
     }
@@ -107,6 +113,12 @@ extension DirectionsModeGlyph {
         "M21 20.325H3V21H21V20.325Z",
         "M21 3H3V3.375H21V3Z"
     ])
+    static let trolleyBus = DirectionsModeGlyph(paths: [
+        "M6.375 8.25H3V7.5H18.074C18.685 7.5 19.219 7.91 19.378 8.5L20.954 14.369C20.985 14.483 21 14.601 21 14.719V18.525C21 18.856 20.731 19.125 20.4 19.125H13.424C13.093 19.125 12.824 18.856 12.824 18.525C12.824 18.521 12.824 18.518 12.824 18.514C12.825 18.493 12.825 18.471 12.825 18.45C12.825 16.546 11.279 15 9.375 15C7.471 15 5.925 16.546 5.925 18.45C5.925 18.471 5.925 18.493 5.926 18.514C5.926 18.518 5.926 18.521 5.926 18.525C5.926 18.856 5.657 19.125 5.326 19.125H3V13.5H6.375C6.582 13.5 6.75 13.332 6.75 13.125V8.625C6.75 8.418 6.582 8.25 6.375 8.25ZM17.438 14.625C17.438 14.832 17.606 15 17.813 15H19.858C20.065 15 20.233 14.832 20.233 14.625C20.233 14.592 20.229 14.559 20.22 14.528L18.634 8.62C18.564 8.358 18.326 8.176 18.054 8.176H18.038C17.707 8.176 17.438 8.445 17.438 8.776V14.625ZM15.488 14.475C15.488 14.806 15.757 15.075 16.088 15.075C16.419 15.075 16.688 14.806 16.688 14.475V8.775C16.688 8.444 16.419 8.175 16.088 8.175C15.757 8.175 15.488 8.444 15.488 8.775V14.475ZM13.538 14.475C13.538 14.806 13.807 15.075 14.138 15.075C14.469 15.075 14.738 14.806 14.738 14.475V8.775C14.738 8.444 14.469 8.175 14.138 8.175C13.807 8.175 13.538 8.444 13.538 8.775V14.475ZM7.5 13.125C7.5 13.332 7.668 13.5 7.875 13.5H12.412C12.619 13.5 12.787 13.332 12.787 13.125V8.625C12.787 8.418 12.619 8.25 12.412 8.25H7.875C7.668 8.25 7.5 8.418 7.5 8.625V13.125Z",
+        "M9.35107 15.8467C10.8001 15.8467 11.9761 17.0227 11.9761 18.4717C11.9761 19.9207 10.8001 21.0967 9.35107 21.0967C7.90207 21.0967 6.72607 19.9207 6.72607 18.4717C6.72707 17.0227 7.90207 15.8467 9.35107 15.8467ZM9.35107 19.9157C10.1791 19.9157 10.8511 19.2437 10.8511 18.4157C10.8511 17.5877 10.1791 16.9157 9.35107 16.9157C8.52307 16.9157 7.85107 17.5877 7.85107 18.4157C7.85207 19.2437 8.52407 19.9157 9.35107 19.9157Z",
+        "M10.3179 3.94075C10.3179 4.03275 10.3549 4.12075 10.4199 4.18575L13.8109 7.57575L14.7909 7.57675L10.9099 3.69575C10.8449 3.62975 10.7569 3.59375 10.6649 3.59375C10.4729 3.59375 10.3179 3.74875 10.3179 3.94075Z",
+        "M21 3H3V3.375H21V3Z"
+    ])
     static let train = DirectionsModeGlyph(paths: [
         "M20.711 18.862C20.918 18.862 21.086 18.694 21.086 18.487C21.086 18.469 21.085 18.451 21.082 18.434L20.763 16.198H16.874V18.862H20.711Z",
         "M11.634 8.19299H3.00002V7.49999H10.05L7.83702 5.99999L12 3.63699L16.137 5.99999H16.162L13.949 7.49999H18.545C19.105 7.49999 19.58 7.91199 19.659 8.46599L20.662 15.488H2.99902V11.776H11.633C11.835 11.776 11.999 11.612 11.999 11.41C11.999 11.208 11.835 11.044 11.633 11.044H2.99902V10.35H11.633C11.835 10.35 11.999 10.186 11.999 9.98399C11.999 9.78199 11.835 9.61799 11.633 9.61799H2.99902V8.92499H11.633C11.835 8.92499 11.999 8.76099 11.999 8.55899C11.999 8.35699 11.835 8.19299 11.634 8.19299ZM16.649 11.4C16.649 11.607 16.817 11.775 17.024 11.775H18.979C19.186 11.775 19.354 11.607 19.354 11.4C19.354 11.382 19.353 11.364 19.35 11.347L18.945 8.51599C18.919 8.33099 18.76 8.19399 18.574 8.19399H17.023C16.816 8.19399 16.648 8.36199 16.648 8.56899L16.649 11.4ZM12.679 7.49999L14.804 6.05999L11.998 4.45799L9.18502 6.05399L11.319 7.49999H12.679Z",
@@ -119,13 +131,14 @@ extension DirectionsModeGlyph {
 }
 
 enum DirectionsModeCategory {
-    case bus, metro, tram, train, other
+    case bus, trolleyBus, metro, tram, train, other
 }
 
 extension DirectionsLeg {
     /// Matches the Android app's LegModeIcon/legModeLabel category rules, including the routeType fallback.
     var modeCategory: DirectionsModeCategory {
         let upper = mode.uppercased()
+        if ["TROLLEYBUS", "TROLLEY_BUS"].contains(upper) || routeType == 11 { return .trolleyBus }
         if ["BUS", "COACH"].contains(upper) || routeType == 3 { return .bus }
         if ["SUBWAY", "METRO"].contains(upper) || routeType == 1 { return .metro }
         if ["TRAM", "LIGHT_RAIL"].contains(upper) || routeType == 0 { return .tram }
@@ -141,6 +154,7 @@ struct LegModeIcon: View {
     var body: some View {
         switch leg.modeCategory {
         case .bus: DirectionsModeGlyph.bus.frame(width: preview ? 16 : 24, height: preview ? 16 : 24)
+        case .trolleyBus: DirectionsModeGlyph.trolleyBus.frame(width: preview ? 16 : 24, height: preview ? 16 : 24)
         case .metro: DirectionsModeGlyph.metro.frame(width: preview ? 16 : 24, height: preview ? 16 : 24)
         case .tram: DirectionsModeGlyph.tram.frame(width: preview ? 16 : 24, height: preview ? 16 : 24)
         case .train: DirectionsModeGlyph.train.frame(width: preview ? 16 : 24, height: preview ? 16 : 24)

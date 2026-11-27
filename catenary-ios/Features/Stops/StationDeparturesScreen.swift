@@ -446,8 +446,10 @@ struct StationDeparturesScreen: View {
         let badges = routeFilters
         let filterRoutes = routeFiltersEnabled
         return model.events.filter { event in
+            // A cancelled trip can be missing both its realtime and scheduled time entirely;
+            // defaulting that to 0 would always fail the cutoff check and hide it from the list.
             guard !event.isTerminalArrivalOnly,
-                  (event.effectiveTime ?? 0) >= cutoff else {
+                  (event.effectiveTime.map { $0 >= cutoff } ?? true) else {
                 return false
             }
 
@@ -477,9 +479,11 @@ struct StationDeparturesScreen: View {
     }
 
     private var daySections: [StopDaySection] {
+        // A trip with no effective time at all (e.g. a cancelled trip missing both realtime and
+        // scheduled times) should land in today's group, not under the 1970 epoch.
         let grouped = Dictionary(grouping: filteredEvents) { event in
             StopDateFormatting.day(
-                epochSeconds: event.effectiveTime ?? 0,
+                epochSeconds: event.effectiveTime ?? Int64(Date().timeIntervalSince1970),
                 timezoneID: event.timezone ?? timezoneID
             )
         }

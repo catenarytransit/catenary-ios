@@ -415,15 +415,19 @@ struct StopScreenView: View {
             ? Int64.min
             : Int64((isNow ? Date() : selectedDate).timeIntervalSince1970) - 60
         return model.events.filter { event in
+            // A cancelled trip can be missing both its realtime and scheduled time entirely;
+            // defaulting that to 0 would always fail the cutoff check and hide it from the list.
             selectedModes.contains(TransitDisplayMode.from(routeType: event.routeType ?? model.routes[event.chateau]?[event.routeId]?.routeType))
                 && !event.isTerminalArrivalOnly
-                && (event.effectiveTime ?? 0) >= cutoff
+                && (event.effectiveTime.map { $0 >= cutoff } ?? true)
         }
     }
 
     private var groupedDays: [StopDayGroup] {
+        // A trip with no effective time at all (e.g. a cancelled trip missing both realtime and
+        // scheduled times) should land in today's group, not under the 1970 epoch.
         let groups = Dictionary(grouping: filteredEvents) { event in
-            TransitFormatting.day(event.effectiveTime ?? 0, timezoneID: event.timezone ?? timezoneID)
+            TransitFormatting.day(event.effectiveTime ?? Int64(Date().timeIntervalSince1970), timezoneID: event.timezone ?? timezoneID)
         }
         return groups.map { key, value in
             StopDayGroup(

@@ -3,8 +3,6 @@ name: iOS Screenshots
 on:
   workflow_dispatch:
   push:
-    branches:
-      - dev
   pull_request:
     branches:
       - dev
@@ -194,7 +192,7 @@ jobs:
             -project "$PROJECT" \
             -scheme "$SCHEME" \
             -configuration Debug \
-            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -destination "generic/platform=iOS Simulator" \
             -derivedDataPath "$DERIVED_DATA" \
             -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
             -skipPackagePluginValidation \
