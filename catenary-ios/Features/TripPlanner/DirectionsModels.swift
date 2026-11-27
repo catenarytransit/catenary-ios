@@ -113,6 +113,7 @@ struct DirectionsLeg: Codable, Equatable, Sendable {
     var routeId: String?
     var routeType: Int?
     var chateau: String?
+    var agencyId: String? = nil
     var tripShortName: String?
     var from: DirectionsPoint?
     var to: DirectionsPoint?
@@ -132,7 +133,7 @@ struct DirectionsLeg: Codable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case mode, duration, startTime, endTime, routeColor, routeTextColor
-        case routeShortName, routeLongName, routeId, routeType, chateau
+        case routeShortName, routeLongName, routeId, routeType, chateau, agencyId
         case tripShortName, from, to, fromPlatform, toPlatform
         case intermediateStops, legGeometry, headsign, tripId, tripStartDate, tripStartTime
         case fromStopSequence, toStopSequence, cancelled
@@ -179,13 +180,75 @@ struct DirectionsPlan: Codable, Sendable {
         }
     }
 }
+/// Wire categories shared with the Android planner and Edelweiss's OJP-style filter.
+enum PublicTransportMode: String, Codable, CaseIterable, Hashable, Sendable {
+    case train = "TRAIN", bus = "BUS", metro = "METRO", tram = "TRAM"
+    case boat = "BOAT", funicular = "FUNICULAR", aerialTramway = "AERIAL_TRAMWAY"
+    case coach = "COACH"
+
+    var title: String {
+        switch self {
+        case .train: return "Train"
+        case .bus: return "Bus"
+        case .metro: return "Metro"
+        case .tram: return "Tram"
+        case .boat: return "Boat"
+        case .funicular: return "Funicular / Cog Railway"
+        case .aerialTramway: return "Aerial Tramway"
+        case .coach: return "Coach"
+        }
+    }
+}
+
 struct DirectionsOptions: Codable, Equatable, Sendable {
-    var cycling = false
-    var walkingPace = 840.0 // seconds per kilometre
-    var cyclingKmh = 16.0
-    var accessSeconds = 900.0
-    var egressSeconds = 900.0
-    var directSeconds = 1800.0
+    var cycling: Bool
+    var walkingPace: Double // seconds per kilometre
+    var cyclingKmh: Double
+    var accessSeconds: Double
+    var egressSeconds: Double
+    var directSeconds: Double
+    var filterTransportModes: Bool
+    var transportModes: Set<PublicTransportMode>
+
+    init(cycling: Bool = false, walkingPace: Double = 840, cyclingKmh: Double = 16,
+         accessSeconds: Double = 900, egressSeconds: Double = 900, directSeconds: Double = 1800,
+         filterTransportModes: Bool = false,
+         transportModes: Set<PublicTransportMode> = Set(PublicTransportMode.allCases)) {
+        self.cycling = cycling
+        self.walkingPace = walkingPace
+        self.cyclingKmh = cyclingKmh
+        self.accessSeconds = accessSeconds
+        self.egressSeconds = egressSeconds
+        self.directSeconds = directSeconds
+        self.filterTransportModes = filterTransportModes
+        self.transportModes = transportModes
+    }
+
+    /// Older saved planner sessions contain none of the transport-filter fields.
+    /// Decoding each field with a fallback preserves their existing search settings.
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        cycling = try values.decodeIfPresent(Bool.self, forKey: .cycling) ?? false
+        walkingPace = try values.decodeIfPresent(Double.self, forKey: .walkingPace) ?? 840
+        cyclingKmh = try values.decodeIfPresent(Double.self, forKey: .cyclingKmh) ?? 16
+        accessSeconds = try values.decodeIfPresent(Double.self, forKey: .accessSeconds) ?? 900
+        egressSeconds = try values.decodeIfPresent(Double.self, forKey: .egressSeconds) ?? 900
+        directSeconds = try values.decodeIfPresent(Double.self, forKey: .directSeconds) ?? 1800
+        filterTransportModes = try values.decodeIfPresent(Bool.self, forKey: .filterTransportModes) ?? false
+        transportModes = try values.decodeIfPresent(Set<PublicTransportMode>.self, forKey: .transportModes)
+            ?? Set(PublicTransportMode.allCases)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case cycling, walkingPace, cyclingKmh, accessSeconds, egressSeconds, directSeconds
+        case filterTransportModes, transportModes
+    }
+}
+
+/// An inclusive/exclusive entry in Edelweiss's modeAndModeOfOperationFilter.
+struct DirectionsModeFilter: Codable, Equatable, Sendable {
+    let exclude: Bool
+    let ptModes: [PublicTransportMode]
 }
 struct DirectionsRequest: Codable {
     struct Point: Codable { let lat: Double; let lon: Double }
@@ -207,6 +270,7 @@ struct DirectionsRequest: Codable {
     var number_of_results_before = 0
     var number_of_results_after = 0
     var request_id: String?
+    var modeAndModeOfOperationFilter: [DirectionsModeFilter]?
 
     init(from: DirectionsLocation, to: DirectionsLocation, date: Date, arriveBy: Bool, options: DirectionsOptions) throws {
         guard from.isValid, to.isValid,
@@ -229,6 +293,22 @@ struct DirectionsRequest: Codable {
         maxPreTransitTime = budget(options.accessSeconds)
         maxPostTransitTime = budget(options.egressSeconds)
         maxDirectTime = budget(options.directSeconds)
+        if options.filterTransportModes {
+            let selected = PublicTransportMode.allCases.filter { options.transportModes.contains($0) }
+            // Edelweiss rejects an empty ptModes array. Include then exclude
+            // TRAIN to produce the empty mask when no boxes are checked.
+            modeAndModeOfOperationFilter = [
+                DirectionsModeFilter(exclude: false, ptModes: selected.isEmpty ? [.train] : selected)
+            ]
+            if selected.isEmpty {
+                modeAndModeOfOperationFilter?.append(
+                    DirectionsModeFilter(exclude: true, ptModes: [.train])
+                )
+            }
+        } else {
+            // A missing filter is unrestricted, including future route categories.
+            modeAndModeOfOperationFilter = nil
+        }
     }
 }
 private extension Int {

@@ -7,7 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2D6E0C7E30BA15FD00C9C03B /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2D6E0C7D30BA15FD00C9C03B /* WidgetKit.framework */; };
+		2D6E0C8030BA15FD00C9C03B /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2D6E0C7F30BA15FD00C9C03B /* SwiftUI.framework */; };
+		2D6E0C9130BA15FE00C9C03B /* Catenary WidgetKitExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 2D6E0C7B30BA15FD00C9C03B /* Catenary WidgetKitExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A55A00012F00000100000001 /* SVGView in Frameworks */ = {isa = PBXBuildFile; productRef = A55A00032F00000100000003 /* SVGView */; };
+		A70000012F10000100000001 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = A70000032F10000100000003 /* FirebaseCore */; };
+		A70000042F10000100000004 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = A70000052F10000100000005 /* FirebaseMessaging */; };
 		F7186EED2EE4A8BF00723A13 /* MapLibreSwiftDSL in Frameworks */ = {isa = PBXBuildFile; productRef = F7186EEC2EE4A8BF00723A13 /* MapLibreSwiftDSL */; };
 		F7186EEF2EE4A8BF00723A13 /* MapLibreSwiftMacros in Frameworks */ = {isa = PBXBuildFile; productRef = F7186EEE2EE4A8BF00723A13 /* MapLibreSwiftMacros */; };
 		F7186EF12EE4A8BF00723A13 /* MapLibreSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = F7186EF02EE4A8BF00723A13 /* MapLibreSwiftUI */; };
@@ -16,11 +21,56 @@
 		F79FE1A52ED395D6006FFFF5 /* MapLibreSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = F79FE1A42ED395D6006FFFF5 /* MapLibreSwiftUI */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		2D6E0C8F30BA15FE00C9C03B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F71913B92EC82B7700AAA2A3 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2D6E0C7A30BA15FD00C9C03B;
+			remoteInfo = "Catenary WidgetKitExtension";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		2D6E0C9630BA15FE00C9C03B /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				2D6E0C9130BA15FE00C9C03B /* Catenary WidgetKitExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		2D6E0C7B30BA15FD00C9C03B /* Catenary WidgetKitExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Catenary WidgetKitExtension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		2D6E0C7D30BA15FD00C9C03B /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		2D6E0C7F30BA15FD00C9C03B /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		F71913C12EC82B7700AAA2A3 /* Catenary.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Catenary.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		2D6E0C9230BA15FE00C9C03B /* Exceptions for "Catenary WidgetKit" folder in "Catenary WidgetKitExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 2D6E0C7A30BA15FD00C9C03B /* Catenary WidgetKitExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		2D6E0C8130BA15FD00C9C03B /* Catenary WidgetKit */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				2D6E0C9230BA15FE00C9C03B /* Exceptions for "Catenary WidgetKit" folder in "Catenary WidgetKitExtension" target */,
+			);
+			path = "Catenary WidgetKit";
+			sourceTree = "<group>";
+		};
 		F71913C32EC82B7700AAA2A3 /* catenary-ios */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "catenary-ios";
@@ -29,10 +79,21 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		2D6E0C7830BA15FD00C9C03B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2D6E0C8030BA15FD00C9C03B /* SwiftUI.framework in Frameworks */,
+				2D6E0C7E30BA15FD00C9C03B /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F71913BE2EC82B7700AAA2A3 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A70000012F10000100000001 /* FirebaseCore in Frameworks */,
+				A70000042F10000100000004 /* FirebaseMessaging in Frameworks */,
 				A55A00012F00000100000001 /* SVGView in Frameworks */,
 				F7186EF12EE4A8BF00723A13 /* MapLibreSwiftUI in Frameworks */,
 				F7186EED2EE4A8BF00723A13 /* MapLibreSwiftDSL in Frameworks */,
@@ -46,10 +107,21 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		2D6E0C7C30BA15FD00C9C03B /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				2D6E0C7D30BA15FD00C9C03B /* WidgetKit.framework */,
+				2D6E0C7F30BA15FD00C9C03B /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		F71913B82EC82B7700AAA2A3 = {
 			isa = PBXGroup;
 			children = (
 				F71913C32EC82B7700AAA2A3 /* catenary-ios */,
+				2D6E0C8130BA15FD00C9C03B /* Catenary WidgetKit */,
+				2D6E0C7C30BA15FD00C9C03B /* Frameworks */,
 				F71913C22EC82B7700AAA2A3 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -58,6 +130,7 @@
 			isa = PBXGroup;
 			children = (
 				F71913C12EC82B7700AAA2A3 /* Catenary.app */,
+				2D6E0C7B30BA15FD00C9C03B /* Catenary WidgetKitExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -65,6 +138,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		2D6E0C7A30BA15FD00C9C03B /* Catenary WidgetKitExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2D6E0C9330BA15FE00C9C03B /* Build configuration list for PBXNativeTarget "Catenary WidgetKitExtension" */;
+			buildPhases = (
+				2D6E0C7730BA15FD00C9C03B /* Sources */,
+				2D6E0C7830BA15FD00C9C03B /* Frameworks */,
+				2D6E0C7930BA15FD00C9C03B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				2D6E0C8130BA15FD00C9C03B /* Catenary WidgetKit */,
+			);
+			name = "Catenary WidgetKitExtension";
+			packageProductDependencies = (
+			);
+			productName = "Catenary WidgetKitExtension";
+			productReference = 2D6E0C7B30BA15FD00C9C03B /* Catenary WidgetKitExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		F71913C02EC82B7700AAA2A3 /* catenary-ios */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = F71913CF2EC82B7900AAA2A3 /* Build configuration list for PBXNativeTarget "catenary-ios" */;
@@ -72,16 +167,20 @@
 				F71913BD2EC82B7700AAA2A3 /* Sources */,
 				F71913BE2EC82B7700AAA2A3 /* Frameworks */,
 				F71913BF2EC82B7700AAA2A3 /* Resources */,
+				2D6E0C9630BA15FE00C9C03B /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				2D6E0C9030BA15FE00C9C03B /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				F71913C32EC82B7700AAA2A3 /* catenary-ios */,
 			);
 			name = "catenary-ios";
 			packageProductDependencies = (
+				A70000032F10000100000003 /* FirebaseCore */,
+				A70000052F10000100000005 /* FirebaseMessaging */,
 				A55A00032F00000100000003 /* SVGView */,
 				F79FE1A02ED395D6006FFFF5 /* MapLibreSwiftDSL */,
 				F79FE1A22ED395D6006FFFF5 /* MapLibreSwiftMacros */,
@@ -101,9 +200,12 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1600;
+				LastSwiftUpdateCheck = 2700;
 				LastUpgradeCheck = 2610;
 				TargetAttributes = {
+					2D6E0C7A30BA15FD00C9C03B = {
+						CreatedOnToolsVersion = 27.0;
+					};
 					F71913C02EC82B7700AAA2A3 = {
 						CreatedOnToolsVersion = 16.0;
 					};
@@ -144,6 +246,7 @@
 			mainGroup = F71913B82EC82B7700AAA2A3;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				A70000022F10000100000002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				A55A00022F00000100000002 /* XCRemoteSwiftPackageReference "SVGView" */,
 				F7186EEB2EE4A8BF00723A13 /* XCRemoteSwiftPackageReference "swiftui-dsl" */,
 			);
@@ -153,11 +256,19 @@
 			projectRoot = "";
 			targets = (
 				F71913C02EC82B7700AAA2A3 /* catenary-ios */,
+				2D6E0C7A30BA15FD00C9C03B /* Catenary WidgetKitExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		2D6E0C7930BA15FD00C9C03B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F71913BF2EC82B7700AAA2A3 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -168,6 +279,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		2D6E0C7730BA15FD00C9C03B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F71913BD2EC82B7700AAA2A3 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -177,7 +295,77 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		2D6E0C9030BA15FE00C9C03B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 2D6E0C7A30BA15FD00C9C03B /* Catenary WidgetKitExtension */;
+			targetProxy = 2D6E0C8F30BA15FE00C9C03B /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		2D6E0C9430BA15FE00C9C03B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7LFT4CQ294;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Catenary WidgetKit/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Catenary WidgetKit";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "org.catenarymaps.maps.Catenary-WidgetKit";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		2D6E0C9530BA15FE00C9C03B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7LFT4CQ294;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Catenary WidgetKit/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Catenary WidgetKit";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "org.catenarymaps.maps.Catenary-WidgetKit";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		F71913CD2EC82B7900AAA2A3 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -378,6 +566,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		2D6E0C9330BA15FE00C9C03B /* Build configuration list for PBXNativeTarget "Catenary WidgetKitExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2D6E0C9430BA15FE00C9C03B /* Debug */,
+				2D6E0C9530BA15FE00C9C03B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		F71913BC2EC82B7700AAA2A3 /* Build configuration list for PBXProject "catenary-ios" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -407,6 +604,14 @@
 				minimumVersion = 1.0.6;
 			};
 		};
+		A70000022F10000100000002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.0.0;
+			};
+		};
 		F7186EEB2EE4A8BF00723A13 /* XCRemoteSwiftPackageReference "swiftui-dsl" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/snagglegrolop/swiftui-dsl";
@@ -422,6 +627,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A55A00022F00000100000002 /* XCRemoteSwiftPackageReference "SVGView" */;
 			productName = SVGView;
+		};
+		A70000032F10000100000003 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A70000022F10000100000002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+		A70000052F10000100000005 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A70000022F10000100000002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
 		};
 		F7186EEC2EE4A8BF00723A13 /* MapLibreSwiftDSL */ = {
 			isa = XCSwiftPackageProductDependency;

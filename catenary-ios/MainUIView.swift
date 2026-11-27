@@ -234,6 +234,7 @@ struct MainUIView: View {
     @StateObject var locationManager = LocationManager()
     @StateObject private var nearbyPinMapCoordinator = NearbyPinMapCoordinator()
     @State private var isSheetPresented = true
+    @ObservedObject private var activeJourneyStore = ActiveJourneyStore.shared
     @State private var liveSheetHeight: CGFloat = 350
     @State private var collapsedNativeSheetHeight: CGFloat?
     @State private var pendingCollapsedNativeSheetHeight: CGFloat?
@@ -362,6 +363,22 @@ struct MainUIView: View {
                     }
                 }
 
+        }
+        .overlay(alignment: .bottom) {
+            if let active = activeJourneyStore.active,
+               !viewobject.showLayerSelector,
+               !viewobject.globalSearchFocused,
+               viewobject.tripPlanner.editing == nil {
+                ActiveJourneyBar(active: active, location: locationManager.lastKnownLocation) {
+                    activeJourneyStore.showingDetails = true
+                }
+                .ignoresSafeArea(.container, edges: .bottom)
+            }
+        }
+        .fullScreenCover(isPresented: $activeJourneyStore.showingDetails) {
+            ActiveJourneyDetails(store: activeJourneyStore) {
+                activeJourneyStore.showingDetails = false
+            }
         }
         .catenaryOnGeometryChange(for: MainViewGeometry.self) { proxy in
             MainViewGeometry(
@@ -1115,8 +1132,9 @@ struct MainUIView: View {
     }
 
     private var floatingToolbarBottomPadding: CGFloat {
-        if usesPortraitPhoneDrawer { return 8 }
-        return usesLeadingPaneLayout ? 15 : 0
+        let bar: CGFloat = activeJourneyStore.active != nil ? 42 : 0
+        if usesPortraitPhoneDrawer { return 8 + bar }
+        return (usesLeadingPaneLayout ? 15 : 0) + bar
     }
 
     private var floatingToolbarYOffset: CGFloat {
@@ -1206,7 +1224,7 @@ struct MainUIView: View {
             return UIEdgeInsets(
                 top: 0,
                 left: leadingPaneWidth + drawerOuterPadding,
-                bottom: 0,
+                bottom: activeJourneyStore.active == nil ? 0 : 42,
                 right: 0
             )
         }
@@ -1216,7 +1234,7 @@ struct MainUIView: View {
         return UIEdgeInsets(
             top: 0,
             left: 0,
-            bottom: mapViewportSize.height / 2,
+            bottom: mapViewportSize.height / 2 + (activeJourneyStore.active == nil ? 0 : 42),
             right: 0
         )
     }

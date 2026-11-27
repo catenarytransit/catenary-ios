@@ -116,6 +116,7 @@ final class TripPlannerModel: ObservableObject {
     private func persistSavedJourneys(_ updated: [String: SavedDirectionsJourney]) {
         guard !savingJourney else { return }
         let snapshot = updated
+        let addedBookmark = updated.count > savedJourneys.count
         savingJourney = true; saveError = nil
         Task { @MainActor in
             do {
@@ -125,6 +126,8 @@ final class TripPlannerModel: ObservableObject {
                     try JSONEncoder().encode(snapshot).write(to: url, options: .atomic)
                 }.value
                 self.savedJourneys = snapshot
+                JourneyNotifications.shared.syncSoon()
+                if addedBookmark { JourneyNotifications.shared.requestPermissionForJourney() }
             } catch { self.saveError = "Unable to save journey. Please try again." }
             self.savingJourney = false
         }

@@ -12,6 +12,10 @@ import SwiftUI
 import CoreLocation
 import MapLibreSwiftUI
 
+extension Notification.Name {
+    static let openJourneyBookmarks = Notification.Name("catenary.openJourneyBookmarks")
+}
+
 struct BottomDrawer: View {
     @Binding var selectedDetent: PresentationDetent
     let sheetHeight: CGFloat
@@ -64,6 +68,10 @@ struct BottomDrawer: View {
                     }
                 }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openJourneyBookmarks)) { _ in
+            viewObject.home()
+            showsSavedJourneys = true
         }
         .fullScreenCover(isPresented: $showsSavedJourneys) {
             SavedJourneysScreen(
@@ -133,6 +141,7 @@ struct BottomDrawer: View {
             }
         }
         .catenaryOnChange(of: isFocused) { _, focused in
+            viewObject.globalSearchFocused = focused
             if focused {
                 isSearchActive = true
             }

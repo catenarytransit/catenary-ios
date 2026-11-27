@@ -33,6 +33,30 @@ expect(departureJSON["arrival_unix_seconds"] == nil, "Arrival field must be omit
 expect(departureJSON["preTransitModes"] as? [String] == ["WALK"], "Walking access")
 expect(abs((departureJSON["pedestrianSpeed"] as! Double) - 1000 / 840) < 0.0001, "Walking pace to metres per second")
 expect(departureJSON["detailed_legs"] as? Bool == true, "Detailed legs")
+expect(departureJSON["modeAndModeOfOperationFilter"] == nil, "Disabled filters remain unrestricted")
+var filtered = DirectionsOptions()
+filtered.filterTransportModes = true
+filtered.transportModes = [.train, .metro, .coach]
+let filteredRequest = try DirectionsRequest(from: origin, to: destination, date: date,
+    arriveBy: false, options: filtered)
+let filteredJSON = try JSONSerialization.jsonObject(with: JSONEncoder().encode(filteredRequest)) as! [String: Any]
+let includeModes = filteredJSON["modeAndModeOfOperationFilter"] as! [[String: Any]]
+expect(includeModes.count == 1, "Inclusive filter is a single entry")
+expect(includeModes[0]["exclude"] as? Bool == false, "Filter entry includes selected modes")
+expect(includeModes[0]["ptModes"] as? [String] == ["TRAIN", "METRO", "COACH"], "Distinct coach mode retained")
+filtered.transportModes = []
+let excludedAllRequest = try DirectionsRequest(from: origin, to: destination, date: date,
+    arriveBy: false, options: filtered)
+let excludedAllJSON = try JSONSerialization.jsonObject(with: JSONEncoder().encode(excludedAllRequest)) as! [String: Any]
+let excludedModes = excludedAllJSON["modeAndModeOfOperationFilter"] as! [[String: Any]]
+expect(excludedModes.count == 2, "Zero checked boxes create include then exclude filter")
+expect(excludedModes[1]["exclude"] as? Bool == true && excludedModes[1]["ptModes"] as? [String] == ["TRAIN"],
+    "Empty mask excludes the sentinel train mode")
+let legacyOptions = try JSONDecoder().decode(DirectionsOptions.self,
+    from: Data(#"{"cycling":true,"walkingPace":750,"cyclingKmh":20,"accessSeconds":600,"egressSeconds":600,"directSeconds":1800}"#.utf8))
+expect(legacyOptions.cycling && !legacyOptions.filterTransportModes,
+    "Older saved options default to an unrestricted transport mode mask")
+expect(legacyOptions.transportModes == Set(PublicTransportMode.allCases), "Legacy options select all boxes")
 var cycling = DirectionsOptions(); cycling.cycling = true; cycling.cyclingKmh = 18
 let arrival = try DirectionsRequest(from: origin, to: destination, date: date, arriveBy: true, options: cycling)
 let arrivalJSON = try JSONSerialization.jsonObject(with: JSONEncoder().encode(arrival)) as! [String: Any]

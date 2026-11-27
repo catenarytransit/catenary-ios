@@ -8,6 +8,9 @@ import MapLibre
 import MapLibreSwiftDSL
 import MapLibreSwiftUI
 import SwiftUI
+import FirebaseCore
+import FirebaseMessaging
+import UserNotifications
 
 
 var GlobalViewObject: viewObject = viewObject()
@@ -17,16 +20,69 @@ struct CatenaryMapsApp: App {
     @StateObject var viewobject = GlobalViewObject
     @StateObject private var searchViewModel = SearchViewModel()
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    @Environment(\.scenePhase) private var scenePhase
     
     var body: some Scene {
         WindowGroup {
             MainUIView(searchViewModel: searchViewModel)
                 .environmentObject(viewobject)
+                .catenaryOnChange(of: scenePhase) { _, phase in
+                    if phase == .active { JourneyNotifications.shared.syncSoon() }
+                }
         }
     }
 }
 
-class AppDelegate: NSObject, UIApplicationDelegate {
+class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate, MessagingDelegate {
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        JourneyFirebaseBootstrap.configureIfAvailable()
+        UNUserNotificationCenter.current().delegate = self
+        if FirebaseApp.app() != nil {
+            Messaging.messaging().delegate = self
+            application.registerForRemoteNotifications()
+            Task { @MainActor in JourneyNotifications.shared.syncSoon() }
+        }
+        return true
+    }
+
+    func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        guard FirebaseApp.app() != nil else { return }
+        Messaging.messaging().apnsToken = deviceToken
+        Task { @MainActor in JourneyNotifications.shared.syncSoon() }
+    }
+
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        NSLog("APNs registration failed: %@", error.localizedDescription)
+    }
+
+    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        Task { @MainActor in JourneyNotifications.shared.receivedToken(fcmToken) }
+    }
+
+    // In the foreground, system banners need explicit authorization.
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification) async
+        -> UNNotificationPresentationOptions {
+        return [.banner, .sound, .badge]
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse) async {
+        let data = response.notification.request.content.userInfo
+        await MainActor.run {
+            let active = ActiveJourneyStore.shared.active
+            let tappedID = data["journeyId"] as? String
+            if let active, tappedID == JourneyNotifications.stableID(active.snapshot.itinerary) {
+                ActiveJourneyStore.shared.showingDetails = true
+            } else {
+                NotificationCenter.default.post(name: .openJourneyBookmarks, object: nil)
+            }
+        }
+    }
+
   func application(_ application: UIApplication,
                    configurationForConnecting connectingSceneSession: UISceneSession,
                   options: UIScene.ConnectionOptions) -> UISceneConfiguration {
