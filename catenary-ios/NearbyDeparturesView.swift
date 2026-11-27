@@ -3,124 +3,6 @@ import CoreLocation
 import Foundation
 import SwiftUI
 
-private struct NearbyAPIResponse: Decodable {
-    var longDistance: [NearbyStationGroup] = []
-    var local: [NearbyRouteGroup] = []
-    var routes: [String: [String: NearbyRouteInfo]] = [:]
-    var stops: [String: [String: NearbyStopInfo]] = [:]
-    var debug: NearbyDebugInfo? = nil
-}
-
-private struct NearbyDebugInfo: Decodable {
-    let totalTimeMs: Int64?
-}
-
-private struct NearbyStationGroup: Decodable, Identifiable {
-    let stationName: String
-    let osmStationId: Int64?
-    let distanceM: Double
-    let departures: [NearbyStationDeparture]
-    let lat: Double
-    let lon: Double
-    let timezone: String
-
-    var id: String { "station|\(osmStationId.map(String.init) ?? stationName)|\(lat)|\(lon)" }
-}
-
-private struct NearbyStationDeparture: Decodable, Identifiable {
-    let scheduledDeparture: Int64?
-    let realtimeDeparture: Int64?
-    let scheduledArrival: Int64?
-    let realtimeArrival: Int64?
-    let serviceDate: String?
-    let headsign: String
-    let platform: String?
-    let tripId: String?
-    let tripShortName: String?
-    let routeId: String
-    let stopId: String
-    let cancelled: Bool?
-    let delayed: Bool?
-    let chateauId: String
-    let lastStop: Bool?
-    let finalStationName: String?
-
-    var id: String {
-        "station-departure|\(chateauId)|\(tripId ?? "")|\(routeId)|\(stopId)|\(scheduledDeparture ?? scheduledArrival ?? 0)"
-    }
-
-    var effectiveDeparture: Int64? {
-        if let realtimeDeparture { return realtimeDeparture }
-        // A realtime arrival only stands in for the departure when there's no scheduled departure
-        // to compare against, or it's actually after it; otherwise it's a stale/earlier event.
-        if let realtimeArrival, scheduledDeparture == nil || realtimeArrival > scheduledDeparture! {
-            return realtimeArrival
-        }
-        return scheduledDeparture ?? scheduledArrival
-    }
-}
-
-private struct NearbyRouteGroup: Decodable, Identifiable {
-    let chateauId: String
-    let routeId: String
-    let color: String?
-    let textColor: String?
-    let shortName: String?
-    let longName: String?
-    let routeType: Int?
-    let agencyName: String?
-    let headsigns: [String: [NearbyLocalDeparture]]
-    let closestDistance: Double
-
-    var id: String { "route|\(chateauId)|\(routeId)" }
-}
-
-private struct NearbyLocalDeparture: Decodable, Identifiable {
-    let tripId: String?
-    let departureSchedule: Int64?
-    let departureRealtime: Int64?
-    let arrivalSchedule: Int64?
-    let arrivalRealtime: Int64?
-    let stopId: String
-    let stopName: String?
-    let cancelled: Bool?
-    let platform: String?
-    let lastStop: Bool?
-    let serviceDate: String?
-
-    var id: String {
-        "local-departure|\(tripId ?? "")|\(stopId)|\(departureSchedule ?? arrivalSchedule ?? 0)"
-    }
-
-    var effectiveDeparture: Int64? {
-        if let departureRealtime { return departureRealtime }
-        // A realtime arrival only stands in for the departure when it's actually after the
-        // scheduled departure; otherwise it's a stale/earlier event that would show the wrong time.
-        if let arrivalRealtime, departureSchedule == nil || arrivalRealtime > departureSchedule! {
-            return arrivalRealtime
-        }
-        return departureSchedule ?? arrivalSchedule
-    }
-}
-
-private struct NearbyRouteInfo: Decodable {
-    let shortName: String?
-    let longName: String?
-    let agencyName: String?
-    let color: String?
-    let textColor: String?
-    let routeType: Int?
-}
-
-private struct NearbyStopInfo: Decodable {
-    let gtfsId: String?
-    let name: String
-    let lat: Double
-    let lon: Double
-    let osmStationId: Int64?
-    let timezone: String?
-}
-
 @MainActor
 private final class NearbyDeparturesViewModel: ObservableObject {
     @Published var response = NearbyAPIResponse()
@@ -128,39 +10,69 @@ private final class NearbyDeparturesViewModel: ObservableObject {
     @Published var hasLoaded = false
     @Published var errorMessage: String?
 
+    private let api = NearbyDepartureAPI()
+    private var currentQuery: NearbyDepartureQuery?
+    private var revision = 0
+    private var activeLoad: Task<Void, Never>?
+
     func load(origin: CLLocationCoordinate2D, departureTime: Int64?) async {
-        var components = URLComponents(string: "https://birch.catenarymaps.org/nearbydeparturesfromcoordsv3")!
-        var queryItems = [
-            URLQueryItem(name: "lat", value: String(origin.latitude)),
-            URLQueryItem(name: "lon", value: String(origin.longitude)),
-            URLQueryItem(name: "limit_per_station", value: "10"),
-            URLQueryItem(name: "limit_per_headsign", value: "20")
-        ]
-        if let departureTime {
-            queryItems.append(URLQueryItem(name: "departure_time", value: String(departureTime)))
+        guard !Task.isCancelled else { return }
+        let query = NearbyDepartureQuery(lat: origin.latitude, lon: origin.longitude, departureTime: departureTime)
+        activeLoad?.cancel()
+        revision &+= 1
+        let requestRevision = revision
+        if currentQuery != query {
+            currentQuery = query
+            response = NearbyAPIResponse()
+            hasLoaded = false
         }
-        components.queryItems = queryItems
-        guard let url = components.url else { return }
 
         isLoading = !hasLoaded
         errorMessage = nil
+        let progressive = !hasLoaded
+        let task = Task {
+            await performLoad(query: query, progressive: progressive, revision: requestRevision)
+        }
+        activeLoad = task
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        if revision == requestRevision {
+            activeLoad = nil
+            isLoading = false
+        }
+    }
+
+    private func performLoad(query: NearbyDepartureQuery, progressive: Bool, revision requestRevision: Int) async {
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-                throw URLError(.badServerResponse)
+            do {
+                try await api.stream(query: query, progressive: progressive) { [weak self] snapshot in
+                    guard let self else { throw CancellationError() }
+                    try self.publish(snapshot, revision: requestRevision)
+                }
+            } catch {
+                try Task.checkCancellation()
+                guard revision == requestRevision else { return }
+                // Preserve the previous snapshot while falling back to Birch.
+                let snapshot = try await api.fetchHTTP(query: query)
+                try publish(snapshot, revision: requestRevision)
             }
-            let decoder = JSONDecoder()
-            decoder.keyDecodingStrategy = .convertFromSnakeCase
-            self.response = try decoder.decode(NearbyAPIResponse.self, from: data)
-            hasLoaded = true
-        } catch is CancellationError {
-            return
         } catch {
+            guard !Task.isCancelled, revision == requestRevision else { return }
             if !hasLoaded {
                 errorMessage = error.localizedDescription
             }
         }
-        isLoading = false
+    }
+
+    private func publish(_ snapshot: NearbyAPIResponse, revision requestRevision: Int) throws {
+        try Task.checkCancellation()
+        guard revision == requestRevision else { throw CancellationError() }
+        response = snapshot
+        hasLoaded = true
+        errorMessage = nil
     }
 }
 
@@ -210,6 +122,7 @@ struct NearbyDeparturesView: View {
 
     @EnvironmentObject private var viewObject: viewObject
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var model = NearbyDeparturesViewModel()
     @State private var lockedOrigin: CLLocationCoordinate2D?
     @State private var selectedDate = Date()
@@ -369,7 +282,7 @@ struct NearbyDeparturesView: View {
             updateFromDraggedPin()
         }
         .task(id: requestKey) {
-            guard let origin = lockedOrigin else { return }
+            guard scenePhase == .active, let origin = lockedOrigin else { return }
             let departureTime = isNow ? nil : Int64(selectedDate.timeIntervalSince1970)
             await model.load(origin: origin, departureTime: departureTime)
 #if DEBUG || SCREENSHOT_AUTOMATION
@@ -618,6 +531,7 @@ struct NearbyDeparturesView: View {
     }
 
     private var requestKey: String {
+        guard scenePhase == .active else { return "inactive" }
         guard let origin = lockedOrigin else { return "no-origin|\(reloadNonce)" }
         let time = isNow ? "now" : String(Int64(selectedDate.timeIntervalSince1970 / 60) * 60)
         return "\(origin.latitude)|\(origin.longitude)|\(time)|\(reloadNonce)"

@@ -75,9 +75,12 @@ final class WildfireMapData: ObservableObject {
                     throw URLError(.badServerResponse)
                 }
 
-                let decoder = JSONDecoder()
-                decoder.keyDecodingStrategy = .convertFromSnakeCase
-                let fires = try decoder.decode([WatchDutyFireData].self, from: data)
+                let fires = try await Task.detached(priority: .utility) {
+                    let decoder = JSONDecoder()
+                    decoder.keyDecodingStrategy = .convertFromSnakeCase
+                    return try decoder.decode([WatchDutyFireData].self, from: data)
+                }.value
+                try Task.checkCancellation()
                 publish(makeFireFeatures(from: fires))
             } catch is CancellationError {
                 break

@@ -192,7 +192,7 @@ jobs:
             -project "$PROJECT" \
             -scheme "$SCHEME" \
             -configuration Debug \
-            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -destination "generic/platform=iOS Simulator" \
             -derivedDataPath "$DERIVED_DATA" \
             -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
             -skipPackagePluginValidation \
