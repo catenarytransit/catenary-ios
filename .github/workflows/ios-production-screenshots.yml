@@ -71,7 +71,7 @@ jobs:
             xcrun simctl list runtimes available -j | jq -r '
               [
                 .runtimes[]
-                | select(.identifier | contains("SimRuntime.iOS-"))
+                | select(.isAvailable == true and (.identifier | contains("SimRuntime.iOS-")))
                 | . + {versionParts: (.version | split(".") | map(tonumber))}
               ]
               | sort_by(.versionParts)
@@ -84,7 +84,7 @@ jobs:
           ios_version="$(cut -f1 <<< "$runtime_line")"
           runtime_id="$(cut -f2 <<< "$runtime_line")"
 
-          if [[ -z "$ios_version" || -z "$runtime_id" ]]; then
+          if [[ -z "$ios_version" || -z "$runtime_id" || "$ios_version" == "null" ]]; then
             echo "No available iOS simulator runtime found."
             exit 1
           fi
@@ -233,12 +233,13 @@ jobs:
 
           # This is still the Release configuration (so DEBUG-only production
           # behavior stays off), but screenshots do not need whole-module
-          # optimization or a multi-architecture simulator binary.
+          # optimization or a multi-architecture simulator binary. Build against
+          # the generic simulator SDK; device UUIDs are only needed for simctl.
           xcodebuild \
             -project "$PROJECT" \
             -scheme "$SCHEME" \
             -configuration "$CONFIGURATION" \
-            -destination "platform=iOS Simulator,id=$IPHONE_UDID" \
+            -destination "generic/platform=iOS Simulator" \
             -derivedDataPath "$DERIVED_DATA" \
             -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
             -disableAutomaticPackageResolution \
@@ -248,7 +249,8 @@ jobs:
             SWIFT_ACTIVE_COMPILATION_CONDITIONS="SCREENSHOT_AUTOMATION" \
             SWIFT_COMPILATION_MODE=incremental \
             SWIFT_OPTIMIZATION_LEVEL=-Onone \
-            ONLY_ACTIVE_ARCH=YES \
+            ARCHS="$(uname -m)" \
+            ONLY_ACTIVE_ARCH=NO \
             DEBUG_INFORMATION_FORMAT=dwarf \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
